@@ -11,7 +11,7 @@ const app = new Hono<{ Bindings: Bindings }>()
 
 const magazineRequest = z.object({
   interests: z.string().trim().max(1000),
-  lifestyles: z.array(z.string()).min(1).max(8),
+  lifestyles: z.array(z.string().trim().min(1).max(100)).min(1).max(8),
   allocations: z.object({
     home: z.number().int().min(0).max(100),
     fashion: z.number().int().min(0).max(100),
