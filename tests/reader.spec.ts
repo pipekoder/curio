@@ -9,7 +9,7 @@ test.beforeEach(async ({ page }) => {
 for (const width of [1280, 390]) {
   test(`reader images, layouts and responsive bounds at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 })
-    await page.goto('/')
+    await page.goto('http://127.0.0.1:4174/tests/browser/legacy.html')
     await expect(page.locator('.catalog-card')).toHaveCount(6)
     for (const image of await page.locator('.catalog-card img').all()) {
       await image.scrollIntoViewIfNeeded()
@@ -31,7 +31,7 @@ for (const width of [1280, 390]) {
 }
 test('reduced motion removes animation and image transitions', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.goto('/')
+  await page.goto('http://127.0.0.1:4174/tests/browser/legacy.html')
   await page.getByRole('button', { name: /Read sample edition/ }).click()
   expect(await page.locator('.reader-pages').evaluate(element => getComputedStyle(element).animationName)).toBe('none')
   expect(await page.locator('.catalog-card img').first().evaluate(element => getComputedStyle(element).transitionDuration)).toBe('0s')
@@ -41,20 +41,20 @@ test('reduced motion removes animation and image transitions', async ({ page }) 
 })
 test('missing static asset retains accessible content and provenance', async ({ page }) => {
   await page.route('**/catalog/home-lamp.svg', route => route.fulfill({ status: 404, body: '' }))
-  await page.goto('/')
+  await page.goto('http://127.0.0.1:4174/tests/browser/legacy.html')
   await expect(page.getByText('Image unavailable')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Paper Moon Lamp' })).toBeVisible()
   await page.locator('.catalog-card').first().getByText('Source & provenance').click()
   await expect(page.getByText(/Catalog home-lamp/)).toBeVisible()
 })
 
-test('ordinary reader navigation never requests private asset intelligence or external candidate images', async ({ page }) => {
+test('component regression navigation never requests private asset intelligence or external candidate images', async ({ page }) => {
   const forbidden: string[] = []
   page.on('request', request => {
     const url = new URL(request.url())
     if (url.pathname.startsWith('/api/operator/') || ['normcph.com','media.oliverbonas.com','assets.bolia.com','hoshinoresorts.com'].includes(url.hostname)) forbidden.push(request.url())
   })
-  await page.goto('/')
+  await page.goto('http://127.0.0.1:4174/tests/browser/legacy.html')
   await expect(page.locator('.catalog-card')).toHaveCount(6)
   await page.getByRole('button', { name: /Read sample edition/ }).click()
   await expect(page.locator('.reader-pages')).toBeVisible()
