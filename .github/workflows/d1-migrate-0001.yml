@@ -1,0 +1,80 @@
+name: Approved production D1 migration 0001
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_sha:
+        description: Exact reviewed main commit (40 hex characters)
+        required: true
+        type: string
+      confirmation:
+        description: Type MIGRATE curio-catalog 0001
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: curio-production-d1-0001
+  cancel-in-progress: false
+env:
+  REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+  MIGRATION_CONFIRMATION: ${{ inputs.confirmation }}
+  WRANGLER_SEND_METRICS: 'false'
+jobs:
+  approval-policy:
+    if: github.repository == 'pipekoder/curio' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Require existing main-only Environment with independent reviewers
+        run: node scripts/d1-migration/run.mjs gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+  migrate:
+    needs: approval-policy
+    environment: production-d1-migration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Install locked tools without lifecycle scripts or production credentials
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Preflight, private recovery backup, migration and verification
+        run: node scripts/d1-migration/run.mjs migrate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_MIGRATION_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          D1_EXPECTED_ACCOUNT_NAME: ${{ vars.D1_EXPECTED_ACCOUNT_NAME }}
+          D1_BACKUP_HOST: ${{ vars.D1_BACKUP_HOST }}
+          D1_BACKUP_PRIVATE_CONFIRMED: ${{ vars.D1_BACKUP_PRIVATE_CONFIRMED }}
+          D1_BACKUP_PUBLIC_KEY: ${{ vars.D1_BACKUP_PUBLIC_KEY }}
+          D1_BACKUP_KEY_SHA256: ${{ vars.D1_BACKUP_KEY_SHA256 }}
+          D1_BACKUP_UPLOAD_URL: ${{ secrets.D1_BACKUP_UPLOAD_URL }}
+          D1_BACKUP_DOWNLOAD_URL: ${{ secrets.D1_BACKUP_DOWNLOAD_URL }}
+      - name: Upload only allowlisted non-sensitive verification
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: d1-0001-verification-${{ github.run_id }}
+          path: ${{ runner.temp }}/curio-d1-evidence/verification.json
+          if-no-files-found: ignore
+          retention-days: 14
