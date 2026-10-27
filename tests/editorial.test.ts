@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, it, vi, afterEach } from "vitest";
 import {
   defaultPreferences,
@@ -51,7 +52,10 @@ it("rejects unapproved IDs, incorrect versions, executable plans, unknown proper
     { motion: "eval(code)" },
     { headline: "<script>alert(1)</script>" },
     { imageUrl: "https://evil.example/x.jpg" },
-    { narrative: "This object is made from rare titanium by an invented designer." },
+    {
+      narrative:
+        "This object is made from rare titanium by an invented designer.",
+    },
   ])
     expect(() =>
       validatePlan(
@@ -145,7 +149,9 @@ it("denies cross-origin and oversized requests without exposing catalog/operator
   expect((await editorialPool({}, home)).retrieval).toBe("fictional");
 });
 it("validates mocked Muse output with the fixed Meta model and no image pixels", async () => {
-  const plan = fallbackPlan(home),
+  const plan = JSON.parse(
+      readFileSync("tests/fixtures/editorial-original.json", "utf8"),
+    ).home,
     send = vi.fn(async () =>
       Response.json({
         choices: [

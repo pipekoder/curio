@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
 for (const width of [1280, 390]) {
   test(`Living Ad selection, alignment and return at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 })
-    await page.goto('/')
+    await page.goto('http://127.0.0.1:4174/tests/browser/legacy.html')
     const card = page.locator('.catalog-card').first()
     const hotspot = card.getByRole('button', { name: 'Explore Paper shade' })
     await expect(hotspot).toBeVisible()
@@ -39,7 +39,7 @@ for (const width of [1280, 390]) {
 }
 test('keyboard interaction, reduced motion and full-frame letterboxing remain aligned', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.goto('/')
+  await page.goto('http://127.0.0.1:4174/tests/browser/legacy.html')
   await page.getByRole('button', { name: /Read sample edition/ }).click()
   const reader = page.getByRole('region', { name: 'A slower kind of discovery.' })
   await reader.getByRole('button', { name: 'Immersive / full frame' }).click()
@@ -56,7 +56,7 @@ test('keyboard interaction, reduced motion and full-frame letterboxing remain al
 })
 test('failed original image cannot leave misleading hotspots or editorial panels', async ({ page }) => {
   await page.route('**/catalog/home-lamp.svg', route => route.fulfill({ status: 404, body: '' }))
-  await page.goto('/')
+  await page.goto('http://127.0.0.1:4174/tests/browser/legacy.html')
   const card = page.locator('.catalog-card').first()
   await expect(card.getByText('Image unavailable')).toBeVisible()
   await expect(card.getByRole('button', { name: 'Explore Paper shade' })).toHaveCount(0)

@@ -49,26 +49,24 @@ const mf = new Miniflare(
           headers: { Location: "https://untrusted.example/steal-key" },
         });
       return MFResponse.json({
+        usage: {
+          prompt_tokens: 800,
+          completion_tokens: 420,
+          total_tokens: 1220,
+          prompt_tokens_details: { cached_tokens: 0 },
+        },
         choices: [
           {
             finish_reason: "stop",
             message: {
-              content: JSON.stringify({
-                title: "The art of quiet rooms",
-                deck: "Focused / Scandinavian. A local edition of authorized visual studies.",
-                features: [
-                  {
-                    catalogId: "home-lamp",
-                    assetId: "asset-home-lamp-v1",
-                    headline: "A closer look: Paper Moon Lamp",
-                    narrative:
-                      "A fictional sculptural paper lamp for a quiet reading corner. Follow paper shade into another visual idea. This is an authored interpretation of a fictional study.",
-                    layout: "hero",
-                    motion: "reveal",
-                    theme: "Scandinavian",
-                  },
-                ],
-              }),
+              content: JSON.stringify(
+                JSON.parse(
+                  await readFile(
+                    "tests/fixtures/editorial-original.json",
+                    "utf8",
+                  ),
+                ).home,
+              ),
             },
           },
         ],
@@ -117,13 +115,16 @@ try {
   assert.ok(!JSON.stringify(data).includes("publisher_metadata"));
   const live = { ...preferences, consent: true };
   const a = await post(live);
-  assert.equal(
-    (await a.json()).source,
-    "meta",
-    `mocked provider calls=${calls}`,
-  );
+  const generated = await a.json();
+  assert.equal(generated.source, "meta", `mocked provider calls=${calls}`);
+  assert.equal(generated.inference.reservedUnits, 1);
+  assert.equal(generated.inference.usage.outputTokens, 420);
+  assert.ok(generated.inference.latencyMs >= 0);
   assert.equal(calls, 1);
-  assert.equal((await (await post(live)).json()).cached, true);
+  const cached = await (await post(live)).json();
+  assert.equal(cached.cached, true);
+  assert.equal(cached.inference.reservedUnits, 0);
+  assert.equal(cached.inference.attempted, false);
   assert.equal(calls, 1);
   assert.equal(
     (

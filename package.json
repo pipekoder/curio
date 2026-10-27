@@ -14,7 +14,9 @@
     "worker:check": "wrangler deploy --dry-run --outdir .wrangler/dry-run",
     "test:integration": "node scripts/smoke.mjs",
     "test:browser": "playwright test",
-    "lint": "eslint shared/editorial.ts worker/editorial.ts src/EditorialExperience.tsx tests/editorial*.ts"
+    "lint": "eslint shared/editorial*.ts worker/editorial.ts src/EditorialExperience.tsx src/App.tsx tests/editorial*.ts scripts/editorial-live-check.mjs scripts/editorial-validation-smoke.mjs scripts/production-review.mjs",
+    "review:production": "node scripts/production-review.mjs",
+    "validate:editorial": "node scripts/editorial-live-check.mjs"
   },
   "dependencies": {
     "@meta-sam/parser": "^0.1.0",

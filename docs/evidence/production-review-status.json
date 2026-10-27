@@ -1,0 +1,11 @@
+{
+  "origin": "https://curio.shuang-han807.workers.dev",
+  "reviewedAt": "2026-10-27T18:44:47.830Z",
+  "timezone": "Europe/Stockholm",
+  "apiRequestsBlocked": 0,
+  "thirdPartyRequestsBlocked": 0,
+  "modelRequestsExecuted": 0,
+  "screenshots": [],
+  "status": "blocked_unverified",
+  "networkObservation": "Workspace proxy rejected the HTTPS CONNECT tunnel with HTTP 403 before application access; the web connector also could not open the URL. No production visual review is claimed."
+}
