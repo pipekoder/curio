@@ -2,7 +2,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [feat/foundation, feat/meta-magazine-generator]
+    branches: [feat/foundation, feat/meta-magazine-generator, feat/advertising-library-visual-magazine]
 permissions:
   contents: read
 jobs:
@@ -23,3 +23,11 @@ jobs:
       - run: npm run build
       - run: npm run worker:check
       - run: npm run test:integration
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reader-verification
+          path: test-results/
+          if-no-files-found: ignore

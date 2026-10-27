@@ -2,7 +2,7 @@ import './runtime-smoke.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -41,6 +41,14 @@ try {
   const asset = await fetch(`${base}${script}`)
   assert.equal(asset.status, 200)
   assert.match(asset.headers.get('content-type'), /javascript/)
+  const images = await readdir('public/catalog')
+  assert.equal(images.length, 6)
+  for (const path of images) {
+    const image = await fetch(`${base}/catalog/${path}`)
+    assert.equal(image.status, 200)
+    assert.match(image.headers.get('content-type'), /image\/svg\+xml/)
+    assert.match(await image.text(), /<svg/)
+  }
   const deepLink = await fetch(`${base}/edition/example`, { headers: { Accept: 'text/html' } })
   assert.equal(deepLink.status, 200)
   assert.equal(await deepLink.text(), html)

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { magazineIssue, type MagazineIssue } from '../shared/magazine'
 import Magazine from './Magazine'
+import AdvertisingLibrary from './AdvertisingLibrary'
 
 const lifestyleOptions = [
   'Japanese Wabi-Sabi', 'Gaudí / Catalan Modernism', 'Scandinavian',
@@ -73,6 +74,7 @@ export default function App() {
         <h1>Follow your <em>curiosity.</em></h1>
         <p className="intro">Not another feed. An advertising magazine edited around your world—where every image is an invitation to discover more.</p>
       </section>
+      <AdvertisingLibrary />
       <section className="config" aria-labelledby="edition-heading">
         <div className="section-label"><span>01 / YOUR EDITION</span><span>PERSONALIZE</span></div>
         <h2 id="edition-heading">What inspires you?</h2>
@@ -89,7 +91,7 @@ export default function App() {
         <div className="actions"><button type="button" className="generate" disabled={!available || !consent || total !== 100 || !lifestyles.length || loading} onClick={generate}>{loading ? 'Creating your edition…' : 'Generate my magazine →'}</button><span className={total === 100 ? 'valid' : 'invalid'}>{total === 100 ? 'Your mix is ready' : 'Adjust categories to total 100%'}</span></div>
         {status && <p className="notice" role="status">{status}</p>}
       </section>
-      {issue && <Magazine issue={issue} />}
+      {issue && <Magazine key={issue.id} issue={issue} />}
       <footer>CURIO / FROM ADVERTISING TO DISCOVERY <span>HACKATHON PROTOTYPE</span></footer>
     </main>
   )
