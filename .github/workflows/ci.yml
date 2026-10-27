@@ -20,6 +20,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: npm run test:migration-workflow
       - run: npm run build
       - run: npm run worker:check
       - run: npm run test:integration
