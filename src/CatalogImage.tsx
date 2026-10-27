@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { displaySource, type CatalogItem } from '../shared/catalog'
 import { approvedExternalAssets, type ExternalAssetApprovals } from '../shared/url-policy'
 
-export default function CatalogImage({ ad, eager = false, externalApprovals = approvedExternalAssets }: {
-  ad: CatalogItem; eager?: boolean; externalApprovals?: ExternalAssetApprovals
+export default function CatalogImage({ ad, eager = false, externalApprovals = approvedExternalAssets, onImageReady, onImageUnavailable }: {
+  ad: CatalogItem; eager?: boolean; externalApprovals?: ExternalAssetApprovals; onImageReady?: (image: { src: string; width: number; height: number }) => void; onImageUnavailable?: () => void
 }) {
   const primary = displaySource(ad, externalApprovals)
   const [attempt, setAttempt] = useState<'primary' | 'fallback' | 'missing'>(primary ? 'primary' : 'missing')
@@ -21,16 +21,18 @@ export default function CatalogImage({ ad, eager = false, externalApprovals = ap
   }, [visible])
   const src = attempt === 'primary' ? primary : attempt === 'fallback' ? ad.image.fallbackPath : null
   const useFallback = () => {
+    onImageUnavailable?.()
     setReady(false)
     setAttempt(attempt === 'primary' && ad.image.externalUrl && ad.image.fallbackPath ? 'fallback' : 'missing')
   }
   useEffect(() => {
     if (!src || ready || !visible || attempt !== 'primary' || !ad.image.externalUrl) return
     const timer = setTimeout(() => {
+      onImageUnavailable?.()
       setAttempt(current => current === 'primary' && ad.image.externalUrl && ad.image.fallbackPath ? 'fallback' : 'missing')
     }, 10000)
     return () => clearTimeout(timer)
-  }, [src, ready, visible, attempt, ad.image.externalUrl, ad.image.fallbackPath])
+  }, [src, ready, visible, attempt, ad.image.externalUrl, ad.image.fallbackPath, onImageUnavailable])
   const fallback = attempt === 'fallback'
   const caption = fallback ? 'Fictional fallback illustration · Curio original geometry; external image unavailable' :
     ad.image.role === 'placeholder' ? 'Original illustration · fictional placeholder' : ad.sourceType === 'editorial_support' ? 'Editorial supporting image' : ad.sourceType === 'synthetic_concept' ? 'Synthetic advertising concept' : 'Brand campaign image'
@@ -39,7 +41,7 @@ export default function CatalogImage({ ad, eager = false, externalApprovals = ap
       {!ready && <span className="image-loading" aria-hidden="true">Loading image…</span>}
       <img key={src} src={src} alt={fallback ? 'Fictional fallback illustration; the original external image is unavailable.' : ad.image.alt}
         width={ad.image.width} height={ad.image.height} loading={eager ? 'eager' : 'lazy'} decoding="async"
-        referrerPolicy="no-referrer" onLoad={() => setReady(true)} onError={useFallback} />
+        referrerPolicy="no-referrer" onLoad={event => { setReady(true); onImageReady?.({ src: src!, width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight }) }} onError={useFallback} />
     </>}
     <figcaption>{caption}</figcaption>
   </figure>
