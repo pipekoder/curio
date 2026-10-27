@@ -29,7 +29,7 @@ node scripts/asset-intelligence-import.mjs
 node scripts/asset-intelligence-plan.mjs
 ```
 
-The importer refuses non-loopback targets. It submits source batches of ten and item batches of five, with zero AI calls. Exact URL and immutable version IDs deduplicate reimports. The operation uses several transactions: a failed later stage can leave discovery/base records committed. Correct the input and reimport idempotently; no inference is automatically started. Delete ignored local state to reset development data. Do not run remote migration commands under this PR's authorization.
+The importer refuses non-loopback targets. It submits source batches of ten and item batches of five, with zero AI calls. Gallery staging uses one bound JSON insert; mixed import batches are validated against the Workers Free 50-query budget. Exact URL and immutable version IDs deduplicate reimports. The operation uses several transactions: a failed later stage can leave discovery/base records committed. Correct the input and reimport idempotently; no inference is automatically started. Delete ignored local state to reset development data. Do not run remote migration commands under this PR's authorization.
 
 ## Operator API
 
@@ -78,4 +78,4 @@ The October 30 deadline is most at risk from unavailable reuse/AI-analysis permi
 
 ## Verification recorded for this PR
 
-Local installation and TypeScript checks passed. All **175 unit/component/security tests across 12 files** and **13 Chromium tests** passed. Production React build and Wrangler dry-run passed. Combined local workerd integration covers the existing magazine budget, D1/SAM security separation, static reader and new 33-record import/retrieval/mock cache. The additive schema has 17 application tables, 10 explicit indexes, the preserved audit trigger, `quick_check=ok` and no foreign-key violations. Production dependency audit reports zero vulnerabilities. All provider responses used in tests are mocked; no paid calls or production writes were made. Live Meta image classification, permissions and production migration 0002 remain unverified/pending.
+Local installation and TypeScript checks passed. All **176 unit/component/security tests across 12 files** and **13 Chromium tests** passed. Production React build and Wrangler dry-run passed. Combined local workerd integration covers the existing magazine budget, D1/SAM security separation, static reader and new 33-record import/retrieval/mock cache. The additive schema has 17 application tables, 10 explicit indexes, the preserved audit trigger, `quick_check=ok` and no foreign-key violations. Production dependency audit reports zero vulnerabilities. All provider responses used in tests are mocked; no paid calls or production writes were made. Live Meta image classification, permissions and production migration 0002 remain unverified/pending.

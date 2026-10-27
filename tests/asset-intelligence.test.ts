@@ -145,3 +145,10 @@ it('does not publish a model result after an AI grant is revoked during inferenc
   expect((await store.stages()).counts?.ai_enriched).toBe(0)
   expect((await context.db.prepare('SELECT COUNT(*) AS n FROM asset_intelligence').first())?.n).toBe(0)
 })
+
+it('stages 100 gallery links and bounds mixed imports for Workers Free',async()=>{
+  await store.import({sources:[fixtureSource()],items:[]})
+  await store.discovered(Array.from({length:100},(_,i)=>fixtureItem(i)))
+  expect((await store.stages()).counts?.discovered).toBe(100)
+  await expect(store.import({sources:Array.from({length:10},(_,i)=>fixtureSource(`fixture-${i}`)),items:Array.from({length:5},(_,i)=>fixtureItem(i))})).rejects.toThrow(/Workers Free/)
+})
