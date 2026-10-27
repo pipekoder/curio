@@ -34,6 +34,14 @@ try {
   assert.deepEqual(await health.json(), { ok: true, app: 'curio', metaConfigured: false })
   const config = await fetch(`${base}/api/magazine/config`)
   assert.deepEqual(await config.json(), { enabled: false, catalogSize: 6 })
+  // The production D1 binding is emulated locally with no catalog tables.
+  // A binding must never enable operator access or trigger a schema query.
+  for (const [path, method] of [['/status', 'GET'], ['/imports', 'POST']]) {
+    const catalog = await fetch(`${base}/api/operator/catalog${path}`, { method })
+    assert.equal(catalog.status, 503)
+    assert.equal(catalog.headers.get('Cache-Control'), 'no-store')
+    assert.deepEqual(await catalog.json(), { status: 'catalog_unavailable' })
+  }
   const home = await fetch(base)
   assert.equal(home.status, 200)
   const html = await home.text()
