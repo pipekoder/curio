@@ -9,6 +9,13 @@ export default ts.config(
   {
     files: [
       "shared/editorial*.ts",
+      "shared/visual-observations.ts",
+      "worker/editorial-visual-context.ts",
+      "worker/asset-contracts.ts",
+      "worker/asset-classifier.ts",
+      "worker/asset-retrieval.ts",
+      "src/LivingAdvertisement.tsx",
+      "tests/visual*.ts",
       "worker/editorial.ts",
       "scripts/editorial-live-check.mjs",
       "scripts/editorial-validation-smoke.mjs",

@@ -1,3 +1,4 @@
+import { authoredVisualContext, visualLabel } from "../shared/visual-observations";
 import { useEffect, useRef, useState } from "react";
 import { curationCatalog, type CatalogItem } from "../shared/catalog";
 import {
@@ -26,6 +27,7 @@ export default function EditorialExperience() {
   const [edition, setEdition] = useState<EditorialEdition | null>(null);
   const [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
+  const [visualThread, setVisualThread] = useState<{ detail: string; relationship: string } | null>(null);
   const [panel, setPanel] = useState<string | null>(null),
     [topic, setTopic] = useState(""),
     [related, setRelated] = useState<CatalogItem[]>([]);
@@ -159,7 +161,8 @@ export default function EditorialExperience() {
     ]);
     setMessage("Saved to your collection.");
   }
-  function openStory(ad: CatalogItem) {
+  function openStory(ad: CatalogItem, thread: { detail: string; relationship: string } | null = null) {
+    setVisualThread(thread);
     branchId.current++;
     setPanel(ad.id);
     setTopic("");
@@ -211,7 +214,7 @@ export default function EditorialExperience() {
       aria-labelledby="personal-edition"
     >
       <div className="edition-intro">
-        <p className="eyebrow">DISCOVER / EXPLORE / COLLECT</p>
+        <p className="eyebrow">FROM ADVERTISING TO DISCOVERY</p>
         <div className="opening-copy">
           <h1 id="personal-edition" tabIndex={-1}>
             An edition
@@ -386,6 +389,7 @@ export default function EditorialExperience() {
           aria-label="Personalized editorial edition"
         >
           <header className="issue-cover">
+            <div className="cover-copy">
             <p className="eyebrow">CURIO / YOUR FIELD NOTES</p>
             <h2 ref={editionHeading} tabIndex={-1}>
               {edition.plan.title}
@@ -400,6 +404,14 @@ export default function EditorialExperience() {
                 ? "approved catalog selection"
                 : "fictional illustration library"}
             </small>
+            </div>
+            <div className="cover-contact-sheet" aria-label="A preview of your visual edition">
+              {edition.plan.features.slice(0, 2).map((f, i) => {
+                const ad = edition.items.find(a => a.image.id === f.assetId)!;
+                return <div key={f.assetId}><CatalogImage ad={ad} eager /><span>{String(i + 1).padStart(2, "0")} / {ad.name}</span></div>;
+              })}
+              <p>LOOK / CONNECT / DISCOVER</p>
+            </div>
           </header>
           <nav className="edition-toc" aria-label="Edition contents">
             {edition.plan.features.map((feature, i) => {
@@ -421,6 +433,7 @@ export default function EditorialExperience() {
               (a) =>
                 a.id === feature.catalogId && a.image.id === feature.assetId,
             )!;
+            const visualContext = authoredVisualContext(ad);
             return (
               <article
                 id={`personal-${feature.assetId}`}
@@ -437,7 +450,7 @@ export default function EditorialExperience() {
                   <span>{feature.theme}</span>
                 </div>
                 <div className="feature-art">
-                  <LivingAdvertisement ad={ad} eager={i === 0} />
+                  <LivingAdvertisement ad={ad} eager={i === 0} onExploreStory={(next, detail, relationship) => openStory(next, { detail, relationship })} />
                 </div>
                 <div className="feature-copy">
                   <p className="eyebrow">
@@ -453,6 +466,11 @@ export default function EditorialExperience() {
                       : "Authored interpretation"}{" "}
                     · no product or material claims
                   </p>
+                  {visualContext && <div className="visual-reading-note">
+                    <span className="eyebrow">A WAY OF SEEING</span>
+                    <p>{visualContext.observations.relationships.map(visualLabel).join(" / ")}</p>
+                    <small>Select a numbered detail in the image to follow a visual thread.</small>
+                  </div>}
                   <Attribution ad={ad} />
                   <div className="feature-actions">
                     <button onClick={() => openStory(ad)}>
@@ -494,6 +512,11 @@ export default function EditorialExperience() {
           <>
             <p className="eyebrow">EXPLORE / UNDERSTAND</p>
             <h2 tabIndex={-1}>{story.name}</h2>
+            {visualThread && <aside className="visual-story-arrival" role="status">
+              <p className="eyebrow">YOUR VISUAL THREAD</p>
+              <p>From {visualThread.detail} to {visualLabel(visualThread.relationship)}.</p>
+              <p>Compare the drawn forms, then explore the context below. This is an authored connection, not a verified relationship between real products.</p>
+            </aside>}
             <CatalogImage ad={story} eager />
             <Attribution ad={story} />
             <div className="story-chapter">
