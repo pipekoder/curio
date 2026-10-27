@@ -45,9 +45,16 @@ owner authorization; this task executed only local checks and CLI `--help`.
 
 ### Preflight and backup, after approval for remote inspection
 
+**Correction:** Wrangler 4.153.0's `d1 migrations list` calls
+`CREATE TABLE IF NOT EXISTS d1_migrations`; it is not a strictly read-only
+preflight command. Use the schema SELECT below. Only when the history table
+already exists, inspect it with `SELECT id,name,applied_at FROM d1_migrations
+ORDER BY id;`. Missing history plus existing catalog tables requires reconciliation.
+See [approved dispatch workflow](D1_MIGRATION_WORKFLOW.md) for the guarded one-off path.
+
 ```sh
 npx wrangler d1 info curio-catalog --config wrangler.jsonc
-npx wrangler d1 migrations list curio-catalog --remote --config wrangler.jsonc
+npx wrangler d1 execute curio-catalog --remote --config wrangler.jsonc --command "SELECT name FROM sqlite_schema WHERE name='d1_migrations';"
 npx wrangler d1 execute curio-catalog --remote --config wrangler.jsonc --command "SELECT type,name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name;"
 npx wrangler d1 time-travel info curio-catalog --config wrangler.jsonc --json
 npx wrangler d1 export curio-catalog --remote --config wrangler.jsonc --output /tmp/curio-catalog-before-0001.sql
@@ -77,7 +84,7 @@ part of schema migration. Deployment is a separate approved action.
 ### Verify schema: read-only, after migration
 
 ```sh
-npx wrangler d1 migrations list curio-catalog --remote --config wrangler.jsonc
+npx wrangler d1 execute curio-catalog --remote --config wrangler.jsonc --command "SELECT name FROM sqlite_schema WHERE name='d1_migrations';"
 npx wrangler d1 execute curio-catalog --remote --config wrangler.jsonc --file scripts/catalog-schema-check.sql --json
 ```
 
@@ -105,7 +112,7 @@ migration data/export before an approved restore if it is needed for recovery.
 # Set this privately to the reviewed bookmark recorded before migration.
 CURIO_D1_PRE_MIGRATION_BOOKMARK='<reviewed bookmark>'
 npx wrangler d1 time-travel restore curio-catalog --config wrangler.jsonc --bookmark "$CURIO_D1_PRE_MIGRATION_BOOKMARK"
-npx wrangler d1 migrations list curio-catalog --remote --config wrangler.jsonc
+npx wrangler d1 execute curio-catalog --remote --config wrangler.jsonc --command "SELECT name FROM sqlite_schema WHERE name='d1_migrations';"
 npx wrangler d1 execute curio-catalog --remote --config wrangler.jsonc --command "PRAGMA quick_check; PRAGMA foreign_key_check;"
 ```
 

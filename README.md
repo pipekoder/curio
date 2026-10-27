@@ -4,6 +4,8 @@ Persistent catalog development: see [D1 foundation, local ingestion and release 
 The private metadata catalog is off by default and does not publish pending brand images.
 The existing production database binding is prepared in code; see the
 [production migration and rollback runbook](docs/D1_PRODUCTION_RUNBOOK.md).
+The [manual migration workflow](docs/D1_MIGRATION_WORKFLOW.md) additionally requires
+Environment approval and verified private encrypted recovery storage before writes.
 See [Meta embedding research and the Vectorize design](docs/VECTORIZE_META_RESEARCH.md)
 for verified capabilities, unresolved access and the next Asset Intelligence slice.
 
