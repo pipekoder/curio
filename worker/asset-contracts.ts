@@ -1,3 +1,4 @@
+import { visualObservations } from "../shared/visual-observations"
 import { z } from 'zod'
 import { categories, lifestyles } from '../shared/catalog'
 import { isSafeHttpsUrl } from '../shared/url-policy'
@@ -19,6 +20,7 @@ const score = z.number().min(0).max(1)
 export const understanding = z.strictObject({ versionId, imageSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   categoryScores: z.record(z.enum(categories), score), aestheticScores: z.record(z.enum(lifestyles), score),
   tags: z.array(text).max(30), objects: z.array(text).max(20), colors: z.array(text).max(12),
+  observations: visualObservations.optional(),
   mood: text, composition: text, editorialThemes: z.array(text).max(10), editorialRelevance: score,
 })
 export type Understanding = z.infer<typeof understanding>

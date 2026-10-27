@@ -12,9 +12,9 @@ export class D1AssetRetriever implements AssetRetriever {
     const params = JSON.stringify({ ...r, tags: r.tags.map(t => t.toLowerCase()), seed: seed % 2147483647 })
     const eligible = readerEligibility('v.id')
     const result = await this.db.prepare(`WITH pool AS (
-      SELECT a.id AS asset_id,a.image_url,v.id AS version_id,v.sequence,
+      SELECT a.id AS asset_id,a.image_url,v.id AS version_id,v.sequence,v.sha256 AS image_sha256,
         COALESCE(s.canonical_brand_id,p.source_id,a.id) AS brand_key,
-        s.brand_name AS verified_brand,p.publisher_name,p.campaign_title,p.source_page,
+        permission.evidence AS analysis_evidence,s.brand_name AS verified_brand,p.publisher_name,p.campaign_title,p.source_page,
         COALESCE(p.hints_json,'{}') AS hints_json,i.output_json AS intelligence_json,
         CASE WHEN i.id IS NOT NULL THEN i.origin ELSE 'editorial_hints' END AS classification_source,
         ${eligible} AS reader_eligible
@@ -43,7 +43,7 @@ export class D1AssetRetriever implements AssetRetriever {
     ), varied AS (
       SELECT scores.*,(1-json_extract(?1,'$.serendipity'))*relevance+json_extract(?1,'$.serendipity')*exploration AS score,
         ROW_NUMBER() OVER(PARTITION BY brand_key ORDER BY relevance DESC,asset_id) AS brand_rank FROM scores WHERE relevance>0
-    ) SELECT asset_id,version_id,image_url,verified_brand,publisher_name,campaign_title,source_page,
+    ) SELECT asset_id,version_id,image_sha256,analysis_evidence,intelligence_json,image_url,verified_brand,publisher_name,campaign_title,source_page,
       classification_source,reader_eligible,category_score,aesthetic_score,tag_score,relevance,
       score-CASE WHEN json_extract(?1,'$.brandDiversity') THEN 0.12*(brand_rank-1) ELSE 0 END AS ranking_score
       FROM varied ORDER BY ranking_score DESC,asset_id LIMIT ?2`).bind(params,r.limit).all()
