@@ -117,3 +117,12 @@ describe('Meta response contract', () => {
     { ...draft(), title: 'Visit https://evil.test' },
   ])('rejects duplicates, mismatched categories and shopping links', data => { expect(() => normalizeIssue(data, preferences)).toThrow() })
 })
+
+// User-supplied URLs never become Worker fetch targets or model attachments.
+it('rejects image URLs in generation input and exposes no image proxy or pending registry', async () => {
+  const fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
+  expect((await post({ ...preferences, imageUrl: 'http://169.254.169.254/latest/meta-data/' }, env)).status).toBe(400)
+  expect((await app.request('/api/image?url=https://example.org/asset', {}, env)).status).toBe(404)
+  expect((await app.request('/api/catalog/pending', {}, env)).status).toBe(404)
+  expect(fetch).not.toHaveBeenCalled()
+})
