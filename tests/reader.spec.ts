@@ -47,3 +47,18 @@ test('missing static asset retains accessible content and provenance', async ({ 
   await page.locator('.catalog-card').first().getByText('Source & provenance').click()
   await expect(page.getByText(/Catalog home-lamp/)).toBeVisible()
 })
+
+test('ordinary reader navigation never requests private asset intelligence or external candidate images', async ({ page }) => {
+  const forbidden: string[] = []
+  page.on('request', request => {
+    const url = new URL(request.url())
+    if (url.pathname.startsWith('/api/operator/') || ['normcph.com','media.oliverbonas.com','assets.bolia.com','hoshinoresorts.com'].includes(url.hostname)) forbidden.push(request.url())
+  })
+  await page.goto('/')
+  await expect(page.locator('.catalog-card')).toHaveCount(6)
+  await page.getByRole('button', { name: /Read sample edition/ }).click()
+  await expect(page.locator('.reader-pages')).toBeVisible()
+  await page.getByRole('button', { name: 'Immersive / full frame' }).click()
+  await expect(page.locator('.layout-immersive')).toBeVisible()
+  expect(forbidden).toEqual([])
+})

@@ -89,3 +89,5 @@ The server-only SAM 3.1 Decoder architecture is off by default and requires
 separate analysis permission, an exact reviewed PNG permit, private operator
 credential and shared durable-budget reservation. No current image is enabled
 for live analysis. See [Living Ads and first authorized SAM test](docs/PR7_LIVING_ADS.md).
+
+Asset Intelligence v1 adds private on-demand gallery discovery, URL-only D1 metadata ingestion, cached structured Muse classification and preference ranking. See [the implementation and local workflow](docs/ASSET_INTELLIGENCE_V1.md) for the 33-candidate inventory, pending rights and production rollout gates.
