@@ -40,7 +40,13 @@ export default function EditorialExperience() {
   const requestId = useRef(0),
     branchId = useRef(0);
   useEffect(() => {
-    if (panel && !dialog.current?.open) dialog.current?.showModal();
+    if (panel && dialog.current) {
+      if (!dialog.current.open) dialog.current.showModal();
+      dialog.current.scrollTop = 0;
+      dialog.current
+        .querySelector<HTMLElement>("h2")
+        ?.focus({ preventScroll: true });
+    }
     if (!panel && dialog.current?.open) dialog.current.close();
   }, [panel]);
   useEffect(() => {
@@ -430,7 +436,7 @@ export default function EditorialExperience() {
         {story && (
           <>
             <p className="eyebrow">EXPLORE / UNDERSTAND</p>
-            <h2>{story.name}</h2>
+            <h2 tabIndex={-1}>{story.name}</h2>
             <CatalogImage ad={story} eager />
             <Attribution ad={story} />
             <h3>Publisher record</h3>
@@ -528,7 +534,7 @@ export default function EditorialExperience() {
         {panel === "collection" && (
           <>
             <p className="eyebrow">COLLECT / YOUR PRIVATE FIELD NOTES</p>
-            <h2>Your collection</h2>
+            <h2 tabIndex={-1}>Your collection</h2>
             <p>
               Saved only in this browser. No account, synchronization or
               tracking. Interests and AI prose are never stored.
