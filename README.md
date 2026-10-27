@@ -69,3 +69,16 @@ illustrations remain fallbacks until those approvals exist. AI-analysis and edit
 permissions are separate. Personalized issues remain session-only, with no share
 route, image proxy or server-side preference/image storage. See the asset register
 for the updated URL, source-page and permissions checklist.
+
+## Living Advertisements
+
+Select a numbered detail in a fictional illustration to see an authored highlight
+and editorial reveal, ask a bounded contextual question, or inspect a related
+catalog discovery. These are explicit demo annotations, not SAM detections or
+live Muse Spark commentary. Keyboard/Escape, mobile layouts and reduced motion
+are supported; the original image and advertiser/provenance layer remain.
+
+The server-only SAM 3.1 Decoder architecture is off by default and requires
+separate analysis permission, an exact reviewed PNG permit, private operator
+credential and shared durable-budget reservation. No current image is enabled
+for live analysis. See [Living Ads and first authorized SAM test](docs/PR7_LIVING_ADS.md).

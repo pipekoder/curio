@@ -57,3 +57,27 @@ it('rejects malformed internal reservation requests', async () => {
   try { expect((await new InferenceBudget(state).fetch(new Request('https://budget', { method: 'POST', body: '{}' }))).status).toBe(400) }
   finally { db.close() }
 })
+
+it('charges two-model reservations against unchanged global/hourly ceilings atomically', async () => {
+  const { state, db } = storage()
+  const budget = new InferenceBudget(state)
+  const multi = (ip: string, units: number) => budget.fetch(new Request('https://budget', { method: 'POST', body: JSON.stringify({ ip, ceiling: 3, units }) }))
+  try {
+    expect(await (await multi('a'.repeat(64), 2)).json()).toMatchObject({ allowed: true })
+    expect(await (await multi('b'.repeat(64), 2)).json()).toMatchObject({ allowed: false })
+    expect(await (await multi('b'.repeat(64), 1)).json()).toMatchObject({ allowed: true })
+    expect(await (await multi('c'.repeat(64), 1)).json()).toMatchObject({ allowed: false })
+    expect((await multi('d'.repeat(64), 100)).status).toBe(400)
+  } finally { db.close() }
+})
+
+it('permits only one SAM reservation per exact asset across IPs and UTC days', async () => {
+  vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-27T10:00:00Z'))
+  const { state, db } = storage()
+  const attempt = (ip: string) => new InferenceBudget(state).fetch(new Request('https://budget', { method: 'POST', body: JSON.stringify({ ip, ceiling: 20, samAssetId: 'reviewed-asset-v1' }) }))
+  try {
+    expect(await (await attempt('a'.repeat(64))).json()).toMatchObject({ allowed: true })
+    vi.setSystemTime(new Date('2026-10-28T10:00:00Z'))
+    expect(await (await attempt('b'.repeat(64))).json()).toMatchObject({ allowed: false })
+  } finally { db.close() }
+})

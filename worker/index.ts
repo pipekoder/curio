@@ -1,10 +1,19 @@
 import { Hono } from 'hono'
+import { timingSafeEqual } from 'hono/utils/buffer'
+import { reserveInference } from './inference-budget'
+import { decoderRequest } from '../shared/decoder'
+import { runDecoder, DecoderError, decoderAvailable } from './decoder'
 import { magazineRequest } from '../shared/magazine'
 import { curationCatalog as catalog } from '../shared/catalog'
 import { boundedText, generateMagazine, GenerationError } from './meta'
 export { InferenceBudget } from './budget'
 
 export type Bindings = {
+  SAM_OPERATOR_TOKEN?: string
+  SAM_DECODER_ENABLED?: string
+  META_SAM_MODEL?: string
+  SAM_LIVE_ASSET_ID?: string
+  DECODER_COMMENTARY_ENABLED?: string
   META_API_KEY?: string
   META_SPARK_MODEL?: string
   MAGAZINE_AI_ENABLED?: string
@@ -34,15 +43,7 @@ app.post('/api/magazine', async c => {
   if (!ip || ip.length > 64) return c.json({ error: 'Trusted client address is unavailable.' }, 403)
   if (!catalog.length) return c.json({ status: 'empty_catalog', message: 'No fictional catalog items are available.' }, 503)
   try {
-    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.RATE_LIMIT_SALT!), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-    const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(ip))
-    const hash = Array.from(new Uint8Array(signature), x => x.toString(16).padStart(2, '0')).join('')
-    const ceiling = Number(env.MAGAZINE_MAX_CALLS ?? '20')
-    if (!Number.isInteger(ceiling) || ceiling < 1 || ceiling > 100) throw new Error('Invalid ceiling')
-    const stub = env.INFERENCE_BUDGET!.get(env.INFERENCE_BUDGET!.idFromName('magazine-v1'))
-    const response = await stub.fetch('https://budget/reserve', { method: 'POST', body: JSON.stringify({ ip: hash, ceiling }) })
-    if (!response.ok) throw new Error('Budget unavailable')
-    const result = await response.json() as { allowed?: boolean; retryAfter?: number }
+    const result = await reserveInference(env, ip)
     if (result.allowed === false) {
       c.header('Retry-After', String(result.retryAfter || 60))
       return c.json({ status: 'throttled', message: 'The generation safety limit has been reached. Please try later or contact the operator.' }, 429)
@@ -59,6 +60,30 @@ app.post('/api/magazine', async c => {
     observe(error instanceof GenerationError ? error.code : 'generation_error')
     if (error instanceof GenerationError) return c.json({ status: error.code, message: error.message }, error.status)
     return c.json({ status: 'generation_error', message: 'Generation could not be completed.' }, 502)
+  }
+})
+app.get('/api/decoder/config', c => c.json({ enabled: decoderAvailable(c.env ?? {}), demo: 'authored_regions_not_sam' }))
+app.post('/api/decoder', async c => {
+  let body: unknown
+  try { body = JSON.parse(await boundedText(c.req.raw.body, 1024)) }
+  catch (error) { return c.json({ error: error instanceof SyntaxError ? 'Invalid JSON.' : 'Decoder input exceeds 1 KiB.' }, error instanceof SyntaxError ? 400 : 413) }
+  const parsed = decoderRequest.safeParse(body)
+  if (!parsed.success) return c.json({ error: 'Invalid Decoder selection or missing consent.' }, 400)
+  const env = c.env ?? {}
+  if (env.SAM_DECODER_ENABLED !== 'true') return c.json({ status: 'disabled', message: 'Live SAM analysis is disabled. Authored demos do not call a model.' }, 503)
+  if (!env.SAM_OPERATOR_TOKEN || env.SAM_OPERATOR_TOKEN.length < 32) return c.json({ status: 'operator_not_configured', message: 'A private operator test credential is required.' }, 503)
+  const authorization = c.req.header('Authorization') ?? ''
+  if (authorization.length > 512 || !await timingSafeEqual(authorization, `Bearer ${env.SAM_OPERATOR_TOKEN}`)) return c.json({ status: 'operator_required', message: 'Live Decoder analysis is restricted to the authorized operator.' }, 403)
+  if (c.req.header('Origin') !== env.PUBLIC_APP_ORIGIN || !c.req.header('Content-Type')?.toLowerCase().startsWith('application/json')) return c.json({ error: 'Request origin or content type is not allowed.' }, 403)
+  const ip = c.req.header('CF-Connecting-IP')
+  if (!ip || ip.length > 64) return c.json({ error: 'Trusted client address is unavailable.' }, 403)
+  try { return c.json(await runDecoder(parsed.data, env, ip)) }
+  catch (error) {
+    if (error instanceof DecoderError) {
+      if (error.retryAfter) c.header('Retry-After', String(error.retryAfter))
+      return c.json({ status: error.code, message: error.message }, error.status)
+    }
+    return c.json({ status: 'decoder_unavailable', message: 'The Decoder could not complete this request.' }, 503)
   }
 })
 app.notFound(c => c.json({ error: 'Not found' }, 404))

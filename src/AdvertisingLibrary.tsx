@@ -1,7 +1,7 @@
 import { memo, useState } from 'react'
 import { categories, lifestyles, localCatalogRepository, isPublishable } from '../shared/catalog'
 import type { CatalogPreview } from '../shared/magazine'
-import CatalogImage from './CatalogImage'
+import LivingAdvertisement from './LivingAdvertisement'
 import Attribution from './Attribution'
 import Magazine from './Magazine'
 
@@ -29,7 +29,7 @@ function AdvertisingLibrary() {
       <button type="button" className="reader-toggle" disabled={!previewAds.length} aria-expanded={reading} aria-controls="sample-reader" onClick={() => setReading(!reading)}>{reading ? 'Close sample edition' : 'Read sample edition →'}</button>
     </div>
     <p aria-live="polite" className="source-label">{visible.length} image {visible.length === 1 ? 'slot' : 'slots'} in this selection</p>
-    <div className="catalog-grid">{visible.map((ad, index) => <article key={ad.id} className="catalog-card"><CatalogImage ad={ad} eager={index < 2} /><h3>{ad.name}</h3><Attribution ad={ad} /><p className="catalog-tags">{ad.lifestyleTags.join(' / ')}</p></article>)}</div>
+    <div className="catalog-grid">{visible.map((ad, index) => <article key={ad.id} className="catalog-card"><LivingAdvertisement ad={ad} eager={index < 2} /><h3>{ad.name}</h3><Attribution ad={ad} /><p className="catalog-tags">{ad.lifestyleTags.join(' / ')}</p></article>)}</div>
     {!visible.length && <p className="notice">No catalog images match both filters. Try another category or lifestyle.</p>}
     <div id="sample-reader">{reading && <Magazine key={sample.id} issue={sample} />}</div>
   </section>
