@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { validateLivePair, estimateCost } from "./editorial-live-check.mjs";
+import { validateLivePair, estimateCost, sanitizeDiagnostic } from "./editorial-live-check.mjs";
 let requests = 0;
 const send = async () => {
   requests++;
@@ -109,3 +109,7 @@ try {
 } finally {
   await rm(privateDirectory, { recursive: true, force: true });
 }
+
+assert.deepEqual(sanitizeDiagnostic({ code: "connection_sequence", field: "plan", raw: "private" }), { code: "connection_sequence", field: "plan" });
+assert.equal(sanitizeDiagnostic({ code: "private provider text", field: "plan" }), null);
+assert.equal(sanitizeDiagnostic({ code: "plan_schema", field: "https://private.example" }), null);

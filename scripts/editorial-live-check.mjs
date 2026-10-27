@@ -9,6 +9,11 @@ import {
 import { isAbsolute, relative, join, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pathToFileURL } from "node:url";
+export function sanitizeDiagnostic(value) {
+  const codes = new Set(["provider_choices_or_finish", "response_json", "provider_plan_schema", "plan_schema", "visual_vocabulary_or_characters", "phrase_length", "hypothetical_sentence_format", "asset_permission_or_pair", "asset_theme_or_copy", "connection_grounding", "original_language", "repeated_copy", "focused_coverage", "insufficient_coverage", "layout_diversity", "dominant_category", "balanced_coverage", "connection_count", "connection_sequence"]);
+  return value && codes.has(value.code) && /^(response|plan|title|deck|features\.[0-5]\.(headline|narrative)|connections\.[0-4]\.thread)$/.test(value.field)
+    ? { code: value.code, field: value.field } : null;
+}
 export const liveProfiles = [
   {
     interests: "paper quiet lamp reading rooms",
@@ -149,6 +154,7 @@ export async function validateLivePair({
       usage: data.inference?.usage ?? null,
       estimatedUsd: cost,
       fallbackReason: data.fallbackReason ?? null,
+      validationDiagnostic: sanitizeDiagnostic(data.validationDiagnostic),
       sequence:
         data.plan?.features?.map((f) => ({
           catalogId: f.catalogId,
