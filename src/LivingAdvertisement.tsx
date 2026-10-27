@@ -1,0 +1,71 @@
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { authoredDemo, containRect, relatedDiscovery, type DecoderRegion } from '../shared/decoder'
+import type { CatalogItem } from '../shared/catalog'
+import CatalogImage from './CatalogImage'
+
+export default function LivingAdvertisement({ ad, eager = false }: { ad: CatalogItem; eager?: boolean }) {
+  const demo = authoredDemo(ad)
+  const [selected, setSelected] = useState<DecoderRegion | null>(null)
+  const [question, setQuestion] = useState(false)
+  const [related, setRelated] = useState(false)
+  const [ready, setReady] = useState(false)
+  const [rect, setRect] = useState<ReturnType<typeof containRect>>(null)
+  const visual = useRef<HTMLDivElement>(null)
+  const buttons = useRef<Record<string, HTMLButtonElement | null>>({})
+  const uid = useId().replace(/:/g, '')
+  const panelId = `${uid}-reveal`
+  const onReady = useCallback((image: { src: string; width: number; height: number }) => {
+    setReady(image.src === ad.image.path && image.width === ad.image.width && image.height === ad.image.height)
+  }, [ad.image.path, ad.image.width, ad.image.height])
+  const unavailable = useCallback(() => { setReady(false); setSelected(null) }, [])
+  useEffect(() => {
+    const element = visual.current, image = element?.querySelector('img')
+    if (!ready || !element || !image) { setRect(null); return }
+    const update = () => {
+      const bounds = image.getBoundingClientRect(), parent = element.getBoundingClientRect()
+      const content = containRect(bounds.width, bounds.height, ad.image.width, ad.image.height)
+      setRect(content ? { ...content, x: content.x + bounds.left - parent.left, y: content.y + bounds.top - parent.top } : null)
+    }
+    update()
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null
+    observer?.observe(image)
+    window.addEventListener('resize', update)
+    return () => { observer?.disconnect(); window.removeEventListener('resize', update) }
+  }, [ready, ad.image.width, ad.image.height])
+  const close = () => {
+    if (selected) buttons.current[selected.id]?.focus()
+    setSelected(null); setQuestion(false); setRelated(false)
+  }
+  const detail = ad.discoverableObjects.find(item => item.id === selected?.detailId)
+  const next = relatedDiscovery(ad)
+  return <div className="living-ad" onKeyDown={event => { if (event.key === 'Escape' && selected) { event.preventDefault(); close() } }}>
+    <div className="living-visual" ref={visual}>
+      <CatalogImage ad={ad} eager={eager} onImageReady={onReady} onImageUnavailable={unavailable} />
+      {ready && rect && demo && <div className="living-overlay" style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}>
+        {selected && <svg className="region-dimming" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
+          <defs><mask id={`${uid}-mask`}><rect width="1000" height="1000" fill="white" /><rect x={selected.box.x * 1000} y={selected.box.y * 1000} width={selected.box.width * 1000} height={selected.box.height * 1000} fill="black" /></mask></defs>
+          <rect width="1000" height="1000" fill="#101b14" opacity=".55" mask={`url(#${uid}-mask)`} />
+          <rect x={selected.box.x * 1000} y={selected.box.y * 1000} width={selected.box.width * 1000} height={selected.box.height * 1000} fill="none" stroke="#f8f3e5" strokeWidth="4" vectorEffect="non-scaling-stroke" />
+        </svg>}
+        {demo.regions.map((region, index) => <button type="button" key={region.id} ref={node => { buttons.current[region.id] = node }} className="image-hotspot"
+          style={{ left: `${(region.box.x + region.box.width / 2) * 100}%`, top: `${(region.box.y + region.box.height / 2) * 100}%` }}
+          aria-label={`Explore ${ad.discoverableObjects.find(item => item.id === region.detailId)?.label}`} aria-expanded={selected?.id === region.id} aria-controls={panelId}
+          onClick={() => { setSelected(region); setQuestion(false); setRelated(false) }}>{index + 1}</button>)}
+      </div>}
+    </div>
+    {demo && <p className="decoder-disclosure">Living advertisement demo · authored regions and commentary, not SAM detections. No model call. {ready ? 'Select a numbered detail to explore.' : 'Details become available when the original illustration loads.'}</p>}
+    <div id={panelId} hidden={!selected}>
+    {selected && detail && ready && <section className="editorial-reveal" role="region" aria-label={`${detail.label} editorial reveal`}>
+      <div className="reveal-heading"><p className="eyebrow">LOOK CLOSER / AUTHORED DEMO</p><button type="button" onClick={close}>Return to original image</button></div>
+      <h4>{detail.label}</h4><p>{detail.description}</p>
+      <p className="source-label">{ad.advertiser?.name ?? 'No real advertiser · fictional study'} · {ad.campaign.title}</p>
+      <p>Source: {ad.id} / {ad.image.id}. Region is an approximate authored box, not a measured mask. No model confidence or verified product identity is claimed.</p>
+      <button type="button" aria-expanded={question} onClick={() => setQuestion(!question)}>Why does this composition feel calm?</button>
+      {question && <p className="context-annotation">Authored interpretation: the spacing around this drawn detail and its relationship to the surrounding shapes can suggest a slower visual rhythm. This is a subjective reading, not a material, brand or product claim.</p>}
+      {next && <><button type="button" aria-expanded={related} onClick={() => setRelated(!related)}>Explore a related discovery</button>
+        {related && <aside className="related-discovery" aria-label="Related catalog discovery"><strong>{next.name}</strong><p>{next.description}</p><p>Connection: another approved {ad.category} catalog study. This is a local selection, not a newly generated page or an AI recommendation.</p><p>{next.provenance.attribution} · {next.sourceType}</p></aside>}</>}
+      <p className="source-label" aria-live="polite">Selected: {detail.label}. Escape returns to the unchanged original image.</p>
+    </section>}
+    </div>
+  </div>
+}

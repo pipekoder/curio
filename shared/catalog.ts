@@ -84,7 +84,7 @@ export const fallbackCatalog = validateCatalog(seeds.map(({ tags, object, ...ite
   provenance: { origin: 'authored_geometry', sourceUrl: null, evidence: 'docs/ASSET_REGISTER.md', attribution: 'Curio · original geometric placeholder', modifications: [{ date: '2026-10-27', description: 'Added original SVG illustration; no third-party image or real brand marks used.' }] },
   permissions: { display: { status: 'approved', evidence: 'docs/ASSET_REGISTER.md' }, aiAnalysis: { status: 'pending', evidence: null }, edits: { status: 'pending', evidence: null } },
   licensing: { status: 'placeholder_only', rightsHolder: null, evidence: 'docs/ASSET_REGISTER.md' }, verifiedBrandLink: null,
-  discoverableObjects: [{ id: `${item.id}-detail`, label: object, description: 'An authored visual detail in this fictional illustration; no identified real product.', grounding: 'authored_illustration', productIdentity: null }],
+  discoverableObjects: [{ id: `${item.id}-detail`, label: object, description: 'An authored visual detail in this fictional illustration; no identified real product.', grounding: 'authored_illustration', productIdentity: null }, ...(item.id === 'home-lamp' ? [{ id: 'home-lamp-base', label: 'Lamp stand', description: 'An authored geometric stem and base in the fictional illustration; not an identified real product.', grounding: 'authored_illustration', productIdentity: null }] : [])],
 })))
 
 if (Object.keys(reviewedSlotRecords).some(id => !fallbackCatalog.some(item => item.id === id))) throw new Error('Unknown demo slot')

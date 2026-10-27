@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { MagazineIssue, CatalogPreview } from '../shared/magazine'
 import Attribution from './Attribution'
-import CatalogImage from './CatalogImage'
+import LivingAdvertisement from './LivingAdvertisement'
 
 const labels = { home: 'Home & Interior', fashion: 'Fashion & Styling', travel: 'Travel & Places' }
 export default function Magazine({ issue }: { issue: MagazineIssue | CatalogPreview }) {
@@ -23,7 +23,7 @@ export default function Magazine({ issue }: { issue: MagazineIssue | CatalogPrev
       {issue.sections.map((section, index) => <article key={section.ad.image.id} className="editorial-page" aria-label={`${section.ad.name} editorial page`}>
         <div className="page-number"><span>0{index + 1}</span><span>{labels[section.category]} / {section.weight}%</span></div>
         <div className="editorial-composition">
-          <CatalogImage ad={section.ad} eager={index === 0} />
+          <LivingAdvertisement ad={section.ad} eager={index === 0} />
           <div className="editorial-copy"><h3>{section.ad.name}</h3><Attribution ad={section.ad} />
             <blockquote>{section.commentary}</blockquote><p className="source-label">{preview ? 'Authored fixture commentary · not AI output' : 'AI interpretation · not a verified factual claim'}</p>
           </div>
