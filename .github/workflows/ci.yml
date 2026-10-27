@@ -2,7 +2,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [feat/foundation, feat/meta-magazine-generator, feat/advertising-library-visual-magazine, feat/living-advertisements-sam-decoder, feat/d1-catalog-foundation, feat/d1-production-binding, feat/asset-intelligence-v1]
+    branches: [feat/foundation, feat/meta-magazine-generator, feat/advertising-library-visual-magazine, feat/living-advertisements-sam-decoder, feat/d1-catalog-foundation, feat/d1-production-binding, feat/asset-intelligence-v1, feat/editorial-experience-v1]
 permissions:
   contents: read
 jobs:
@@ -19,6 +19,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm test
       - run: npm run build
       - run: npm run worker:check

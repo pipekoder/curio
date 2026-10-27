@@ -1,6 +1,6 @@
 # Existing D1 database: binding and reviewed migration procedure
 
-> Asset Intelligence v1 adds pending migration `0002_asset_intelligence.sql`. The owner reports production 0001 complete; no remote state was queried by this change. **Do not reuse the remote `migrations apply` commands below for 0001: Wrangler applies every pending file, including 0002.** Migration 0002 requires its own backup, schema review and explicit production approval. This PR authorizes local tests only. See [Asset Intelligence v1](ASSET_INTELLIGENCE_V1.md).
+> Current owner-reported state: production migrations 0001 and 0002 are complete and verified (17 tables, 10 indexes, one audit trigger). This development did not query or modify production. The remote migration commands below document the earlier rollout procedure; **do not rerun them without approval, because Wrangler applies every pending migration**. Further writes, ingestion, operator enablement and deployment still require separate approval. See [Editorial Experience v1](EDITORIAL_EXPERIENCE_V1.md).
 
 This PR starts from main `fd8795d` (merged #9 and #10). It only prepares repository
 configuration for the **owner-supplied existing** `curio-catalog` database,
