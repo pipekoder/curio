@@ -1,5 +1,6 @@
+import { resolveEditorialInput, PROMPT_INTENT_VERSION } from "../shared/editorial-intent";
 import { authoredVisualContext, type VisualContext } from "../shared/visual-observations";
-import { retrievedVisualContext } from "./editorial-visual-context";
+import { retrievedVisualContext, observationAssetMatches } from "./editorial-visual-context";
 import {
   diagnoseOriginalPlan,
   type EditorialDiagnostic,
@@ -12,13 +13,11 @@ import { Hono } from "hono";
 import { z } from "zod";
 import {
   curationCatalog,
-  hasExternalApproval,
   type CatalogItem,
 } from "../shared/catalog";
 import {
   editorialDemoCatalog,
   validateOriginalPlan,
-  editorialPreferences,
   editorialPlan,
   fallbackPlan,
   interestTags,
@@ -52,7 +51,7 @@ export async function editorialPool(
       const items = ranked.items.flatMap((hit) => {
         const item = curationCatalog.find(
           (a) =>
-            a.image.externalUrl === hit.image_url && hasExternalApproval(a),
+            observationAssetMatches(hit, a),
         );
         if (!item || p.allocations[item.category] <= 0) return [];
         const context = retrievedVisualContext(hit, item);
@@ -79,11 +78,10 @@ editorialApi.post("/", async (c) => {
       400,
     );
   }
-  const parsed = editorialPreferences.safeParse(input);
-  if (!parsed.success)
-    return c.json({ error: "Invalid editorial preferences." }, 400);
-  const env = c.env ?? {},
-    p = parsed.data;
+  let p: EditorialPreferences;
+  try { p = resolveEditorialInput(input); }
+  catch { return c.json({ error: "Invalid editorial preferences." }, 400); }
+  const env = c.env ?? {};
   if (
     !env.PUBLIC_APP_ORIGIN ||
     c.req.header("Origin") !== env.PUBLIC_APP_ORIGIN ||
@@ -135,7 +133,7 @@ editorialApi.post("/", async (c) => {
   )
     return fallback();
   const key = await catalogDigest(
-    JSON.stringify(["editorial-v3-visual", VISUAL_LANGUAGE_VERSION, p, pool.items, pool.visualContexts]),
+    JSON.stringify(["editorial-v4-prompt", PROMPT_INTENT_VERSION, VISUAL_LANGUAGE_VERSION, p, pool.items, pool.visualContexts]),
   );
   const cached = plans.get(key);
   if (cached && cached.expires > Date.now())
@@ -146,6 +144,7 @@ editorialApi.post("/", async (c) => {
         source: "meta",
         retrieval: pool.retrieval,
         cached: true,
+        imageContextAssetIds: cached.plan ? pool.visualContexts.filter(v => v.source === "meta_image_observation" && (cached.plan as { features: { assetId: string }[] }).features.some(f => f.assetId === v.assetId)).map(v => v.assetId) : [],
         inference,
       });
     } catch {
@@ -176,6 +175,7 @@ editorialApi.post("/", async (c) => {
       source: "meta",
       retrieval: pool.retrieval,
       cached: false,
+      imageContextAssetIds: pool.visualContexts.filter(v => v.source === "meta_image_observation" && plan.features.some(f => f.assetId === v.assetId)).map(v => v.assetId),
       inference,
     });
   } catch (error) {

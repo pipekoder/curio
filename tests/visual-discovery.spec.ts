@@ -11,8 +11,8 @@ for (const width of [1440, 390]) {
     });
     await page.route("https://api.meta.ai/**", route => { modelRequests.push(route.request().url()); return route.abort(); });
     await page.goto("/");
-    await page.getByRole("button", { name: "Quiet rooms Paper / light / stillness →" }).click();
-    await page.getByRole("button", { name: "Compose my edition" }).click();
+    await page.getByRole("button", { name: "Try a prompt: Quiet rooms" }).click();
+    await page.getByRole("button", { name: "Generate magazine" }).click();
     await expect(page.getByRole("heading", { name: "The art of quiet rooms" })).toBeVisible();
     await expect(page.locator(".cover-contact-sheet .image-ready")).toHaveCount(2);
     await page.locator(".issue-cover").screenshot({ path: `test-results/visual-cover-${width}.png` });

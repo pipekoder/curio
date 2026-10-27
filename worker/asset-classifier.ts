@@ -9,7 +9,9 @@ import { boundedText } from './meta'
 import type { Bindings } from './index'
 
 export const ANALYSIS_SPEC = 'curio-asset-vision-v2'
-export class AssetAnalysisError extends Error { constructor(public code: string, public status: 403 | 409 | 415 | 429 | 502 | 503 | 504) { super(code) } }
+export type AssetInference = { attempted: boolean; reservedUnits: number; latencyMs: number | null; usage: { inputTokens: number; outputTokens: number; cachedInputTokens: number | null; totalTokens: number } | null }
+const noInference = (): AssetInference => ({ attempted: false, reservedUnits: 0, latencyMs: null, usage: null })
+export class AssetAnalysisError extends Error { inference?: AssetInference; constructor(public code: string, public status: 403 | 409 | 415 | 429 | 502 | 503 | 504) { super(code) } }
 export function mockUnderstanding(id: string): Understanding {
   return understanding.parse({ versionId: id, imageSha256: null,
     categoryScores: Object.fromEntries(categories.map((c,i) => [c, i === 0 ? 1 : 0])), aestheticScores: Object.fromEntries(lifestyles.map((s,i) => [s,i === 0 ? 1 : 0])),
@@ -47,9 +49,12 @@ export function imageDimensions(bytes: Uint8Array, mime: AnalysisMediaPermit['mi
   }
   throw new AssetAnalysisError('invalid_image_header',415)
 }
-export async function readAnalysisImage(permit: AnalysisMediaPermit, signal: AbortSignal) {
+export async function readAnalysisImage(permit: AnalysisMediaPermit, signal: AbortSignal, assets?: Fetcher) {
   if (permit.width > 4096 || permit.height > 4096 || permit.width * permit.height > 4000000) throw new AssetAnalysisError('image_too_large',415)
-  const response = await fetch(permit.imageUrl, { redirect: 'manual', signal })
+  if (permit.bundledPath && (!/^\/catalog\/[a-z0-9-]+\.png$/.test(permit.bundledPath) || permit.mime !== 'image/png' || !assets)) throw new AssetAnalysisError('invalid_bundled_media',415)
+  const response = permit.bundledPath
+    ? await assets!.fetch(new Request(`https://local-assets.invalid${permit.bundledPath}`, { redirect: 'manual', signal }))
+    : await fetch(permit.imageUrl, { redirect: 'manual', signal })
   if (!response.ok || response.headers.get('Content-Type')?.split(';')[0] !== permit.mime) { await response.body?.cancel(); throw new AssetAnalysisError('invalid_media',415) }
   const reader = response.body?.getReader(); if (!reader) throw new AssetAnalysisError('invalid_media',415)
   const chunks: Uint8Array[] = []; let size = 0
@@ -63,7 +68,8 @@ export async function readAnalysisImage(permit: AnalysisMediaPermit, signal: Abo
   let binary = ''; for (let i=0;i<bytes.length;i+=8192) binary += String.fromCharCode(...bytes.subarray(i,i+8192))
   return `data:${permit.mime};base64,${btoa(binary)}`
 }
-export async function classifyWithMeta(id: string, sha: string, data: string, key: string, signal: AbortSignal): Promise<Understanding> {
+export async function classifyWithMeta(id: string, sha: string, data: string, key: string, signal: AbortSignal, measure?: (value: Pick<AssetInference, "latencyMs" | "usage">) => void): Promise<Understanding> {
+  const started = performance.now()
   const schema = understanding.extend({ versionId: z.literal(id), imageSha256: z.literal(sha) })
   const response = await fetch('https://api.meta.ai/v1/chat/completions', { method: 'POST', redirect: 'manual', signal,
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
@@ -74,8 +80,15 @@ export async function classifyWithMeta(id: string, sha: string, data: string, ke
     }),
   })
   if (!response.ok) { await response.body?.cancel(); throw new AssetAnalysisError('provider_error',502) }
-  const envelope = z.object({ choices: z.array(z.object({ finish_reason: z.literal('stop'), message: z.object({ content: z.string().max(20000) }) })).length(1) }).parse(JSON.parse(await boundedText(response.body,32768)))
-  return schema.parse(JSON.parse(envelope.choices[0].message.content))
+  try {
+    const count = z.number().int().min(0).max(10000000)
+    const envelope = z.object({ choices: z.unknown(), usage: z.object({ prompt_tokens: count, completion_tokens: count, total_tokens: count, prompt_tokens_details: z.object({ cached_tokens: count }).optional() }).optional() }).parse(JSON.parse(await boundedText(response.body,32768)))
+    const u = envelope.usage
+    if (u && (u.total_tokens !== u.prompt_tokens + u.completion_tokens || (u.prompt_tokens_details?.cached_tokens ?? 0) > u.prompt_tokens)) throw Error('Invalid accounting')
+    measure?.({ latencyMs: Math.round(performance.now()-started), usage: u ? { inputTokens: u.prompt_tokens, outputTokens: u.completion_tokens, cachedInputTokens: u.prompt_tokens_details?.cached_tokens ?? null, totalTokens: u.total_tokens } : null })
+    const choices = z.array(z.object({ finish_reason: z.literal('stop'), message: z.object({ content: z.string().max(20000) }) })).length(1).parse(envelope.choices)
+    return schema.parse(JSON.parse(choices[0].message.content))
+  } catch { throw new AssetAnalysisError('invalid_model_output',502) }
 }
 type Dependencies = { permits: typeof analysisMediaPermits; media: typeof readAnalysisImage; classify: typeof classifyWithMeta; reserve: typeof reserveInference }
 export async function runClassification(input: unknown, env: Bindings, ip: string, overrides: Partial<Dependencies> = {}) {
@@ -89,26 +102,29 @@ export async function runClassification(input: unknown, env: Bindings, ip: strin
   const fingerprint = r.mode === 'meta' ? row.sha256 : null
   const cacheKey = await catalogDigest(JSON.stringify([row.id,fingerprint,ANALYSIS_SPEC,'muse-spark-1.3',r.mode,row.analysis_revision]))
   const existing = await store.db.prepare('SELECT j.state,i.output_json FROM asset_analysis_jobs j LEFT JOIN asset_intelligence i ON i.id=j.intelligence_id WHERE j.cache_key=?').bind(cacheKey).first()
-  if (existing?.state === 'succeeded') return { origin: r.mode, cached: true, result: understanding.parse(JSON.parse(String(existing.output_json))) }
+  if (existing?.state === 'succeeded') return { origin: r.mode, cached: true, inference: noInference(), result: understanding.parse(JSON.parse(String(existing.output_json))) }
   const claim = crypto.randomUUID(), now = Date.now()
   const claimed = await store.db.prepare(`INSERT INTO asset_analysis_jobs(cache_key,version_id,image_sha256,model,spec,origin,permission_revision,state,claim_token,lease_until,updated_at)
     VALUES(?,?,?,?,?,?,?,'processing',?,?,?) ON CONFLICT(cache_key) DO UPDATE SET state='processing',claim_token=excluded.claim_token,lease_until=excluded.lease_until,error_code=NULL,updated_at=excluded.updated_at
     WHERE ?=1 AND (asset_analysis_jobs.state='failed' OR asset_analysis_jobs.state='processing' AND asset_analysis_jobs.lease_until<?) RETURNING claim_token`)
     .bind(cacheKey,row.id,fingerprint,'muse-spark-1.3',ANALYSIS_SPEC,r.mode,row.analysis_revision,claim,now+120000,new Date().toISOString(),r.retryFailed?1:0,now).first()
   if (claimed?.claim_token !== claim) throw new AssetAnalysisError('analysis_in_progress_or_retry_requires_consent',409)
+  let inference = noInference(), inferenceStarted = 0
   const controller = new AbortController(), timer = setTimeout(()=>controller.abort(),15000)
   try {
     let result: Understanding
     if (r.mode === 'mock') result = mockUnderstanding(row.id)
     else {
-      const data = await deps.media(deps.permits[row.id],controller.signal)
+      const data = await deps.media(deps.permits[row.id],controller.signal,env.ASSETS)
       const current = await store.version(row.id)
       if (!current || !mediaReadiness(current,deps.permits).ready || current.analysis_revision !== row.analysis_revision) throw new AssetAnalysisError('permission_changed',403)
       controller.signal.throwIfAborted()
       const budget = await deps.reserve(env,ip,1)
       if (!budget.allowed) throw new AssetAnalysisError('inference_limit_reached',429)
+      inference.reservedUnits = 1
       controller.signal.throwIfAborted()
-      result = understanding.parse(await deps.classify(row.id,row.sha256!,data,env.META_API_KEY!,controller.signal))
+      inference = { ...inference, attempted: true, reservedUnits: 1 }; inferenceStarted = performance.now()
+      result = understanding.parse(await deps.classify(row.id,row.sha256!,data,env.META_API_KEY!,controller.signal, value => { inference = { ...inference, ...value } }))
       if (result.versionId !== row.id || result.imageSha256 !== row.sha256) throw new AssetAnalysisError('invalid_asset_binding',502)
     }
     controller.signal.throwIfAborted()
@@ -123,11 +139,14 @@ export async function runClassification(input: unknown, env: Bindings, ip: strin
       store.db.prepare(`UPDATE asset_analysis_jobs SET state='succeeded',intelligence_id=?,updated_at=? WHERE cache_key=? AND claim_token=? AND EXISTS(SELECT 1 FROM asset_intelligence WHERE id=?)`).bind(id,stamp,cacheKey,claim,id),
     ])
     if (saved[0].meta.changes !== 1) throw new AssetAnalysisError('permission_changed',403)
-    return { origin: r.mode, cached: false, result }
+    if (inference.attempted && inference.latencyMs === null) inference.latencyMs = Math.round(performance.now()-inferenceStarted)
+    return { origin: r.mode, cached: false, result, inference }
   } catch (error) {
     const code = controller.signal.aborted ? 'analysis_timeout' : error instanceof AssetAnalysisError ? error.code : 'analysis_failed'
     await store.db.prepare(`UPDATE asset_analysis_jobs SET state='failed',error_code=?,updated_at=? WHERE cache_key=? AND claim_token=? AND state='processing'`).bind(code,new Date().toISOString(),cacheKey,claim).run()
-    if (error instanceof AssetAnalysisError) throw error
-    throw new AssetAnalysisError(code, controller.signal.aborted ? 504 : 502)
+    if (inference.attempted && inference.latencyMs === null) inference.latencyMs = Math.round(performance.now()-inferenceStarted)
+    const failure = error instanceof AssetAnalysisError ? error : new AssetAnalysisError(code, controller.signal.aborted ? 504 : 502)
+    failure.inference = inference
+    throw failure
   } finally { clearTimeout(timer) }
 }

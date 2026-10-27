@@ -1,0 +1,9 @@
+{
+  "environment": "local synthetic, not production Core Web Vitals",
+  "width": 390,
+  "composeMs": 108,
+  "navigationMs": 359.30000001192093,
+  "jsBytes": 364409,
+  "externalRequests": 0,
+  "modelCalls": 0
+}

@@ -172,7 +172,11 @@ export function fallbackPlan(
       title: top
         ? `${top.category === "home" ? "The art of quiet rooms" : top.category === "fashion" ? "A study in silhouette" : "Into the open"}`
         : "An open invitation",
-      deck: `${p.mode} / ${p.aesthetics.join(" + ")}. A local edition of authorized visual studies.`,
+      deck: top?.category === "home"
+        ? "A study of light, form and the spaces that invite us to pause."
+        : top?.category === "fashion"
+          ? "Follow folds, silhouettes and the rhythm of a different point of view."
+          : "An invitation to wander between open paths and quieter horizons.",
       features: ranked.map((a, i) => ({
         catalogId: a.id,
         assetId: a.image.id,

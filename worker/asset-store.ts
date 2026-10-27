@@ -44,17 +44,19 @@ export class AssetStore {
       }>()
   }
   async access(id: string) { return this.db.prepare('SELECT * FROM asset_access_checks WHERE version_id=? ORDER BY sequence DESC LIMIT 1').bind(id).first() }
-  async checkAccess(id: string, send: typeof fetch = fetch) {
+  async checkAccess(id: string, send: typeof fetch = fetch, assets?: Fetcher) {
     const row = await this.version(id); if (!row || row.archived_at || row.latest_version !== row.id) throw new CatalogConflict('Unknown or stale active image version.')
     // HEAD on a previously imported exact URL, only for server-reviewed media
     // hosts. No GET body, redirects, conversions or remote model processing.
-    const { technicalMediaHosts } = await import('./asset-sources')
-    const allowed = technicalMediaHosts.some(host => host === new URL(row.image_url).hostname)
+    const { technicalMediaHosts, analysisMediaPermits } = await import('./asset-sources')
+    const permit = analysisMediaPermits[id]
+    const bundled = permit?.imageUrl === row.image_url && permit.sha256 === row.sha256 && permit.width === row.width && permit.height === row.height && permit.bundledPath && /^\/catalog\/[a-z0-9-]+\.png$/.test(permit.bundledPath) && permit.mime === 'image/png' && assets ? permit.bundledPath : null
+    const allowed = Boolean(bundled) || technicalMediaHosts.some(host => host === new URL(row.image_url).hostname)
     if (!allowed) throw new CatalogConflict('This media host needs a server policy review before technical access.')
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 5000)
     let status: 'reachable' | 'blocked' | 'failed' = 'failed', code: number | null = null, type: string | null = null
     try {
-      const response = await send(row.image_url, { method: 'HEAD', redirect: 'manual', signal: controller.signal })
+      const response = bundled ? await assets!.fetch(new Request(`https://local-assets.invalid${bundled}`, { method: "HEAD", signal: controller.signal, redirect: "manual" })) : await send(row.image_url, { method: 'HEAD', redirect: 'manual', signal: controller.signal })
       code = response.status; type = response.headers.get('Content-Type')?.split(';')[0] ?? null
       status = response.status === 200 && type?.startsWith('image/') ? 'reachable' : [401,403,429].includes(response.status) ? 'blocked' : 'failed'
       await response.body?.cancel()
