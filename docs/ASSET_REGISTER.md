@@ -21,7 +21,8 @@ Existing fictional fixture names are retained, not introduced as real brands.
 All have `licensing.status=placeholder_only`, no real advertiser, no source
 website, no shopping/brand link, and no asserted third-party reuse permission.
 Asset IDs use `asset-{ad-id}-v1`; replacing an image requires a new versioned
-asset ID and a modification-history entry. The images contain no overlaid text,
+asset ID and a modification-history entry. Reader frames contain the complete source image without cropping or stripping marks.
+The images contain no overlaid text,
 logos, external resources, scripts, embedded photographs or automatic mark
 removal. Their provenance and fictional status are visible outside each image.
 The annotations describe authored geometry; **they are not SAM detections or

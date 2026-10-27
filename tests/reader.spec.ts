@@ -22,6 +22,7 @@ for (const width of [1280, 390]) {
     await reader.screenshot({ path: `test-results/reader-airy-${width}.png` })
     await page.getByRole('button', { name: 'Immersive / full frame' }).click()
     await expect(reader).toHaveClass(/layout-immersive/)
+    expect(await reader.locator('img').first().evaluate(element => getComputedStyle(element).objectFit)).toBe('contain')
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     await expect(reader.locator('figure .attribution')).toHaveCount(0)
     await expect(reader.locator('.attribution')).toHaveCount(3)
