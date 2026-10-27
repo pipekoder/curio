@@ -1,0 +1,1434 @@
+{
+  "sources": [
+    {
+      "id": "oliver-bonas",
+      "name": "Oliver Bonas",
+      "entryUrl": "https://media.oliverbonas.com/cdn-cgi/image/dpr=1,w=2600,h=1734,fit=scale-down,f=auto,background=transparent/static/cms/media/Oliver-Bonas%20AW26%20Ditial%20Lookbook-4.png",
+      "kind": "individual_urls",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799"
+    },
+    {
+      "id": "bolia",
+      "name": "BOLIA",
+      "entryUrl": "https://assets.bolia.com/cdn-cgi/image/fit=cover,width=1500,format=auto,gravity=0.50x0.28,height=1350,quality=81/globalassets/media/4.-collections/fy27/fy27aw/living-room/cosima_aw27_5.jpg?v=1065279335",
+      "kind": "individual_urls",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799"
+    },
+    {
+      "id": "experimental-group",
+      "name": "Experimental Group",
+      "entryUrl": "https://cdn.prod.website-files.com/6932dc91bcf2019d2c1c5686/6a3a62361c2ee5436c15710f_experimental-group-press-lady-desktop.webp",
+      "kind": "individual_urls",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799"
+    },
+    {
+      "id": "hoshino-resorts",
+      "name": "Hoshino Resorts",
+      "entryUrl": "https://hoshinoresorts.com/wpadmin2022/wp-content/uploads/2026/10/65ded2c39f09562d2eac8a5842f96bba-1200x675.jpg",
+      "kind": "individual_urls",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799"
+    },
+    {
+      "id": "hm-home",
+      "name": "H&M Home",
+      "entryUrl": "https://press.hm.com/image-gallery/hm-home",
+      "kind": "gallery",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6441844919"
+    },
+    {
+      "id": "hm-events",
+      "name": "H&M Events",
+      "entryUrl": "https://press.hm.com/image-gallery/events",
+      "kind": "gallery",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6441844919"
+    },
+    {
+      "id": "hm-move",
+      "name": "H&M Move",
+      "entryUrl": "https://press.hm.com/image-gallery/hm-move",
+      "kind": "gallery",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6441844919"
+    },
+    {
+      "id": "zara-press",
+      "name": "Zara Press",
+      "entryUrl": "https://www.zara.com/integration/pressapi/microsite/news/?countryiso=WW&languageiso=pt",
+      "kind": "gallery",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6441844919"
+    },
+    {
+      "id": "normann-gallery",
+      "name": "Normann Copenhagen digital showroom",
+      "entryUrl": "https://normcph.presscloud.com/digitalshowroom/#/gallery",
+      "kind": "gallery",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6441844919"
+    },
+    {
+      "id": "norm-residence",
+      "name": "Norm Residence",
+      "entryUrl": "https://normcph.presscloud.com/digitalshowroom/#/gallery/Norm-Residence",
+      "kind": "gallery",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6441844919"
+    },
+    {
+      "id": "norm-residence-project",
+      "name": "Norm Architects · Norm Residence project",
+      "entryUrl": "https://normcph.com/project/norm-residence/",
+      "kind": "gallery",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6441844919"
+    }
+  ],
+  "items": [
+    {
+      "candidate": {
+        "sourceId": "oliver-bonas",
+        "imageUrl": "https://media.oliverbonas.com/cdn-cgi/image/dpr=1,w=2600,h=1734,fit=scale-down,f=auto,background=transparent/static/cms/media/Oliver-Bonas%20AW26%20Ditial%20Lookbook-4.png",
+        "versionKey": "owner-candidate-v1",
+        "sourcePage": null,
+        "retrievedAt": "2026-10-27T13:11:39Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+          "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+        }
+      },
+      "publisher": {
+        "name": "Oliver Bonas",
+        "campaign": null,
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "hints": {
+          "categories": [
+            "home",
+            "fashion"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "unverified",
+        "transport": "owner_metadata",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "oliver-bonas",
+        "imageUrl": "https://media.oliverbonas.com/cdn-cgi/image/dpr=1,w=2600,h=1734,fit=scale-down,f=auto,background=transparent/static/cms/media/Oliver%20Bonas%20AW26%20Ditial%20Lookbook-7-3.png",
+        "versionKey": "owner-candidate-v1",
+        "sourcePage": null,
+        "retrievedAt": "2026-10-27T13:11:39Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+          "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+        }
+      },
+      "publisher": {
+        "name": "Oliver Bonas",
+        "campaign": null,
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "hints": {
+          "categories": [
+            "home",
+            "fashion"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "unverified",
+        "transport": "owner_metadata",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "oliver-bonas",
+        "imageUrl": "https://media.oliverbonas.com/cdn-cgi/image/dpr=1,w=2600,h=1734,fit=scale-down,f=auto,background=transparent/static/cms/media/Oliver-Bonas%20AW26%20Ditial%20Lookbook-9.png",
+        "versionKey": "owner-candidate-v1",
+        "sourcePage": null,
+        "retrievedAt": "2026-10-27T13:11:39Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+          "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+        }
+      },
+      "publisher": {
+        "name": "Oliver Bonas",
+        "campaign": null,
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "hints": {
+          "categories": [
+            "home",
+            "fashion"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "unverified",
+        "transport": "owner_metadata",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "oliver-bonas",
+        "imageUrl": "https://media.oliverbonas.com/cdn-cgi/image/dpr=1,w=2600,h=1734,fit=scale-down,f=auto,background=transparent/static/cms/media/Oliver-Bonas%20AW26%20Ditial%20Lookbook-12.png",
+        "versionKey": "owner-candidate-v1",
+        "sourcePage": null,
+        "retrievedAt": "2026-10-27T13:11:39Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+          "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+        }
+      },
+      "publisher": {
+        "name": "Oliver Bonas",
+        "campaign": null,
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "hints": {
+          "categories": [
+            "home",
+            "fashion"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "unverified",
+        "transport": "owner_metadata",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "bolia",
+        "imageUrl": "https://assets.bolia.com/cdn-cgi/image/fit=cover,width=1500,format=auto,gravity=0.50x0.28,height=1350,quality=81/globalassets/media/4.-collections/fy27/fy27aw/living-room/cosima_aw27_5.jpg?v=1065279335",
+        "versionKey": "owner-candidate-v1",
+        "sourcePage": null,
+        "retrievedAt": "2026-10-27T13:11:39Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+          "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+        }
+      },
+      "publisher": {
+        "name": "BOLIA",
+        "campaign": null,
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "hints": {
+          "categories": [
+            "home"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "unverified",
+        "transport": "owner_metadata",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "bolia",
+        "imageUrl": "https://assets.bolia.com/cdn-cgi/image/fit=cover,width=1500,format=auto,gravity=0.42x0.00,height=1500,quality=81/globalassets/media/4.-collections/fy27/fy27aw/people--moods/silhouette-lulu-safia_aw27_1.jpg?v=1065279509",
+        "versionKey": "owner-candidate-v1",
+        "sourcePage": null,
+        "retrievedAt": "2026-10-27T13:11:39Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+          "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+        }
+      },
+      "publisher": {
+        "name": "BOLIA",
+        "campaign": null,
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "hints": {
+          "categories": [
+            "home"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "unverified",
+        "transport": "owner_metadata",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "bolia",
+        "imageUrl": "https://assets.bolia.com/cdn-cgi/image/fit=cover,width=1500,format=auto,gravity=0.50x1.00,height=853,quality=81/globalassets/media/4.-collections/fy27/fy27aw/living-room/cosima-kaio-plateau-natura-mingei-mei-ciora-duna-nami-classic-cushion_aw27.jpg?v=1065279519",
+        "versionKey": "owner-candidate-v1",
+        "sourcePage": null,
+        "retrievedAt": "2026-10-27T13:11:39Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+          "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+        }
+      },
+      "publisher": {
+        "name": "BOLIA",
+        "campaign": null,
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "hints": {
+          "categories": [
+            "home"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "unverified",
+        "transport": "owner_metadata",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "experimental-group",
+        "imageUrl": "https://cdn.prod.website-files.com/6932dc91bcf2019d2c1c5686/6a3a62361c2ee5436c15710f_experimental-group-press-lady-desktop.webp",
+        "versionKey": "owner-candidate-v1",
+        "sourcePage": null,
+        "retrievedAt": "2026-10-27T13:11:39Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+          "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+        }
+      },
+      "publisher": {
+        "name": "Experimental Group",
+        "campaign": null,
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "hints": {
+          "categories": [
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "unverified",
+        "transport": "owner_metadata",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "hoshino-resorts",
+        "imageUrl": "https://hoshinoresorts.com/wpadmin2022/wp-content/uploads/2026/10/65ded2c39f09562d2eac8a5842f96bba-1200x675.jpg",
+        "versionKey": "owner-candidate-v1",
+        "sourcePage": null,
+        "retrievedAt": "2026-10-27T13:11:39Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+          "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+        }
+      },
+      "publisher": {
+        "name": "Hoshino Resorts",
+        "campaign": null,
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "hints": {
+          "categories": [
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "unverified",
+        "transport": "owner_metadata",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "hoshino-resorts",
+        "imageUrl": "https://hoshinoresorts.com/wpadmin2022/wp-content/uploads/2026/10/1a0ed59b8b5afcbb8a9322d5d0cb1cf0-1200x800.jpg",
+        "versionKey": "owner-candidate-v1",
+        "sourcePage": null,
+        "retrievedAt": "2026-10-27T13:11:39Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+          "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+        }
+      },
+      "publisher": {
+        "name": "Hoshino Resorts",
+        "campaign": null,
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "hints": {
+          "categories": [
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "unverified",
+        "transport": "owner_metadata",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_04-1.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [
+            "Scandinavian",
+            "Japanese Wabi-Sabi",
+            "Quiet Luxury"
+          ],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_11.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [
+            "Scandinavian",
+            "Japanese Wabi-Sabi",
+            "Quiet Luxury"
+          ],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Karl-Tranberg_16.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [
+            "Scandinavian",
+            "Japanese Wabi-Sabi",
+            "Quiet Luxury"
+          ],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_03-1.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [
+            "Scandinavian",
+            "Japanese Wabi-Sabi",
+            "Quiet Luxury"
+          ],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_15-1.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [
+            "Scandinavian",
+            "Japanese Wabi-Sabi",
+            "Quiet Luxury"
+          ],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_33.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Karl-Tranberg_04.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_32.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Karl-Tranberg_45-1.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Karl-Tranberg_22-1.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_28-1.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_25-1.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_38.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/NormArchitects_NormResidence_2026_JPB9-1.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_20-1.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_47.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_44B-1.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Karl-Tranberg_101-1.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_105.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_18-1.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Karl-Tranberg_108-1.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_101.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    },
+    {
+      "candidate": {
+        "sourceId": "norm-residence-project",
+        "imageUrl": "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_103-1.jpg",
+        "versionKey": "norm-project-v1",
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "retrievedAt": "2026-10-27T16:17:28.242Z",
+        "sha256": null,
+        "width": null,
+        "height": null,
+        "alt": null,
+        "attribution": null,
+        "sourceType": "brand_candidate",
+        "provenance": {
+          "discoveredFrom": "https://normcph.com/project/norm-residence/",
+          "notes": "Exact publisher-linked URL observed through web connector; no image files committed or Meta inference. Category hints are editorial review hypotheses, not image classifications. Rights and exact image dimensions/fingerprint remain unverified."
+        }
+      },
+      "publisher": {
+        "name": "Norm Architects",
+        "campaign": "Norm Residence",
+        "description": null,
+        "alt": null,
+        "sourcePage": "https://normcph.com/project/norm-residence/",
+        "hints": {
+          "categories": [
+            "home",
+            "travel"
+          ],
+          "aesthetics": [],
+          "tags": []
+        }
+      },
+      "access": {
+        "status": "observed",
+        "transport": "web_connector",
+        "httpStatus": null,
+        "contentType": null
+      }
+    }
+  ],
+  "planning": {
+    "classificationUrls": [
+      "https://media.oliverbonas.com/cdn-cgi/image/dpr=1,w=2600,h=1734,fit=scale-down,f=auto,background=transparent/static/cms/media/Oliver-Bonas%20AW26%20Ditial%20Lookbook-4.png",
+      "https://media.oliverbonas.com/cdn-cgi/image/dpr=1,w=2600,h=1734,fit=scale-down,f=auto,background=transparent/static/cms/media/Oliver%20Bonas%20AW26%20Ditial%20Lookbook-7-3.png",
+      "https://assets.bolia.com/cdn-cgi/image/fit=cover,width=1500,format=auto,gravity=0.50x0.28,height=1350,quality=81/globalassets/media/4.-collections/fy27/fy27aw/living-room/cosima_aw27_5.jpg?v=1065279335",
+      "https://cdn.prod.website-files.com/6932dc91bcf2019d2c1c5686/6a3a62361c2ee5436c15710f_experimental-group-press-lady-desktop.webp",
+      "https://hoshinoresorts.com/wpadmin2022/wp-content/uploads/2026/10/65ded2c39f09562d2eac8a5842f96bba-1200x675.jpg",
+      "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_04-1.jpg",
+      "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_25-1.jpg"
+    ],
+    "samHeroUrls": [
+      "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_04-1.jpg",
+      "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_28-1.jpg",
+      "https://normcph.com/wp-content/uploads/2026/10/Norm-Architects_Amaliegade-Office_Jonas-Bjerre-Poulsen_38.jpg"
+    ],
+    "status": "Provisional review shortlist only. No image is analysis-ready or SAM-authorized."
+  }
+}
