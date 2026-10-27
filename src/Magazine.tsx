@@ -9,9 +9,10 @@ export default function Magazine({ issue }: { issue: MagazineIssue | CatalogPrev
   const [layout, setLayout] = useState(issue.layoutIntent)
   const heading = `magazine-${issue.id}`
   return <section className={`magazine layout-${layout}`} aria-labelledby={heading}>
-    <header className="reader-header"><p className="eyebrow">{preview ? 'THE LIBRARY EDITION / NO AI CALL' : 'YOUR CURATED EDITION'}</p>
+    <header className="reader-header"><p className="eyebrow">{preview ? 'THE LIBRARY EDITION / NO AI CALL' : 'YOUR PRIVATE EDITION'}</p>
       <h2 id={heading}>{issue.title}</h2>
       <p>{preview ? 'A local sample from the advertising library. Commentary below is authored fixture text; this sample makes no AI call.' : 'Curated commentary by Meta Muse Spark 1.3 Standard. AI interpretation is not a verified factual claim.'}</p>
+      {!preview && <p className="source-label">Session-only edition: Curio does not save or share this issue or your preferences. Approved external images load directly from their hosts; those hosts may receive your IP address.</p>}
       <p>Category percentages represent editorial emphasis, with one selected item per active category.</p>
       <div className="layout-controls" role="group" aria-label="Editorial layout">
         <button type="button" aria-pressed={layout === 'airy'} onClick={() => setLayout('airy')}>Airy / split</button>

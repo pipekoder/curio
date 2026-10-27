@@ -28,6 +28,9 @@ const post = ip => mf.dispatchFetch('https://curio.test/api/magazine', {
   body: JSON.stringify({ interests: '', lifestyles: ['Scandinavian'], allocations: { home: 100, fashion: 0, travel: 0 }, consent: true }),
 })
 try {
+  assert.equal((await mf.dispatchFetch('https://curio.test/api/image?url=http://169.254.169.254/')).status, 404)
+  assert.equal((await mf.dispatchFetch('https://curio.test/api/catalog/pending')).status, 404)
+  assert.equal(calls, 0, 'no image proxy, pending registry or external fetch')
   const responses = await Promise.all(Array.from({ length: 6 }, () => post('192.0.2.1')))
   assert.equal(responses.filter(r => r.status === 200).length, 1, JSON.stringify(await Promise.all(responses.map(async r => ({ status: r.status, body: await r.clone().text() })))))
   assert.equal(responses.filter(r => r.status === 429).length, 5)

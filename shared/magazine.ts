@@ -28,6 +28,9 @@ export const magazineIssue = z.strictObject({
     category, weight, ad: catalogItem, commentary: prose,
     commentarySource: z.literal('ai_interpretation_not_verified_fact'),
   })).min(1).max(3),
+}).superRefine((issue, ctx) => {
+  try { validateCatalog(issue.sections.map(section => section.ad)) }
+  catch { ctx.addIssue({ code: 'custom', message: 'The issue contains an unapproved asset.' }) }
 })
 export type MagazineIssue = z.infer<typeof magazineIssue>
 export type CatalogPreview = Omit<MagazineIssue, 'model' | 'source' | 'sections'> & {

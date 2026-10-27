@@ -58,7 +58,7 @@ export default function App() {
       const parsed = magazineIssue.safeParse(data)
       if (!parsed.success) { setStatus('The edition could not be validated. Please try again later.'); return }
       setIssue(parsed.data)
-      setStatus('Your fictional edition is ready.')
+      setStatus('Your private edition is ready.')
     } catch (error) {
       setStatus(error instanceof Error && error.name === 'TimeoutError' ? 'The request timed out. Please wait before trying again.' : 'The API is unavailable. Please try again later.')
     } finally {
@@ -86,7 +86,7 @@ export default function App() {
         <h2>Make it yours.</h2>
         <p>Decide how much space each category gets in your magazine.</p>
         {(Object.keys(allocations) as (keyof Allocation)[]).map(key => <div className="slider" key={key}><label htmlFor={key}>{({ home: 'Home & Interior', fashion: 'Fashion & Styling', travel: 'Travel & Places' } as const)[key]} <strong>{allocations[key]}%</strong></label><input type="range" id={key} min="0" max="100" step="5" value={allocations[key]} onChange={e => setAllocations(current => ({ ...current, [key]: Number(e.target.value) }))} /></div>)}
-        <p className="transparency">Fictional catalog only: illustrated placeholders, no real brands or shopping links. Commentary is AI interpretation, not verified fact.</p>
+        <p className="transparency">Every image keeps its source and rights classification. The fallback illustrations are fictional. Commentary is AI interpretation, not verified fact; no shopping links are generated.</p>
         <label className="consent"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} /> I agree to send these preferences to Meta Muse Spark 1.3 Standard for this edition. Do not enter personal or sensitive information.</label>
         <div className="actions"><button type="button" className="generate" disabled={!available || !consent || total !== 100 || !lifestyles.length || loading} onClick={generate}>{loading ? 'Creating your edition…' : 'Generate my magazine →'}</button><span className={total === 100 ? 'valid' : 'invalid'}>{total === 100 ? 'Your mix is ready' : 'Adjust categories to total 100%'}</span></div>
         {status && <p className="notice" role="status">{status}</p>}
