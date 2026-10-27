@@ -200,7 +200,7 @@ Sources: [GitHub Environment protection and plan availability](https://docs.gith
 
 ### Recorded local checks, October 27
 
-- 160 application/component/security/D1 tests passed; 26 migration-specific
+- 160 application/component/security/D1 tests passed; 27 migration-specific
   tests passed with mocked transports and real local SQLite.
 - Typecheck, production build, Worker dry run and Worker integration passed.
 - All 12 Chromium tests passed; original reader/Living Ads behavior retained.

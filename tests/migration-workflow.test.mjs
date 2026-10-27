@@ -144,7 +144,7 @@ async function exercise(options = {}) {
     transferRecovery: async bytes => { if (options.backupFailure) throw new Error('backup not durable'); backupPayload = decrypt(bytes); backedUp = true },
   }
   let failure
-  try { await migrate({ ...env, RUNNER_TEMP: temp }, deps) } catch (error) { failure = error }
+  try { await migrate({ ...env, ...options.environment, RUNNER_TEMP: temp }, deps) } catch (error) { failure = error }
   const evidence = JSON.parse(await readFile(join(temp, 'curio-d1-evidence/verification.json'), 'utf8'))
   const files = await readdir(temp)
   assert.deepEqual(files, ['curio-d1-evidence'], 'all private runner recovery files removed')
@@ -159,6 +159,11 @@ test('full mocked orchestration verifies actual local migration and persists bac
   assert.deepEqual(r.commands, ['d1 time-travel info','d1 export curio-catalog','d1 migrations apply'])
   assert.equal(r.evidence.outcome, 'verified'); assert.equal(r.evidence.tablesVerified, 10); assert.equal(r.evidence.indexesVerified, 6)
   assert.equal(r.backupPayload.recovery.bookmark, 'SENSITIVE-BOOKMARK')
+})
+test('failure artifact never copies arbitrary dispatch input', async () => {
+  const r = await exercise({ noApproval: true, environment: { REVIEWED_SHA: 'SENSITIVE-INPUT' } })
+  assert.equal(r.evidence.commit, sha)
+  assert.equal(JSON.stringify(r.evidence).includes('SENSITIVE-INPUT'), false)
 })
 for (const option of ['noApproval','wrongAccount','enabledOperator','unexpectedTable','exportFailure','backupFailure']) test(`no migration write on ${option}`, async () => {
   const r = await exercise({ [option]: true })
