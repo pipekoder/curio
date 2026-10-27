@@ -6,9 +6,10 @@ import { runDecoder, DecoderError, decoderAvailable } from './decoder'
 import { magazineRequest } from '../shared/magazine'
 import { curationCatalog as catalog } from '../shared/catalog'
 import { boundedText, generateMagazine, GenerationError } from './meta'
+import { catalogApi, type CatalogBindings } from './catalog-api'
 export { InferenceBudget } from './budget'
 
-export type Bindings = {
+export type Bindings = CatalogBindings & {
   SAM_OPERATOR_TOKEN?: string
   SAM_DECODER_ENABLED?: string
   META_SAM_MODEL?: string
@@ -25,6 +26,7 @@ export type Bindings = {
 }
 const app = new Hono<{ Bindings: Bindings }>()
 app.use('/api/*', async (c, next) => { c.header('Cache-Control', 'no-store'); await next() })
+app.route('/api/operator/catalog', catalogApi)
 const configured = (env: Bindings) => Boolean(env.META_API_KEY && env.META_SPARK_MODEL === 'muse-spark-1.3' && env.INFERENCE_BUDGET && env.RATE_LIMIT_SALT && env.RATE_LIMIT_SALT.length >= 32 && env.PUBLIC_APP_ORIGIN)
 app.get('/api/health', c => c.json({ ok: true, app: 'curio', metaConfigured: Boolean(c.env?.META_API_KEY && c.env?.META_SPARK_MODEL) }))
 app.get('/api/magazine/config', c => c.json({ enabled: c.env?.MAGAZINE_AI_ENABLED === 'true' && configured(c.env), catalogSize: catalog.length }))

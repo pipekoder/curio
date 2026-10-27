@@ -1,0 +1,247 @@
+{
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "id": "oliver-bonas",
+      "name": "Oliver Bonas",
+      "entryUrl": "https://media.oliverbonas.com/cdn-cgi/image/dpr=1,w=2600,h=1734,fit=scale-down,f=auto,background=transparent/static/cms/media/Oliver-Bonas%20AW26%20Ditial%20Lookbook-4.png",
+      "kind": "individual_urls",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799"
+    },
+    {
+      "id": "bolia",
+      "name": "BOLIA",
+      "entryUrl": "https://assets.bolia.com/cdn-cgi/image/fit=cover,width=1500,format=auto,gravity=0.50x0.28,height=1350,quality=81/globalassets/media/4.-collections/fy27/fy27aw/living-room/cosima_aw27_5.jpg?v=1065279335",
+      "kind": "individual_urls",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799"
+    },
+    {
+      "id": "experimental-group",
+      "name": "Experimental Group",
+      "entryUrl": "https://cdn.prod.website-files.com/6932dc91bcf2019d2c1c5686/6a3a62361c2ee5436c15710f_experimental-group-press-lady-desktop.webp",
+      "kind": "individual_urls",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799"
+    },
+    {
+      "id": "hoshino-resorts",
+      "name": "Hoshino Resorts",
+      "entryUrl": "https://hoshinoresorts.com/wpadmin2022/wp-content/uploads/2026/10/65ded2c39f09562d2eac8a5842f96bba-1200x675.jpg",
+      "kind": "individual_urls",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799"
+    },
+    {
+      "id": "hm-home",
+      "name": "H&M Home",
+      "entryUrl": "https://press.hm.com/image-gallery/hm-home",
+      "kind": "gallery",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6441844919"
+    },
+    {
+      "id": "hm-events",
+      "name": "H&M Events",
+      "entryUrl": "https://press.hm.com/image-gallery/events",
+      "kind": "gallery",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6441844919"
+    },
+    {
+      "id": "hm-move",
+      "name": "H&M Move",
+      "entryUrl": "https://press.hm.com/image-gallery/hm-move",
+      "kind": "gallery",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6441844919"
+    },
+    {
+      "id": "zara-press",
+      "name": "Zara Press",
+      "entryUrl": "https://www.zara.com/integration/pressapi/microsite/news/?countryiso=WW&languageiso=pt",
+      "kind": "gallery",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6441844919"
+    },
+    {
+      "id": "normann-gallery",
+      "name": "Normann Copenhagen digital showroom",
+      "entryUrl": "https://normcph.presscloud.com/digitalshowroom/#/gallery",
+      "kind": "gallery",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6441844919"
+    },
+    {
+      "id": "norm-residence",
+      "name": "Norm Residence",
+      "entryUrl": "https://normcph.presscloud.com/digitalshowroom/#/gallery/Norm-Residence",
+      "kind": "gallery",
+      "issueUrl": "https://github.com/pipekoder/curio/issues/5#issuecomment-6441844919"
+    }
+  ],
+  "candidates": [
+    {
+      "sourceId": "oliver-bonas",
+      "imageUrl": "https://media.oliverbonas.com/cdn-cgi/image/dpr=1,w=2600,h=1734,fit=scale-down,f=auto,background=transparent/static/cms/media/Oliver-Bonas%20AW26%20Ditial%20Lookbook-4.png",
+      "versionKey": "owner-candidate-v1",
+      "sourcePage": null,
+      "retrievedAt": "2026-10-27T13:11:39Z",
+      "sha256": null,
+      "width": null,
+      "height": null,
+      "alt": null,
+      "attribution": null,
+      "sourceType": "brand_candidate",
+      "provenance": {
+        "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+      }
+    },
+    {
+      "sourceId": "oliver-bonas",
+      "imageUrl": "https://media.oliverbonas.com/cdn-cgi/image/dpr=1,w=2600,h=1734,fit=scale-down,f=auto,background=transparent/static/cms/media/Oliver%20Bonas%20AW26%20Ditial%20Lookbook-7-3.png",
+      "versionKey": "owner-candidate-v1",
+      "sourcePage": null,
+      "retrievedAt": "2026-10-27T13:11:39Z",
+      "sha256": null,
+      "width": null,
+      "height": null,
+      "alt": null,
+      "attribution": null,
+      "sourceType": "brand_candidate",
+      "provenance": {
+        "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+      }
+    },
+    {
+      "sourceId": "oliver-bonas",
+      "imageUrl": "https://media.oliverbonas.com/cdn-cgi/image/dpr=1,w=2600,h=1734,fit=scale-down,f=auto,background=transparent/static/cms/media/Oliver-Bonas%20AW26%20Ditial%20Lookbook-9.png",
+      "versionKey": "owner-candidate-v1",
+      "sourcePage": null,
+      "retrievedAt": "2026-10-27T13:11:39Z",
+      "sha256": null,
+      "width": null,
+      "height": null,
+      "alt": null,
+      "attribution": null,
+      "sourceType": "brand_candidate",
+      "provenance": {
+        "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+      }
+    },
+    {
+      "sourceId": "oliver-bonas",
+      "imageUrl": "https://media.oliverbonas.com/cdn-cgi/image/dpr=1,w=2600,h=1734,fit=scale-down,f=auto,background=transparent/static/cms/media/Oliver-Bonas%20AW26%20Ditial%20Lookbook-12.png",
+      "versionKey": "owner-candidate-v1",
+      "sourcePage": null,
+      "retrievedAt": "2026-10-27T13:11:39Z",
+      "sha256": null,
+      "width": null,
+      "height": null,
+      "alt": null,
+      "attribution": null,
+      "sourceType": "brand_candidate",
+      "provenance": {
+        "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+      }
+    },
+    {
+      "sourceId": "bolia",
+      "imageUrl": "https://assets.bolia.com/cdn-cgi/image/fit=cover,width=1500,format=auto,gravity=0.50x0.28,height=1350,quality=81/globalassets/media/4.-collections/fy27/fy27aw/living-room/cosima_aw27_5.jpg?v=1065279335",
+      "versionKey": "owner-candidate-v1",
+      "sourcePage": null,
+      "retrievedAt": "2026-10-27T13:11:39Z",
+      "sha256": null,
+      "width": null,
+      "height": null,
+      "alt": null,
+      "attribution": null,
+      "sourceType": "brand_candidate",
+      "provenance": {
+        "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+      }
+    },
+    {
+      "sourceId": "bolia",
+      "imageUrl": "https://assets.bolia.com/cdn-cgi/image/fit=cover,width=1500,format=auto,gravity=0.42x0.00,height=1500,quality=81/globalassets/media/4.-collections/fy27/fy27aw/people--moods/silhouette-lulu-safia_aw27_1.jpg?v=1065279509",
+      "versionKey": "owner-candidate-v1",
+      "sourcePage": null,
+      "retrievedAt": "2026-10-27T13:11:39Z",
+      "sha256": null,
+      "width": null,
+      "height": null,
+      "alt": null,
+      "attribution": null,
+      "sourceType": "brand_candidate",
+      "provenance": {
+        "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+      }
+    },
+    {
+      "sourceId": "bolia",
+      "imageUrl": "https://assets.bolia.com/cdn-cgi/image/fit=cover,width=1500,format=auto,gravity=0.50x1.00,height=853,quality=81/globalassets/media/4.-collections/fy27/fy27aw/living-room/cosima-kaio-plateau-natura-mingei-mei-ciora-duna-nami-classic-cushion_aw27.jpg?v=1065279519",
+      "versionKey": "owner-candidate-v1",
+      "sourcePage": null,
+      "retrievedAt": "2026-10-27T13:11:39Z",
+      "sha256": null,
+      "width": null,
+      "height": null,
+      "alt": null,
+      "attribution": null,
+      "sourceType": "brand_candidate",
+      "provenance": {
+        "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+      }
+    },
+    {
+      "sourceId": "experimental-group",
+      "imageUrl": "https://cdn.prod.website-files.com/6932dc91bcf2019d2c1c5686/6a3a62361c2ee5436c15710f_experimental-group-press-lady-desktop.webp",
+      "versionKey": "owner-candidate-v1",
+      "sourcePage": null,
+      "retrievedAt": "2026-10-27T13:11:39Z",
+      "sha256": null,
+      "width": null,
+      "height": null,
+      "alt": null,
+      "attribution": null,
+      "sourceType": "brand_candidate",
+      "provenance": {
+        "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+      }
+    },
+    {
+      "sourceId": "hoshino-resorts",
+      "imageUrl": "https://hoshinoresorts.com/wpadmin2022/wp-content/uploads/2026/10/65ded2c39f09562d2eac8a5842f96bba-1200x675.jpg",
+      "versionKey": "owner-candidate-v1",
+      "sourcePage": null,
+      "retrievedAt": "2026-10-27T13:11:39Z",
+      "sha256": null,
+      "width": null,
+      "height": null,
+      "alt": null,
+      "attribution": null,
+      "sourceType": "brand_candidate",
+      "provenance": {
+        "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+      }
+    },
+    {
+      "sourceId": "hoshino-resorts",
+      "imageUrl": "https://hoshinoresorts.com/wpadmin2022/wp-content/uploads/2026/10/1a0ed59b8b5afcbb8a9322d5d0cb1cf0-1200x800.jpg",
+      "versionKey": "owner-candidate-v1",
+      "sourcePage": null,
+      "retrievedAt": "2026-10-27T13:11:39Z",
+      "sha256": null,
+      "width": null,
+      "height": null,
+      "alt": null,
+      "attribution": null,
+      "sourceType": "brand_candidate",
+      "provenance": {
+        "discoveredFrom": "https://github.com/pipekoder/curio/issues/5#issuecomment-6439970799",
+        "notes": "Owner supplied exact URL in Issue #5. Image availability, source page, identity, dimensions, alt text, display, AI-analysis and edit permissions remain unverified. retrievedAt records issue metadata retrieval, not image access."
+      }
+    }
+  ]
+}
