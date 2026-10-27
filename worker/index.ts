@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
-import { magazineRequest, catalog } from '../shared/magazine'
+import { magazineRequest } from '../shared/magazine'
+import { curationCatalog as catalog } from '../shared/catalog'
 import { boundedText, generateMagazine, GenerationError } from './meta'
 export { InferenceBudget } from './budget'
 

@@ -5,7 +5,7 @@ import { catalog, normalizeIssue, type MagazineRequest } from '../shared/magazin
 import { generateMagazine } from '../worker/meta'
 
 export const preferences: MagazineRequest = { interests: 'Quiet spaces', lifestyles: ['Scandinavian'], allocations: { home: 40, fashion: 30, travel: 30 }, consent: true }
-const draft = () => ({ title: 'A quieter day', sections: ['home', 'fashion', 'travel'].map(category => ({ category, catalogId: catalog.find(item => item.category === category)!.id, commentary: 'A gentle visual rhythm.' })) })
+const draft = () => ({ title: 'A quieter day', sections: ['home', 'fashion', 'travel'].map(category => ({ category, catalogId: catalog.find(item => item.category === category)!.id, assetId: catalog.find(item => item.category === category)!.image.id, commentary: 'A gentle visual rhythm.' })) })
 const envelope = (content = draft(), finish_reason = 'stop') => Response.json({ choices: [{ finish_reason, message: { content: JSON.stringify(content) } }] })
 const reserve = vi.fn()
 const env: Bindings = { MAGAZINE_AI_ENABLED: 'true', META_API_KEY: 'test-server-key', META_SPARK_MODEL: 'muse-spark-1.3', PUBLIC_APP_ORIGIN: 'https://curio.test', RATE_LIMIT_SALT: 'test-only-high-entropy-salt-placeholder-32',
@@ -116,4 +116,13 @@ describe('Meta response contract', () => {
     { title: 'Quiet', sections: draft().sections.map(s => ({ ...s, catalogId: 'home-lamp' })) },
     { ...draft(), title: 'Visit https://evil.test' },
   ])('rejects duplicates, mismatched categories and shopping links', data => { expect(() => normalizeIssue(data, preferences)).toThrow() })
+})
+
+// User-supplied URLs never become Worker fetch targets or model attachments.
+it('rejects image URLs in generation input and exposes no image proxy or pending registry', async () => {
+  const fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
+  expect((await post({ ...preferences, imageUrl: 'http://169.254.169.254/latest/meta-data/' }, env)).status).toBe(400)
+  expect((await app.request('/api/image?url=https://example.org/asset', {}, env)).status).toBe(404)
+  expect((await app.request('/api/catalog/pending', {}, env)).status).toBe(404)
+  expect(fetch).not.toHaveBeenCalled()
 })

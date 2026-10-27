@@ -19,7 +19,7 @@ const options = {
     assert.equal(body.model, 'muse-spark-1.3')
     assert.equal(body.max_completion_tokens, 1800)
     calls++
-    return MiniflareResponse.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ title: 'Mock edition — not real AI', sections: [{ category: 'home', catalogId: 'home-lamp', commentary: 'A soft visual rhythm.' }] }) } }] })
+    return MiniflareResponse.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ title: 'Mock edition — not real AI', layoutIntent: 'immersive', sections: [{ category: 'home', catalogId: 'home-lamp', assetId: 'asset-home-lamp-v1', commentary: 'A soft visual rhythm.' }] }) } }] })
   },
 }
 let mf = new Miniflare(convertV4MiniflareOptions(options))
@@ -28,12 +28,18 @@ const post = ip => mf.dispatchFetch('https://curio.test/api/magazine', {
   body: JSON.stringify({ interests: '', lifestyles: ['Scandinavian'], allocations: { home: 100, fashion: 0, travel: 0 }, consent: true }),
 })
 try {
+  assert.equal((await mf.dispatchFetch('https://curio.test/api/image?url=http://169.254.169.254/')).status, 404)
+  assert.equal((await mf.dispatchFetch('https://curio.test/api/catalog/pending')).status, 404)
+  assert.equal(calls, 0, 'no image proxy, pending registry or external fetch')
   const responses = await Promise.all(Array.from({ length: 6 }, () => post('192.0.2.1')))
   assert.equal(responses.filter(r => r.status === 200).length, 1, JSON.stringify(await Promise.all(responses.map(async r => ({ status: r.status, body: await r.clone().text() })))))
   assert.equal(responses.filter(r => r.status === 429).length, 5)
   const issue = await responses.find(r => r.status === 200).json()
   assert.equal(issue.sections[0].ad.id, 'home-lamp')
   assert.equal(issue.sections[0].weight, 100)
+  assert.equal(issue.layoutIntent, 'immersive')
+  assert.equal(issue.sections[0].ad.image.id, 'asset-home-lamp-v1')
+  assert.equal(issue.sections[0].ad.licensing.status, 'placeholder_only')
   assert.equal(calls, 1)
   await mf.dispose()
   mf = new Miniflare(convertV4MiniflareOptions(options))

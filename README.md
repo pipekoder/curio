@@ -54,3 +54,18 @@ See [foundation verification](docs/FOUNDATION_REVIEW.md) for results and limits.
 
 PR #1 results in `docs/FOUNDATION_REVIEW.md` are historical; PR #2 changes and
 current configuration are described in `docs/PR2_CONFIGURATION.md`.
+
+## Advertising library and reader
+
+The library now includes six local, explicitly fictional illustration slots,
+category/lifestyle filters, and a non-billable sample reader with two editorial
+layouts. See [PR #3 review](docs/PR3_REVIEW.md) and the
+[asset/permission checklist](docs/ASSET_REGISTER.md) before replacing placeholders
+with real campaign assets. The sample reader never calls an inference API.
+
+The catalog is URL-first/hybrid: externally hosted visuals require independently
+reviewed display permission and an exact URL approval; the current six local
+illustrations remain fallbacks until those approvals exist. AI-analysis and edit
+permissions are separate. Personalized issues remain session-only, with no share
+route, image proxy or server-side preference/image storage. See the asset register
+for the updated URL, source-page and permissions checklist.
