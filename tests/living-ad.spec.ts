@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test'
 
+test.use({ hasTouch: true })
+
 test.beforeEach(async ({ page }) => {
   await page.route('https://fonts.googleapis.com/**', route => route.abort())
   await page.route('https://fonts.gstatic.com/**', route => route.abort())
@@ -20,7 +22,8 @@ for (const width of [1280, 390]) {
     const containHeight = containWidth / sourceRatio
     expect(point!.x + point!.width / 2).toBeCloseTo(image!.x + (image!.width - containWidth) / 2 + (760 / 1200) * containWidth, 0)
     expect(point!.y + point!.height / 2).toBeCloseTo(image!.y + (image!.height - containHeight) / 2 + (330 / 900) * containHeight, 0)
-    await hotspot.click()
+    if (width === 390) await hotspot.tap()
+    else await hotspot.click()
     await expect(card.getByRole('region', { name: 'Paper shade editorial reveal' })).toBeVisible()
     await expect(card.locator('.region-dimming')).toBeVisible()
     await card.getByRole('button', { name: /Why does this composition/ }).click()
