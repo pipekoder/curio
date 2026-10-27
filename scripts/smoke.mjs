@@ -1,5 +1,6 @@
 import './runtime-smoke.mjs'
 import './catalog-smoke.mjs'
+import './asset-intelligence-smoke.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
@@ -36,7 +37,7 @@ try {
   assert.deepEqual(await config.json(), { enabled: false, catalogSize: 6 })
   // The production D1 binding is emulated locally with no catalog tables.
   // A binding must never enable operator access or trigger a schema query.
-  for (const [path, method] of [['/status', 'GET'], ['/imports', 'POST']]) {
+  for (const [path, method] of [['/status', 'GET'], ['/imports', 'POST'], ['/intelligence/stages', 'GET']]) {
     const catalog = await fetch(`${base}/api/operator/catalog${path}`, { method })
     assert.equal(catalog.status, 503)
     assert.equal(catalog.headers.get('Cache-Control'), 'no-store')

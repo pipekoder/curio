@@ -4,8 +4,9 @@ import { z } from 'zod'
 import { boundedText } from './meta'
 import { queryRequest } from './catalog-contracts'
 import { CatalogConflict, D1Catalog } from './catalog-store'
+import { assetApi } from './asset-api'
 
-export type CatalogBindings = { CATALOG_DB?: D1Database; CATALOG_OPERATOR_ENABLED?: string; CATALOG_OPERATOR_TOKEN?: string; PUBLIC_APP_ORIGIN?: string }
+export type CatalogBindings = { CATALOG_DB?: D1Database; CATALOG_OPERATOR_ENABLED?: string; CATALOG_OPERATOR_TOKEN?: string; PUBLIC_APP_ORIGIN?: string; ASSET_AI_ENABLED?: string }
 export const catalogApi = new Hono<{ Bindings: CatalogBindings }>()
 catalogApi.use('*', async (c, next) => {
   c.header('Cache-Control', 'no-store')
@@ -28,6 +29,7 @@ catalogApi.onError((error, c) => {
   return c.json({ error: 'Catalog operation unavailable.' }, 503)
 })
 catalogApi.get('/status', c => new D1Catalog(c.env.CATALOG_DB!).status().then(value => c.json(value)))
+catalogApi.route('/intelligence', assetApi)
 catalogApi.get('/sources', c => new D1Catalog(c.env.CATALOG_DB!).listSources().then(value => c.json({ sources: value })))
 catalogApi.get('/sources/:id/facts', async c => c.json({ facts: await new D1Catalog(c.env.CATALOG_DB!).sourceFacts(c.req.param('id')) }))
 catalogApi.post('/query', async c => c.json(await new D1Catalog(c.env.CATALOG_DB!).query(queryRequest.parse(await body(c.req.raw)))))
