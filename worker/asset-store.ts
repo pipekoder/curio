@@ -54,7 +54,7 @@ export class AssetStore {
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 5000)
     let status: 'reachable' | 'blocked' | 'failed' = 'failed', code: number | null = null, type: string | null = null
     try {
-      const response = await send(row.image_url, { method: 'HEAD', redirect: 'error', signal: controller.signal })
+      const response = await send(row.image_url, { method: 'HEAD', redirect: 'manual', signal: controller.signal })
       code = response.status; type = response.headers.get('Content-Type')?.split(';')[0] ?? null
       status = response.status === 200 && type?.startsWith('image/') ? 'reachable' : [401,403,429].includes(response.status) ? 'blocked' : 'failed'
       await response.body?.cancel()

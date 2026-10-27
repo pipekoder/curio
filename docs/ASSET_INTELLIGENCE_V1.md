@@ -1,6 +1,6 @@
 # Asset Intelligence v1
 
-This is a private, on-demand D1 workflow for Issues #5 and #8. It adds migration `0002_asset_intelligence.sql`; the owner's completed production migration `0001_catalog.sql` is unchanged. **0002 has only been exercised locally.** No production import, deployment, paid inference, or Cloudflare setting change is included.
+This is a private, on-demand D1 workflow for Issues #5 and #8. It adds migration `0002_asset_intelligence.sql`; the owner's completed production migration `0001_catalog.sql` is unchanged. **Update for Editorial Experience v1: the owner reports production migrations 0001 and 0002 complete and verified (17 tables, 10 indexes, one trigger). This development did not query or modify production.** No production import, deployment, paid inference, or Cloudflare setting change is included.
 
 ## Actual inventory and permissions
 
@@ -78,4 +78,4 @@ The October 30 deadline is most at risk from unavailable reuse/AI-analysis permi
 
 ## Verification recorded for this PR
 
-Local installation and TypeScript checks passed. All **176 unit/component/security tests across 12 files** and **13 Chromium tests** passed. Production React build and Wrangler dry-run passed. Combined local workerd integration covers the existing magazine budget, D1/SAM security separation, static reader and new 33-record import/retrieval/mock cache. The additive schema has 17 application tables, 10 explicit indexes, the preserved audit trigger, `quick_check=ok` and no foreign-key violations. Production dependency audit reports zero vulnerabilities. All provider responses used in tests are mocked; no paid calls or production writes were made. Live Meta image classification, permissions and production migration 0002 remain unverified/pending.
+Local installation and TypeScript checks passed. All **176 unit/component/security tests across 12 files** and **13 Chromium tests** passed. Production React build and Wrangler dry-run passed. Combined local workerd integration covers the existing magazine budget, D1/SAM security separation, static reader and new 33-record import/retrieval/mock cache. The additive schema has 17 application tables, 10 explicit indexes, the preserved audit trigger, `quick_check=ok` and no foreign-key violations. Production dependency audit reports zero vulnerabilities. All provider responses used in tests are mocked; no paid calls or production writes were made. Live Meta image classification and permissions remain unverified/pending. The owner subsequently confirmed production migration 0002 complete.

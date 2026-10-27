@@ -8,8 +8,9 @@ const setup = (response: () => Promise<Response>, config = { enabled: true, cata
   const fetch = vi.fn((url: string, _options?: RequestInit) => url === '/api/magazine/config' ? Promise.resolve(Response.json(config)) : response())
   vi.stubGlobal('fetch', fetch); render(<App />); return fetch
 }
+const legacy = () => within(document.querySelector('.config') as HTMLElement)
 const consent = async () => {
-  await userEvent.click(screen.getByRole('checkbox'))
+  await userEvent.click(legacy().getByRole('checkbox'))
   await waitFor(() => expect(screen.getByRole('button', { name: /Generate my magazine/ })).toHaveProperty('disabled', false))
 }
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
@@ -30,7 +31,7 @@ it('disables invalid allocations and no lifestyles', async () => {
   const button = screen.getByRole('button', { name: /Generate my magazine/ })
   fireEvent.change(screen.getByLabelText(/Home & Interior/), { target: { value: '45' } }); expect(button).toHaveProperty('disabled', true)
   fireEvent.change(screen.getByLabelText(/Home & Interior/), { target: { value: '40' } })
-  await userEvent.click(screen.getByRole('button', { name: 'Japanese Wabi-Sabi' })); await userEvent.click(screen.getByRole('button', { name: 'Scandinavian' }))
+  await userEvent.click(legacy().getByRole('button', { name: 'Japanese Wabi-Sabi' })); await userEvent.click(legacy().getByRole('button', { name: 'Scandinavian' }))
   expect(button).toHaveProperty('disabled', true)
 })
 it.each([
@@ -38,13 +39,13 @@ it.each([
 ])('displays API status %s', async (status, message) => {
   setup(async () => Response.json({ message }, { status })); await consent()
   await userEvent.click(screen.getByRole('button', { name: /Generate my magazine/ }))
-  expect(await screen.findByRole('status')).toHaveProperty('textContent', message)
+  expect(await legacy().findByRole('status')).toHaveProperty('textContent', message)
 })
-it('handles empty catalogs', async () => { setup(async () => Response.json({}), { enabled: true, catalogSize: 0 }); expect(await screen.findByRole('status')).toHaveProperty('textContent', expect.stringContaining('empty')) })
-it('handles disabled configuration without submitting', async () => { const fetch = setup(async () => Response.json({}), { enabled: false, catalogSize: 6 }); expect(await screen.findByRole('status')).toHaveProperty('textContent', expect.stringContaining('disabled')); expect(fetch).toHaveBeenCalledTimes(1) })
+it('handles empty catalogs', async () => { setup(async () => Response.json({}), { enabled: true, catalogSize: 0 }); expect(await legacy().findByRole('status')).toHaveProperty('textContent', expect.stringContaining('empty')) })
+it('handles disabled configuration without submitting', async () => { const fetch = setup(async () => Response.json({}), { enabled: false, catalogSize: 6 }); expect(await legacy().findByRole('status')).toHaveProperty('textContent', expect.stringContaining('disabled')); expect(fetch).toHaveBeenCalledTimes(1) })
 it('handles network failure and restores the button', async () => {
   setup(async () => { throw new Error('offline') }); await consent(); await userEvent.click(screen.getByRole('button', { name: /Generate my magazine/ }))
-  expect(await screen.findByRole('status')).toHaveProperty('textContent', expect.stringContaining('API is unavailable'))
+  expect(await legacy().findByRole('status')).toHaveProperty('textContent', expect.stringContaining('API is unavailable'))
   expect(screen.getByRole('button', { name: /Generate my magazine/ })).toHaveProperty('disabled', false)
 })
 it('shows loading and prevents duplicate clicks', async () => {
@@ -55,6 +56,6 @@ it('shows loading and prevents duplicate clicks', async () => {
 it('rejects malformed successful output without rendering an issue', async () => {
   setup(async () => Response.json({ title: 'Unvalidated' })); await consent()
   await userEvent.click(screen.getByRole('button', { name: /Generate my magazine/ }))
-  expect(await screen.findByRole('status')).toHaveProperty('textContent', expect.stringContaining('could not be validated'))
+  expect(await legacy().findByRole('status')).toHaveProperty('textContent', expect.stringContaining('could not be validated'))
   expect(screen.queryByRole('heading', { name: 'Unvalidated' })).toBeNull()
 })

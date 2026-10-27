@@ -91,3 +91,5 @@ credential and shared durable-budget reservation. No current image is enabled
 for live analysis. See [Living Ads and first authorized SAM test](docs/PR7_LIVING_ADS.md).
 
 Asset Intelligence v1 adds private on-demand gallery discovery, URL-only D1 metadata ingestion, cached structured Muse classification and preference ranking. See [the implementation and local workflow](docs/ASSET_INTELLIGENCE_V1.md) for the 33-candidate inventory, pending rights and production rollout gates.
+
+[Editorial Experience v1](docs/EDITORIAL_EXPERIENCE_V1.md) adds personalized editions, varied layouts, source-backed stories, curiosity branches and private local collections. “Compose my edition” works with AI disabled or the Worker unavailable. Real candidates remain subject to both D1 eligibility and the existing public registry.
