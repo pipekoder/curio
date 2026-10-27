@@ -54,7 +54,7 @@ export async function transferRecovery(bytes, urls, send = fetch) {
 export async function migrate(env, dependencies = {}) {
   const deps = { api, wrangler, transferRecovery, auditApproval, ...dependencies }
   check(env.RUNNER_TEMP && !resolve(env.RUNNER_TEMP).startsWith(`${process.cwd()}/`) && resolve(env.RUNNER_TEMP) !== process.cwd(), 'private_temp_required')
-  const evidence = { format: 1, commit: /^[a-f0-9]{40}$/.test(env.REVIEWED_SHA ?? '') ? env.REVIEWED_SHA : null, migrationSha256: TARGET.hash, accountVerified: false, targetVerified: false, operatorDisabled: false, readOnlyPreflightPassed: false, privateBackupVerified: false, migrationAttempted: false, migrationApplied: false, schemaVerified: false, outcome: 'blocked' }
+  const evidence = { format: 1, commit: /^[a-f0-9]{40}$/.test(env.GITHUB_SHA ?? '') ? env.GITHUB_SHA : null, migrationSha256: TARGET.hash, accountVerified: false, targetVerified: false, operatorDisabled: false, readOnlyPreflightPassed: false, privateBackupVerified: false, migrationAttempted: false, migrationApplied: false, schemaVerified: false, outcome: 'blocked' }
   const evidenceDir = join(env.RUNNER_TEMP, 'curio-d1-evidence')
   await mkdir(evidenceDir, { recursive: true, mode: 0o700 })
   const privateDir = await mkdtemp(join(env.RUNNER_TEMP, 'curio-d1-private-'))
