@@ -1,24 +1,26 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import { authoredDemo, containRect, relatedDiscovery, type DecoderRegion } from '../shared/decoder'
+import { readerSegmentation, containRect, relatedDiscovery } from '../shared/decoder'
 import { curationCatalog, type CatalogItem } from '../shared/catalog'
 import { authoredVisualContext, relatedVisualStory, visualLabel } from '../shared/visual-observations'
 import CatalogImage from './CatalogImage'
 
-export default function LivingAdvertisement({ ad, eager = false, onExploreStory }: { ad: CatalogItem; eager?: boolean; onExploreStory?: (next: CatalogItem, detail: string, relationship: string) => void }) {
-  const demo = authoredDemo(ad)
-  const [selected, setSelected] = useState<DecoderRegion | null>(null)
+export default function LivingAdvertisement({ ad, eager = false, samResult, onExploreStory }: { ad: CatalogItem; eager?: boolean; samResult?: unknown; onExploreStory?: (next: CatalogItem, detail: string, relationship: string) => void }) {
+  const demo = readerSegmentation(ad, samResult)
+  const [selection, setSelection] = useState<{ assetId: string; regionId: string } | null>(null)
+  const selected = selection?.assetId === ad.image.id ? demo?.regions.find(r => r.id === selection.regionId) ?? null : null
   const [question, setQuestion] = useState(false)
   const [related, setRelated] = useState(false)
-  const [ready, setReady] = useState(false)
+  const [loadedAsset, setLoadedAsset] = useState<string | null>(null)
+  const ready = loadedAsset === ad.image.id
   const [rect, setRect] = useState<ReturnType<typeof containRect>>(null)
   const visual = useRef<HTMLDivElement>(null)
   const buttons = useRef<Record<string, HTMLButtonElement | null>>({})
   const uid = useId().replace(/:/g, '')
   const panelId = `${uid}-reveal`
   const onReady = useCallback((image: { src: string; width: number; height: number }) => {
-    setReady(image.src === ad.image.path && image.width === ad.image.width && image.height === ad.image.height)
-  }, [ad.image.path, ad.image.width, ad.image.height])
-  const unavailable = useCallback(() => { setReady(false); setSelected(null) }, [])
+    setLoadedAsset(image.src === ad.image.path && image.width === ad.image.width && image.height === ad.image.height ? ad.image.id : null)
+  }, [ad.image.id, ad.image.path, ad.image.width, ad.image.height])
+  const unavailable = useCallback(() => { setLoadedAsset(null); setSelection(null) }, [])
   useEffect(() => {
     const element = visual.current, image = element?.querySelector('img')
     if (!ready || !element || !image) { setRect(null); return }
@@ -35,7 +37,7 @@ export default function LivingAdvertisement({ ad, eager = false, onExploreStory 
   }, [ready, ad.image.width, ad.image.height])
   const close = () => {
     if (selected) buttons.current[selected.id]?.focus()
-    setSelected(null); setQuestion(false); setRelated(false)
+    setSelection(null); setQuestion(false); setRelated(false)
   }
   const detail = ad.discoverableObjects.find(item => item.id === selected?.detailId)
   const next = relatedDiscovery(ad)
@@ -53,13 +55,14 @@ export default function LivingAdvertisement({ ad, eager = false, onExploreStory 
         {demo.regions.map((region, index) => <button type="button" key={region.id} ref={node => { buttons.current[region.id] = node }} className="image-hotspot"
           style={{ left: `${(region.box.x + region.box.width / 2) * 100}%`, top: `${(region.box.y + region.box.height / 2) * 100}%` }}
           aria-label={`Explore ${ad.discoverableObjects.find(item => item.id === region.detailId)?.label}`} aria-expanded={selected?.id === region.id} aria-controls={panelId}
-          onClick={() => { setSelected(region); setQuestion(false); setRelated(false) }}>{index + 1}</button>)}
+          onClick={() => { setSelection({ assetId: ad.image.id, regionId: region.id }); setQuestion(false); setRelated(false) }}>{index + 1}</button>)}
       </div>}
     </div>
-    {demo && <p className="decoder-disclosure">Living advertisement demo · authored regions and commentary (mock segmentation), not SAM detections. No model call. {ready ? 'Select a numbered detail to explore.' : 'Details become available when the original illustration loads.'}</p>}
+    {samResult !== undefined && !demo && <p className="decoder-disclosure" role="status">Segmentation unavailable or no longer authorized. No model call.</p>}
+    {demo && <p className="decoder-disclosure">{demo.source === "sam_detection" ? "SAM 3.1 structured regions · model estimates, not verified identity. Operator-supplied result; no new model call." : "Living advertisement demo · authored regions and commentary (mock segmentation), not SAM detections. No model call."} {ready ? demo.regions.length ? 'Select a numbered detail to explore.' : 'No matching regions were returned. No object identity is inferred.' : 'Details become available when the original illustration loads.'}</p>}
     <div id={panelId} hidden={!selected}>
     {selected && detail && ready && <section className="editorial-reveal" role="region" aria-label={`${detail.label} editorial reveal`}>
-      <div className="reveal-heading"><p className="eyebrow">LOOK CLOSER / AUTHORED DEMO</p><button type="button" onClick={close}>Return to original image</button></div>
+      <div className="reveal-heading"><p className="eyebrow">{demo?.source === "sam_detection" ? "LOOK CLOSER / MODEL ESTIMATE" : "LOOK CLOSER / AUTHORED DEMO"}</p><button type="button" onClick={close}>Return to original image</button></div>
       <h4>{detail.label}</h4><p>{detail.description}</p>
       {visualContext && <aside className="visual-observation" aria-label="Visual detail context">
         <p className="eyebrow">01 / NOTICE THE RELATIONSHIP</p>
@@ -76,7 +79,7 @@ export default function LivingAdvertisement({ ad, eager = false, onExploreStory 
         </div>}
       </aside>}
       <p className="source-label">{ad.advertiser?.name ?? 'No real advertiser · fictional study'} · {ad.campaign.title}</p>
-      <details className="annotation-provenance"><summary>How this detail was annotated</summary><p>Source: {ad.id} / {ad.image.id}. Region is an approximate authored box, not a measured mask. No model confidence or verified product identity is claimed.</p></details>
+      <details className="annotation-provenance"><summary>How this detail was annotated</summary><p>Source: {ad.id} / {ad.image.id}. {demo?.source === "sam_detection" ? "Region is a model-estimated bounding box, not a verified product identity. A mask is not rendered or edited." : "Region is an approximate authored box, not a measured mask. No model confidence or verified product identity is claimed."}</p></details>
       <button type="button" aria-expanded={question} onClick={() => setQuestion(!question)}>Why does this composition feel calm?</button>
       {question && <p className="context-annotation">Authored interpretation: the spacing around this drawn detail and its relationship to the surrounding shapes can suggest a slower visual rhythm. This is a subjective reading, not a material, brand or product claim.</p>}
       {next && !onExploreStory && <><button type="button" aria-expanded={related} onClick={() => setRelated(!related)}>Explore a related discovery</button>

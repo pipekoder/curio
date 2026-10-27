@@ -1,0 +1,78 @@
+// @vitest-environment node
+import { afterEach, expect, it, vi } from "vitest";
+import { assetDatabase, fixtureItem, fixtureSource } from "./asset-fixtures";
+import { AssetStore } from "../worker/asset-store";
+import { candidateIds, D1Catalog } from "../worker/catalog-store";
+import { runClassification, mockUnderstanding, readAnalysisImage, classifyWithMeta } from "../worker/asset-classifier";
+import { D1AssetRetriever } from "../worker/asset-retrieval";
+import { retrievedVisualContext } from "../worker/editorial-visual-context";
+import { catalog, catalogItem } from "../shared/catalog";
+import { defaultPreferences } from "../shared/editorial";
+import { generateEditorialResult } from "../worker/editorial";
+import { readFileSync } from "node:fs";
+const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="), c => c.charCodeAt(0));
+let dbContext: Awaited<ReturnType<typeof assetDatabase>>;
+afterEach(async () => { vi.unstubAllGlobals(); await dbContext?.mf.dispose(); });
+it("traces original raster bytes → mocked Muse vision → D1 → permission-checked editorial context → validated plan", async () => {
+  dbContext = await assetDatabase();
+  const store = new AssetStore(dbContext.db), base = new D1Catalog(dbContext.db);
+  const sha = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", png)), n => n.toString(16).padStart(2, "0")).join("");
+  const item = fixtureItem(); item.candidate.sourceType = "synthetic_concept";
+  item.candidate.sha256 = sha; item.candidate.width = 1; item.candidate.height = 1;
+  item.access = { status: "reachable", transport: "head", httpStatus: 200, contentType: "image/png" };
+  await store.import({ sources: [fixtureSource()], items: [item] });
+  const { versionId } = await candidateIds(item.candidate.imageUrl, item.candidate.versionKey);
+  const review = (purpose: string, status = "approved", expectedRevision = 0) => ({ purpose, status, expectedRevision, evidence: "docs/TEST_ONLY.md", rightsHolder: "Original test-fixture creator only", reviewer: "Automated test, not real permissions" });
+  await base.review(versionId, review("ai_analysis")); await base.review(versionId, review("display"));
+  await store.reviewIdentity({ sourceId: item.candidate.sourceId, canonicalBrandId: "original-test-creator", brandName: "Original test creator (not a real brand)", evidence: "https://example.com/test", reviewer: "Test" });
+  await store.reviewReader({ versionId, sourceId: item.candidate.sourceId, alt: "Original test pixel", attribution: "Test only", sourcePage: fixtureSource().entryUrl, licensingEvidence: "https://example.com/test", reviewer: "Test" });
+  const ad = catalogItem.parse({ ...catalog[0], image: { ...catalog[0].image, id: "original-raster-test-v1", path: "/catalog/original-test.png", role: "supplied_image", width: 1, height: 1 }, licensing: { status: "cleared", rightsHolder: "Test creator", evidence: "docs/TEST_ONLY.md" }, permissions: { ...catalog[0].permissions, aiAnalysis: { status: "approved", evidence: "docs/TEST_ONLY.md" } } });
+  const permit = { imageUrl: item.candidate.imageUrl, sha256: sha, width: 1, height: 1, mime: "image/png" as const, analysisEvidence: "docs/TEST_ONLY.md", bundledPath: ad.image.path! };
+  const observations = { subjects: ["lighting"], materialAppearance: ["indeterminate"], environments: ["abstract"], relationships: ["light-and-shadow"] };
+  const result = { ...mockUnderstanding(versionId), imageSha256: sha, observations };
+  const reserve = vi.fn(async () => ({ allowed: true, retryAfter: 0 }));
+  const assets = { fetch: vi.fn(async () => new Response(png, { headers: { "Content-Type": "image/png" } })) } as unknown as Fetcher;
+  const send = vi.fn(async (url: string, init: RequestInit) => {
+    expect(url).toBe("https://api.meta.ai/v1/chat/completions");
+    const body = JSON.parse(String(init.body));
+    expect(body.messages[1].content[1].image_url.url).toBe(`data:image/png;base64,${Buffer.from(png).toString("base64")}`);
+    expect(body.model).toBe("muse-spark-1.3"); expect(body.max_completion_tokens).toBe(1200);
+    return Response.json({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify(result) } }], usage: { prompt_tokens: 100, completion_tokens: 200, total_tokens: 300 } });
+  });
+  vi.stubGlobal("fetch", send);
+  const env = { CATALOG_DB: dbContext.db, ASSET_AI_ENABLED: "true", META_SPARK_MODEL: "muse-spark-1.3", META_API_KEY: "FAKE", ASSETS: assets };
+  const input = { versionId, mode: "meta", consent: true };
+  const classified = await runClassification(input, env, "ip", { permits: { [versionId]: permit }, reserve });
+  expect(classified.inference).toMatchObject({ attempted: true, reservedUnits: 1, usage: { inputTokens: 100, outputTokens: 200 } });
+  expect((await runClassification(input, env, "ip", { permits: { [versionId]: permit }, reserve })).inference.reservedUnits).toBe(0);
+  expect(send).toHaveBeenCalledTimes(1); expect(reserve).toHaveBeenCalledTimes(1);
+  const hits = await new D1AssetRetriever(dbContext.db).retrieve({ allocations: { home: 100, fashion: 0, travel: 0 }, aesthetics: [], scope: "reader" });
+  const context = retrievedVisualContext(hits.items[0], ad, {}, { [versionId]: permit })!;
+  expect(context.observations).toEqual(observations);
+  const plan = JSON.parse(readFileSync("tests/fixtures/editorial-live-home.json", "utf8")).plan;
+  plan.features[0].assetId = ad.image.id; plan.connections[0].fromAssetId = ad.image.id;
+  vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    expect(JSON.parse(body.messages[1].content).catalog[0].visualContext.source).toBe("meta_image_observation");
+    expect(JSON.parse(body.messages[1].content).catalog[0].visualContext.observations).toEqual(observations);
+    return Response.json({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify(plan) } }] });
+  }));
+  expect((await generateEditorialResult({ ...defaultPreferences, mode: "Focused", allocations: { home: 100, fashion: 0, travel: 0 } }, [ad, catalog[1]], "FAKE", [context])).plan).toEqual(plan);
+  await base.review(versionId, review("ai_analysis", "blocked", 1));
+  const revoked = await new D1AssetRetriever(dbContext.db).retrieve({ allocations: { home: 100, fashion: 0, travel: 0 }, aesthetics: [], scope: "reader" });
+  expect(retrievedVisualContext(revoked.items[0], ad, {}, { [versionId]: permit })).toBeNull();
+});
+it("rejects invalid bundled paths and changed fingerprints before any model request", async () => {
+  const send = vi.fn(); vi.stubGlobal("fetch", send);
+  const permit = { imageUrl: "https://example.com/test.png", sha256: "0".repeat(64), width: 1, height: 1, mime: "image/png" as const, analysisEvidence: "docs/TEST_ONLY.md", bundledPath: "/catalog/../secret.png" };
+  await expect(readAnalysisImage(permit, new AbortController().signal)).rejects.toMatchObject({ code: "invalid_bundled_media" });
+  await expect(readAnalysisImage({ ...permit, bundledPath: "/catalog/test.png" }, new AbortController().signal, { fetch: async () => new Response(png, { headers: { "Content-Type": "image/png" } }) } as unknown as Fetcher)).rejects.toMatchObject({ code: "media_fingerprint_changed" });
+  expect(send).not.toHaveBeenCalled();
+});
+it("retains measured usage when vision output is rejected, and never retries", async () => {
+  const send = vi.fn(async () => Response.json({ usage: { prompt_tokens: 123, completion_tokens: 45, total_tokens: 168 }, choices: [{ finish_reason: "length", message: { content: "private rejected content" } }] }));
+  vi.stubGlobal("fetch", send); const measured = vi.fn();
+  await expect(classifyWithMeta(`version-${"a".repeat(64)}`, "b".repeat(64), "data:image/png;base64,AA==", "FAKE", new AbortController().signal, measured)).rejects.toMatchObject({ code: "invalid_model_output" });
+  expect(measured).toHaveBeenCalledWith(expect.objectContaining({ usage: { inputTokens: 123, outputTokens: 45, totalTokens: 168, cachedInputTokens: null } }));
+  expect(send).toHaveBeenCalledTimes(1);
+});

@@ -1,0 +1,33 @@
+{
+  "origin": "https://curio.shuang-han807.workers.dev",
+  "readOnly": true,
+  "requests": 4,
+  "paidCalls": 0,
+  "status": "blocked_or_failed_unverified",
+  "results": [
+    {
+      "path": "/api/health",
+      "passed": false,
+      "status": null,
+      "failure": "transport_or_unreadable_response"
+    },
+    {
+      "path": "/api/magazine/config",
+      "passed": false,
+      "status": null,
+      "failure": "transport_or_unreadable_response"
+    },
+    {
+      "path": "/api/decoder/config",
+      "passed": false,
+      "status": null,
+      "failure": "transport_or_unreadable_response"
+    },
+    {
+      "path": "/api/operator/catalog/status",
+      "passed": false,
+      "status": null,
+      "failure": "transport_or_unreadable_response"
+    }
+  ]
+}

@@ -10,7 +10,7 @@ it("presents one primary editorial journey without competing legacy generators",
   vi.stubGlobal("fetch", send);
   render(<App />);
   expect(
-    screen.getByRole("button", { name: /Compose my edition/ }),
+    screen.getByRole("button", { name: /Generate magazine/ }),
   ).toBeTruthy();
   expect(
     screen.queryByRole("button", {
@@ -18,27 +18,22 @@ it("presents one primary editorial journey without competing legacy generators",
     }),
   ).toBeNull();
   expect(
-    screen.getByRole("link", { name: "Skip to your edition" }),
+    screen.getByRole("link", { name: "Skip to magazine prompt" }),
   ).toBeTruthy();
   expect(send).not.toHaveBeenCalled();
 });
 
-it("requires a valid mix and an aesthetic while keeping AI consent optional", async () => {
+it("accepts one prompt without configuration controls and keeps consent optional", async () => {
   const { fireEvent } = await import("@testing-library/react");
   render(<App />);
-  const button = screen.getByRole("button", { name: /Compose my edition/ });
+  const button = screen.getByRole("button", { name: /Generate magazine/ });
+  expect(button).toHaveProperty("disabled", true);
+  expect(screen.queryByRole("spinbutton")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Scandinavian" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /Focused A closer study/ })).toBeNull();
+  fireEvent.change(screen.getByLabelText("Your discovery prompt"), { target: { value: "A quiet home with paper lamps" } });
   expect(button).toHaveProperty("disabled", false);
-  fireEvent.change(
-    screen.getByRole("spinbutton", { name: "Editorial home weight" }),
-    { target: { value: "70" } },
-  );
-  expect(button).toHaveProperty("disabled", true);
-  fireEvent.change(
-    screen.getByRole("spinbutton", { name: "Editorial home weight" }),
-    { target: { value: "50" } },
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Scandinavian" }));
-  expect(button).toHaveProperty("disabled", true);
+  expect(screen.getByRole("checkbox")).toHaveProperty("checked", false);
 });
 it("composes a local edition after a network failure without granting AI consent", async () => {
   const { fireEvent } = await import("@testing-library/react");
@@ -49,7 +44,8 @@ it("composes a local edition after a network failure without granting AI consent
   });
   vi.stubGlobal("fetch", send);
   render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: /Compose my edition/ }));
+  fireEvent.change(screen.getByLabelText("Your discovery prompt"), { target: { value: "paper lamps and quiet reading rooms" } });
+  fireEvent.click(screen.getByRole("button", { name: /Generate magazine/ }));
   expect(
     await screen.findByRole("heading", { name: "The art of quiet rooms" }),
   ).toBeTruthy();
@@ -60,7 +56,8 @@ it("blocks duplicate composition while a request is pending", async () => {
   const send = vi.fn(() => new Promise(() => {}));
   vi.stubGlobal("fetch", send);
   render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: /Compose my edition/ }));
+  fireEvent.change(screen.getByLabelText("Your discovery prompt"), { target: { value: "paper lamps and quiet reading rooms" } });
+  fireEvent.click(screen.getByRole("button", { name: /Generate magazine/ }));
   const busy = screen.getByRole("button", { name: "Composing your issue…" });
   expect(busy).toHaveProperty("disabled", true);
   fireEvent.click(busy);
@@ -86,7 +83,8 @@ it("rejects unsupported AI copy in successful responses and renders a safe autho
     ),
   );
   render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: /Compose my edition/ }));
+  fireEvent.change(screen.getByLabelText("Your discovery prompt"), { target: { value: "paper lamps and quiet reading rooms" } });
+  fireEvent.click(screen.getByRole("button", { name: /Generate magazine/ }));
   expect(
     await screen.findByRole("heading", { name: "The art of quiet rooms" }),
   ).toBeTruthy();

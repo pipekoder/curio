@@ -97,3 +97,5 @@ Asset Intelligence v1 adds private on-demand gallery discovery, URL-only D1 meta
 [Demo Readiness & Real AI Editorial Engine](docs/PR15_DEMO_READINESS.md) makes Editorial Experience the primary journey and adds original, constrained Muse narratives and connected story threads. `npm run validate:editorial` is a zero-network dry run; live validation requires separate explicit approval. Both production inference/operator flags remain false.
 
 Visual Asset & Image Intelligence: [PR #17 implementation, rights and SAM readiness](docs/PR17_VISUAL_INTELLIGENCE.md).
+
+Final QA: [PR #18 acceptance checklist, live-test limits and integration status](docs/PR18_ACCEPTANCE_RUNBOOK.md). Run `npm run accept:demo` for local checks.

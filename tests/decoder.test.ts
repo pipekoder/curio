@@ -138,7 +138,7 @@ it('uses the fixed Meta SAM endpoint and official parser; zero matches is valid'
   const result = await segmentWithMeta(input, 'FAKE_TEST_KEY', new AbortController().signal)
   expect(result.regions).toEqual([])
   expect(fetch.mock.calls[0][0]).toBe('https://api.meta.ai/v1/responses')
-  expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ model: 'sam-3.1', stream: true })
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ model: 'sam-3.1', stream: true, input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Paper shade' }, { type: 'input_image', image_url: input.imageDataUrl }] }] })
 })
 it.each([302, 401, 429, 500])('rejects Meta SAM status %s without following redirects or retrying', async status => {
   const fetch = vi.fn().mockResolvedValue(new Response('secret', { status })); vi.stubGlobal('fetch', fetch)

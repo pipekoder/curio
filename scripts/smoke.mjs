@@ -1,3 +1,4 @@
+import './acceptance-smoke.mjs'
 import './runtime-smoke.mjs'
 import './catalog-smoke.mjs'
 import './asset-intelligence-smoke.mjs'
