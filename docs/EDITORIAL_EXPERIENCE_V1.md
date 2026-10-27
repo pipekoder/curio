@@ -1,5 +1,7 @@
 # Editorial Experience v1
 
+> PR #15 supersedes the competing legacy interfaces and fixed paragraph selection described below. See [Demo Readiness & Original AI Engine](PR15_DEMO_READINESS.md) for the current acceptance report, original-language safeguards, production-review blocker and controlled live procedure.
+
 A complete demonstration of **Discover → Explore → Understand → Follow Curiosity → Collect**, based on merged Asset Intelligence v1 (#13). The owner's completed production schema (17 tables, 10 indexes, one trigger) is unchanged. This PR adds no migrations, production writes, deployment or Cloudflare configuration changes.
 
 ## Try the journey

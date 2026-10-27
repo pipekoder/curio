@@ -8,9 +8,13 @@ export default ts.config(
   { ignores: ["node_modules/**", "dist/**", ".wrangler/**"] },
   {
     files: [
-      "shared/editorial.ts",
+      "shared/editorial*.ts",
       "worker/editorial.ts",
+      "scripts/editorial-live-check.mjs",
+      "scripts/editorial-validation-smoke.mjs",
+      "scripts/production-review.mjs",
       "src/EditorialExperience.tsx",
+      "src/App.tsx",
       "tests/editorial*.ts",
     ],
     extends: [js.configs.recommended, ...ts.configs.recommended],

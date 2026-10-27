@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { visualPhrase, visualNarrative } from "./editorial-language";
 import {
   categories,
   lifestyles,
@@ -44,6 +45,16 @@ export const editorialPlan = z
   .strictObject({
     title: prose,
     deck: prose,
+    connections: z
+      .array(
+        z.strictObject({
+          fromAssetId: z.string().max(100),
+          toAssetId: z.string().max(100),
+          thread: prose,
+        }),
+      )
+      .max(5)
+      .optional(),
     features: z
       .array(
         z.strictObject({
@@ -74,11 +85,22 @@ export function validatePlan(input: unknown, pool: readonly CatalogItem[]) {
     if (!ad) throw Error("Unapproved editorial asset");
     const copy = editorialCopy(ad);
     if (
-      !copy.headlines.includes(f.headline) ||
-      !copy.narratives.includes(f.narrative) ||
+      !(copy.headlines.includes(f.headline) || visualPhrase(f.headline)) ||
+      !(
+        copy.narratives.includes(f.narrative) || visualNarrative(f.narrative)
+      ) ||
       !ad.lifestyleTags.some((t) => t === f.theme)
     )
       throw Error("Unreviewed editorial copy");
+  }
+  for (const connection of p.connections ?? []) {
+    if (
+      connection.fromAssetId === connection.toAssetId ||
+      !p.features.some((f) => f.assetId === connection.fromAssetId) ||
+      !p.features.some((f) => f.assetId === connection.toAssetId) ||
+      !visualNarrative(connection.thread)
+    )
+      throw Error("Ungrounded editorial connection");
   }
   return p;
 }
@@ -224,4 +246,75 @@ export function editorialCopy(a: CatalogItem) {
       `An invitation to pause: look at the relationship between silhouette, scale and empty space. This editorial interpretation is a point of departure, not a factual claim about an object.`,
     ],
   };
+}
+
+export function validateOriginalPlan(
+  input: unknown,
+  pool: readonly CatalogItem[],
+  prefs: EditorialPreferences,
+) {
+  const eligible = pool.filter((a) => prefs.allocations[a.category] > 0);
+  const plan = validatePlan(input, eligible);
+  if (
+    !visualPhrase(plan.title) ||
+    plan.title.length > 80 ||
+    plan.title.split(/\s+/).length > 12 ||
+    !visualNarrative(plan.deck) ||
+    plan.features.some(
+      (f) =>
+        !visualPhrase(f.headline) ||
+        f.headline.length > 90 ||
+        f.headline.split(/\s+/).length > 12 ||
+        !visualNarrative(f.narrative),
+    )
+  )
+    throw Error("Original visual interpretation required");
+  if (
+    new Set(plan.features.map((f) => f.headline)).size !==
+      plan.features.length ||
+    new Set(plan.features.map((f) => f.narrative)).size !== plan.features.length
+  )
+    throw Error("Repeated editorial copy");
+  if (prefs.mode === "Focused" && plan.features.length > 3)
+    throw Error("Focused edition is too broad");
+  if (
+    plan.features.length <
+    Math.min(eligible.length, prefs.mode === "Focused" ? 2 : 3)
+  )
+    throw Error("Insufficient editorial coverage");
+  if (
+    plan.features.length > 1 &&
+    new Set(plan.features.map((f) => f.layout)).size < 2
+  )
+    throw Error("Editorial rhythm required");
+  const dominant = categories.find((c) => prefs.allocations[c] >= 60);
+  if (
+    dominant &&
+    eligible.some((a) => a.category === dominant) &&
+    !eligible.some(
+      (a) => a.id === plan.features[0].catalogId && a.category === dominant,
+    )
+  )
+    throw Error("Dominant preference must lead");
+  if (prefs.mode === "Balanced")
+    for (const c of categories)
+      if (
+        eligible.some((a) => a.category === c) &&
+        !plan.features.some((f) =>
+          eligible.some((a) => a.id === f.catalogId && a.category === c),
+        )
+      )
+        throw Error("Balanced category coverage required");
+  if ((plan.connections?.length ?? 0) !== plan.features.length - 1)
+    throw Error("Complete editorial thread required");
+  for (let i = 0; i < plan.features.length - 1; i++)
+    if (
+      !plan.connections?.some(
+        (c) =>
+          c.fromAssetId === plan.features[i].assetId &&
+          c.toAssetId === plan.features[i + 1].assetId,
+      )
+    )
+      throw Error("Sequential editorial connection required");
+  return plan;
 }
