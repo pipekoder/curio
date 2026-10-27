@@ -47,7 +47,7 @@ export async function discoverGallery(source: GallerySource, send: typeof fetch 
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 10000)
   try {
     const url = new URL(source.entryUrl); url.hash = ''
-    const response = await send(url.href, { redirect: 'error', signal: controller.signal, headers: { Accept: 'text/html,application/json' } })
+    const response = await send(url.href, { redirect: 'manual', signal: controller.signal, headers: { Accept: 'text/html,application/json' } })
     if (!response.ok) { await response.body?.cancel(); return { status: response.status === 401 || response.status === 403 || response.status === 429 ? 'blocked' as const : 'failed' as const, httpStatus: response.status, items: [], hash: null } }
     if (!/text\/html|application\/json/i.test(response.headers.get('Content-Type') ?? '')) { await response.body?.cancel(); throw new Error('unsupported_gallery') }
     const reader = response.body?.getReader(); if (!reader) throw new Error('missing_gallery')
