@@ -173,13 +173,13 @@ persistent catalog has no equivalent cap. Dynamic adapter work is next.
 
 ## Cloudflare configuration, migration and rollback review
 
-`wrangler.jsonc` and production settings are unchanged. No real database exists
-because of this work. After owner approval, provision a reviewed D1 database,
-add a `CATALOG_DB` binding and migration directory, configure the private token
-as a server secret and exact origin, review/back up data, then separately approve
-the remote migration. Start with the operator flag absent/false; never put an
-operator credential in the frontend. The local dummy UUID must never be used as
-a real remote binding. Deployment is a separate approval, not part of setup.
+The owner has now supplied the existing `curio-catalog` database. Its production
+binding is prepared in repository `wrangler.jsonc`, with operator access explicitly
+false. No production settings or remote migration were changed by this work.
+Do not provision another database. See the [production runbook](D1_PRODUCTION_RUNBOOK.md)
+for exact target identity, schema review, backup, migration and rollback commands.
+The private operator secret/origin, remote migration and deployment still need
+separate approval. The local dummy UUID remains only in the local test config.
 
 Migration is additive and forward-only. Before remote use, review the SQL and
 backup/Time Travel availability. Code rollback: disable the operator flag and
@@ -190,8 +190,10 @@ catalog dev state and reapply to test a clean database. Archive mistaken imports
 and retain their receipts; use explicit new versions rather than destructive edits.
 
 Free compatibility: no R2/queues/cron or paid inference is added. Each maximum
-import uses 41 SQL statements; status uses 25; detail reads use 7. These fit the
-50 D1 queries per Workers Free invocation. Indexed pagination avoids a fixed
+import uses a batch of at most 41 SQL statements; status uses 25 individual
+queries and detail reads use 7. Current D1 limits count a batch as one query
+against the 50-query Free invocation limit, not one per statement. The small
+import batches still bound transaction work. Indexed pagination avoids a fixed
 library cap. Provider storage/daily read/write/CPU quotas still apply; measure
 production usage before enabling a larger library. Local workerd verification
 does not establish production CPU or billing behavior.
