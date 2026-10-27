@@ -196,6 +196,7 @@ for (const profile of ["home", "travel"] as const)
           ),
         )
       : null;
+    if (profile === "home") plans.home = JSON.parse(readFileSync("tests/fixtures/editorial-live-home.json", "utf8")).plan;
     if (replay) plans[profile] = replay.plan;
     await page.route("**/api/editorial", async (route) => {
       const body = route.request().postDataJSON();

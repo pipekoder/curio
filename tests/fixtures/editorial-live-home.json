@@ -1,0 +1,44 @@
+{
+  "plan": {
+    "title": "quiet soft light and calm rooms",
+    "deck": "Imagine quiet calm rooms with soft light and gentle shade.",
+    "connections": [
+      {
+        "fromAssetId": "asset-home-lamp-v1",
+        "toAssetId": "asset-home-chair-v1",
+        "thread": "Perhaps gentle light and rounded shapes meet in calm harmony."
+      }
+    ],
+    "features": [
+      {
+        "catalogId": "home-lamp",
+        "assetId": "asset-home-lamp-v1",
+        "headline": "soft round glow near quiet corner",
+        "narrative": "Imagine softer light lingering within small quiet reading rooms.",
+        "layout": "hero",
+        "motion": "still",
+        "theme": "Scandinavian"
+      },
+      {
+        "catalogId": "home-chair",
+        "assetId": "asset-home-chair-v1",
+        "headline": "rounded calm form for still restful moments",
+        "narrative": "Consider calm curves and gentle forms with quiet thoughtful stillness.",
+        "layout": "split",
+        "motion": "reveal",
+        "theme": "Quiet Luxury"
+      }
+    ]
+  },
+  "inference": {
+    "attempted": true,
+    "reservedUnits": 1,
+    "latencyMs": 6124,
+    "usage": {
+      "inputTokens": 1889,
+      "outputTokens": 1357,
+      "cachedInputTokens": 0,
+      "totalTokens": 3246
+    }
+  }
+}
