@@ -95,3 +95,5 @@ Asset Intelligence v1 adds private on-demand gallery discovery, URL-only D1 meta
 [Editorial Experience v1](docs/EDITORIAL_EXPERIENCE_V1.md) adds personalized editions, varied layouts, source-backed stories, curiosity branches and private local collections. “Compose my edition” works with AI disabled or the Worker unavailable. Real candidates remain subject to both D1 eligibility and the existing public registry.
 
 [Demo Readiness & Real AI Editorial Engine](docs/PR15_DEMO_READINESS.md) makes Editorial Experience the primary journey and adds original, constrained Muse narratives and connected story threads. `npm run validate:editorial` is a zero-network dry run; live validation requires separate explicit approval. Both production inference/operator flags remain false.
+
+Visual Asset & Image Intelligence: [PR #17 implementation, rights and SAM readiness](docs/PR17_VISUAL_INTELLIGENCE.md).
