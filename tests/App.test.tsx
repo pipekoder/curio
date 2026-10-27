@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../src/App'
 import { catalog, normalizeIssue } from '../shared/magazine'
@@ -14,14 +14,14 @@ const consent = async () => {
 }
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 it('requires consent, submits preferences and renders a validated fictional issue', async () => {
-  const issue = normalizeIssue({ title: 'Quiet moments', sections: ['home', 'fashion', 'travel'].map(category => ({ category, catalogId: catalog.find(item => item.category === category)!.id, commentary: 'A calm visual rhythm.' })) }, { interests: '', lifestyles: ['Scandinavian'], allocations: { home: 40, fashion: 30, travel: 30 }, consent: true })
+  const issue = normalizeIssue({ title: 'Quiet moments', sections: ['home', 'fashion', 'travel'].map(category => ({ category, catalogId: catalog.find(item => item.category === category)!.id, assetId: catalog.find(item => item.category === category)!.image.id, commentary: 'A calm visual rhythm.' })) }, { interests: '', lifestyles: ['Scandinavian'], allocations: { home: 40, fashion: 30, travel: 30 }, consent: true })
   const fetch = setup(async () => Response.json(issue))
   expect(screen.getByRole('button', { name: /Generate my magazine/ })).toHaveProperty('disabled', true)
   await consent()
   await userEvent.type(screen.getByLabelText(/what you're curious about/), 'Quiet rooms')
   await userEvent.click(screen.getByRole('button', { name: /Generate my magazine/ }))
   expect(await screen.findByRole('heading', { name: 'Quiet moments' })).toBeTruthy()
-  expect(screen.getAllByText('FICTIONAL AD / ILLUSTRATED PLACEHOLDER')).toHaveLength(3)
+  expect(within(screen.getByRole('region', { name: 'Quiet moments' })).getAllByText('Original illustration · fictional placeholder')).toHaveLength(3)
   const call = fetch.mock.calls.find(([url]) => url === '/api/magazine')!
   expect(JSON.parse(call[1]!.body as string)).toMatchObject({ interests: 'Quiet rooms', consent: true, allocations: { home: 40, fashion: 30, travel: 30 } })
 })

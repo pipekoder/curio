@@ -19,7 +19,7 @@ const options = {
     assert.equal(body.model, 'muse-spark-1.3')
     assert.equal(body.max_completion_tokens, 1800)
     calls++
-    return MiniflareResponse.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ title: 'Mock edition — not real AI', sections: [{ category: 'home', catalogId: 'home-lamp', commentary: 'A soft visual rhythm.' }] }) } }] })
+    return MiniflareResponse.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ title: 'Mock edition — not real AI', layoutIntent: 'immersive', sections: [{ category: 'home', catalogId: 'home-lamp', assetId: 'asset-home-lamp-v1', commentary: 'A soft visual rhythm.' }] }) } }] })
   },
 }
 let mf = new Miniflare(convertV4MiniflareOptions(options))
@@ -34,6 +34,9 @@ try {
   const issue = await responses.find(r => r.status === 200).json()
   assert.equal(issue.sections[0].ad.id, 'home-lamp')
   assert.equal(issue.sections[0].weight, 100)
+  assert.equal(issue.layoutIntent, 'immersive')
+  assert.equal(issue.sections[0].ad.image.id, 'asset-home-lamp-v1')
+  assert.equal(issue.sections[0].ad.licensing.status, 'placeholder_only')
   assert.equal(calls, 1)
   await mf.dispose()
   mf = new Miniflare(convertV4MiniflareOptions(options))
