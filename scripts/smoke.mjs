@@ -1,4 +1,5 @@
 import './runtime-smoke.mjs'
+import './catalog-smoke.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'

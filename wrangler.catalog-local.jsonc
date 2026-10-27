@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "curio-catalog-local",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-26",
+  "assets": { "directory": "./dist", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api", "/api/*"] },
+  "vars": { "MAGAZINE_AI_ENABLED": "false", "META_SPARK_MODEL": "muse-spark-1.3", "CATALOG_OPERATOR_ENABLED": "true", "PUBLIC_APP_ORIGIN": "https://curio.test" },
+  "d1_databases": [{ "binding": "CATALOG_DB", "database_name": "curio-catalog-local", "database_id": "00000000-0000-0000-0000-000000000001", "migrations_dir": "migrations" }]
+}
