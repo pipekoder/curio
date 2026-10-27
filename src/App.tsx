@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { magazineIssue, type MagazineIssue } from '../shared/magazine'
 import Magazine from './Magazine'
+import EditorialExperience from './EditorialExperience'
 import AdvertisingLibrary from './AdvertisingLibrary'
 
 const lifestyleOptions = [
@@ -74,6 +75,7 @@ export default function App() {
         <h1>Follow your <em>curiosity.</em></h1>
         <p className="intro">Not another feed. An advertising magazine edited around your world—where every image is an invitation to discover more.</p>
       </section>
+      <EditorialExperience />
       <AdvertisingLibrary />
       <section className="config" aria-labelledby="edition-heading">
         <div className="section-label"><span>01 / YOUR EDITION</span><span>PERSONALIZE</span></div>
