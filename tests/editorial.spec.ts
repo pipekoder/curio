@@ -19,6 +19,24 @@ for (const width of [1280, 390])
     test.setTimeout(60000);
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/");
+    await expect(
+      page.getByRole("button", {
+        name: /Read sample edition|Generate my magazine/,
+      }),
+    ).toHaveCount(0);
+    await expect(page.locator(".opening-art .image-ready")).toHaveCount(2);
+    await expect
+      .poll(() =>
+        page
+          .locator(".opening-art img")
+          .first()
+          .evaluate((e) => getComputedStyle(e).opacity),
+      )
+      .toBe("1");
+    await page.screenshot({
+      path: `test-results/demo-landing-${width}.png`,
+      fullPage: true,
+    });
     await page.getByLabel("Your editorial interests").fill("paper quiet lamp");
     await page.getByRole("button", { name: "Focused A closer study" }).click();
     for (const [category, value] of [
@@ -161,3 +179,79 @@ test("reduced motion, keyboard collection controls and unavailable local storage
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).not.toBeVisible();
 });
+
+for (const profile of ["home", "travel"] as const)
+  test(`original AI ${profile} edition renders a coherent story thread using mocked responses`, async ({
+    page,
+  }) => {
+    const { readFileSync } = await import("node:fs");
+    const plans = JSON.parse(
+      readFileSync("tests/fixtures/editorial-original.json", "utf8"),
+    );
+    const replay = process.env.CURIO_REPLAY_DIR
+      ? JSON.parse(
+          readFileSync(
+            `${process.env.CURIO_REPLAY_DIR}/${profile === "home" ? "focused-home" : "surprise-travel"}.json`,
+            "utf8",
+          ),
+        )
+      : null;
+    if (replay) plans[profile] = replay.plan;
+    await page.route("**/api/editorial", async (route) => {
+      const body = route.request().postDataJSON();
+      if (!body.consent)
+        return route.fulfill({
+          status: 503,
+          json: { error: "Local fallback" },
+        });
+      const { curationCatalog } = await import("../shared/catalog");
+      if (replay) return route.fulfill({ json: replay });
+      return route.fulfill({
+        json: {
+          plan: plans[profile],
+          items: curationCatalog,
+          source: "meta",
+          retrieval: "fictional",
+          cached: false,
+        },
+      });
+    });
+    await page.goto("/");
+    await page
+      .getByRole("button", {
+        name:
+          profile === "home"
+            ? "Quiet rooms Paper / light / stillness →"
+            : "Into the wild Paths / landscape / possibility →",
+      })
+      .click();
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: "Compose my edition" }).click();
+    await expect(
+      page.getByRole("heading", { name: plans[profile].title }),
+    ).toBeVisible();
+    await page
+      .locator(".personal-feature")
+      .first()
+      .screenshot({ path: `test-results/mock-original-${profile}.png` });
+    await expect(page.locator(".feature-narrative").first()).toHaveText(
+      plans[profile].features[0].narrative,
+    );
+    await page
+      .locator(".personal-feature")
+      .first()
+      .getByRole("button", { name: "Explore the story", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.locator(".original-interpretation")).toContainText(
+      plans[profile].features[0].narrative,
+    );
+    await expect(dialog.locator(".curiosity-thread")).toContainText(
+      plans[profile].connections[0].thread,
+    );
+    await dialog.getByRole("button", { name: /Follow the thread:/ }).click();
+    await expect(dialog.locator("h2")).toBeFocused();
+    await expect(dialog.locator("h2")).not.toHaveText(
+      profile === "home" ? "Paper Moon Lamp" : "Moss Path",
+    );
+  });

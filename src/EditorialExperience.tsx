@@ -6,6 +6,7 @@ import {
   editorialPreferences,
   fallbackPlan,
   validatePlan,
+  validateOriginalPlan,
   readCollection,
   categoryLabel,
   rankDemo,
@@ -20,6 +21,8 @@ import Attribution from "./Attribution";
 const STORAGE = "curio.collection.v1";
 export default function EditorialExperience() {
   const [prefs, setPrefs] = useState<EditorialPreferences>(defaultPreferences);
+  const [editionMode, setEditionMode] =
+    useState<EditorialPreferences["mode"]>("Balanced");
   const [edition, setEdition] = useState<EditorialEdition | null>(null);
   const [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
@@ -93,29 +96,27 @@ export default function EditorialExperience() {
           !["d1", "fictional"].includes(data.retrieval)
         )
           throw Error("Invalid source");
-        result = {
-          ...data,
-          items: curationCatalog.filter((a) =>
+        const allowed = curationCatalog.filter(
+          (a) =>
+            prefs.allocations[a.category] > 0 &&
             data.items.some(
               (item) => item.id === a.id && item.image.id === a.image.id,
             ),
-          ),
-          plan: validatePlan(
-            data.plan,
-            curationCatalog.filter(
-              (a) =>
-                prefs.allocations[a.category] > 0 &&
-                data.items.some(
-                  (item) => item.id === a.id && item.image.id === a.image.id,
-                ),
-            ),
-          ),
+        );
+        result = {
+          ...data,
+          items: allowed,
+          plan:
+            data.source === "meta"
+              ? validateOriginalPlan(data.plan, allowed, prefs)
+              : validatePlan(data.plan, allowed),
         };
       }
     } catch {
       /* Fully local deterministic edition remains available offline. */
     }
     if (id !== requestId.current) return;
+    setEditionMode(prefs.mode);
     setEdition(result);
     setBusy(false);
     setMessage(
@@ -210,13 +211,32 @@ export default function EditorialExperience() {
       aria-labelledby="personal-edition"
     >
       <div className="edition-intro">
-        <p className="eyebrow">THE PERSONAL ISSUE / VOL. 01</p>
-        <h2 id="personal-edition">
-          A world shaped
-          <br />
-          by your eye.
-        </h2>
-        <p>Discover. Explore. Understand. Follow curiosity. Collect.</p>
+        <p className="eyebrow">DISCOVER / EXPLORE / COLLECT</p>
+        <div className="opening-copy">
+          <h1 id="personal-edition" tabIndex={-1}>
+            An edition
+            <br />
+            of <em>your own.</em>
+          </h1>
+          <p className="opening-deck">
+            Quiet rooms. Unexpected silhouettes. Somewhere you have never been.
+            Begin with what moves you.
+          </p>
+          <p className="opening-caption">
+            Six original fictional studies. Infinite ways to look closer.
+          </p>
+        </div>
+        <div
+          className="opening-art"
+          aria-label="Preview of authorized fictional studies"
+        >
+          {editorialDemoCatalog
+            .filter((ad) => ad.id === "home-lamp" || ad.id === "travel-cabin")
+            .map((ad) => (
+              <CatalogImage key={ad.image.id} ad={ad} eager />
+            ))}
+          <span>THE ART OF NOTICING / 01</span>
+        </div>
         <button
           className="collection-open"
           onClick={() => setPanel("collection")}
@@ -224,7 +244,44 @@ export default function EditorialExperience() {
           Your collection ({saved.length})
         </button>
       </div>
-      <div className="editorial-controls">
+      <div className="editorial-controls" id="edition-builder">
+        <div className="builder-heading">
+          <p className="eyebrow">01 / SET YOUR DIRECTION</p>
+          <h2>What catches your eye?</h2>
+          <p>Start with a mood, then make it yours.</p>
+        </div>
+        <div
+          className="edition-presets"
+          role="group"
+          aria-label="Edition starting points"
+        >
+          <button
+            onClick={() =>
+              setPrefs({
+                ...prefs,
+                interests: "paper quiet lamp reading rooms",
+                aesthetics: ["Scandinavian"],
+                allocations: { home: 100, fashion: 0, travel: 0 },
+                mode: "Focused",
+              })
+            }
+          >
+            Quiet rooms <span>Paper / light / stillness →</span>
+          </button>
+          <button
+            onClick={() =>
+              setPrefs({
+                ...prefs,
+                interests: "woodland path walking outdoors",
+                aesthetics: ["Nature & Outdoor"],
+                allocations: { home: 0, fashion: 0, travel: 100 },
+                mode: "Surprise Me",
+              })
+            }
+          >
+            Into the wild <span>Paths / landscape / possibility →</span>
+          </button>
+        </div>
         <label>
           Your editorial interests
           <textarea
@@ -325,7 +382,7 @@ export default function EditorialExperience() {
       </div>
       {edition && (
         <div
-          className={`personal-edition direction-${prefs.mode.toLowerCase().replaceAll(" ", "-")}`}
+          className={`personal-edition direction-${editionMode.toLowerCase().replaceAll(" ", "-")}`}
           aria-label="Personalized editorial edition"
         >
           <header className="issue-cover">
@@ -336,7 +393,7 @@ export default function EditorialExperience() {
             <p>{edition.plan.deck}</p>
             <small>
               {edition.source === "meta"
-                ? "AI-directed plan · authored copy"
+                ? "AI-generated visual interpretation"
                 : "Deterministic authored edition · no AI output"}{" "}
               /{" "}
               {edition.retrieval === "d1"
@@ -392,7 +449,7 @@ export default function EditorialExperience() {
                   <p className="feature-narrative">{feature.narrative}</p>
                   <p className="source-label">
                     {edition.source === "meta"
-                      ? "AI-selected authored interpretation"
+                      ? "AI-generated hypothetical interpretation"
                       : "Authored interpretation"}{" "}
                     · no product or material claims
                   </p>
@@ -439,7 +496,10 @@ export default function EditorialExperience() {
             <h2 tabIndex={-1}>{story.name}</h2>
             <CatalogImage ad={story} eager />
             <Attribution ad={story} />
-            <h3>Publisher record</h3>
+            <div className="story-chapter">
+              <span>01 / THE RECORD</span>
+              <h3>Publisher record</h3>
+            </div>
             <p>
               {story.description}{" "}
               {story.image.role === "placeholder"
@@ -456,9 +516,12 @@ export default function EditorialExperience() {
               target="_blank"
               rel="noopener noreferrer"
             >
-              Source: Curio illustration record ↗
+              Source: Curio illustration record →
             </a>
-            <h3>A wider design conversation</h3>
+            <div className="story-chapter">
+              <span>02 / THE CONTEXT</span>
+              <h3>A wider design conversation</h3>
+            </div>
             <p>
               Independent historical context: the V&amp;A describes Arts and
               Crafts as a late nineteenth-century British movement concerned
@@ -471,9 +534,29 @@ export default function EditorialExperience() {
               target="_blank"
               rel="noopener noreferrer"
             >
-              Source: V&amp;A — Arts and Crafts: an introduction ↗
+              Source: V&amp;A — Arts and Crafts: an introduction →
             </a>
             <h3>An editorial reading</h3>
+            {edition?.source === "meta" &&
+              edition.plan.features.find(
+                (f) => f.assetId === story.image.id,
+              ) && (
+                <aside className="original-interpretation">
+                  <p className="eyebrow">
+                    MUSE SPARK / ORIGINAL INTERPRETATION
+                  </p>
+                  <p>
+                    {
+                      edition.plan.features.find(
+                        (f) => f.assetId === story.image.id,
+                      )!.narrative
+                    }
+                  </p>
+                  <p className="source-label">
+                    Hypothetical visual language, not a sourced factual claim.
+                  </p>
+                </aside>
+              )}
             <p>
               Authored interpretation: follow the relationship between the drawn
               silhouette and the space around it. What changes when you see it
@@ -484,7 +567,10 @@ export default function EditorialExperience() {
               This interpretation is subjective. No AI-generated factual
               enrichment is presented.
             </p>
-            <h3>Follow your curiosity</h3>
+            <div className="story-chapter">
+              <span>03 / YOUR NEXT THREAD</span>
+              <h3>Follow your curiosity</h3>
+            </div>
             <p>
               Explore a detail or theme. These connections use catalog metadata;
               no segmentation call is made.
@@ -505,6 +591,22 @@ export default function EditorialExperience() {
               ))}
             </div>
             {topic && <p role="status">Following: {topic}</p>}
+            {edition?.plan.connections
+              ?.filter((c) => c.fromAssetId === story.image.id)
+              .map((c) => {
+                const next = curationCatalog.find(
+                  (a) => a.image.id === c.toAssetId,
+                );
+                return next ? (
+                  <aside key={c.toAssetId} className="curiosity-thread">
+                    <p className="eyebrow">AN EDITORIAL THREAD</p>
+                    <p>{c.thread}</p>
+                    <button onClick={() => openStory(next)}>
+                      Follow the thread: {next.name} →
+                    </button>
+                  </aside>
+                ) : null;
+              })}
             <h4>Related discoveries</h4>
             <div className="related-rail">
               {related.map((ad) => (
