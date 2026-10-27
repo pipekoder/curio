@@ -2,7 +2,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [feat/foundation, feat/meta-magazine-generator, feat/advertising-library-visual-magazine, feat/living-advertisements-sam-decoder, feat/d1-catalog-foundation]
+    branches: [feat/foundation, feat/meta-magazine-generator, feat/advertising-library-visual-magazine, feat/living-advertisements-sam-decoder, feat/d1-catalog-foundation, feat/d1-production-binding]
 permissions:
   contents: read
 jobs:
