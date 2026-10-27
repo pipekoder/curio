@@ -14,7 +14,7 @@ export const discoveryItem = z.strictObject({ candidate: candidateRecord,
   if (v.access.status === 'reachable' && (v.access.transport !== 'head' || v.access.httpStatus !== 200 || !v.access.contentType?.startsWith('image/'))) ctx.addIssue({ code: 'custom', message: 'Reachability requires a successful image HEAD check.' })
 })
 export type DiscoveryItem = z.infer<typeof discoveryItem>
-export const discoveryImport = z.strictObject({ sources: z.array(sourceRecord).max(10), items: z.array(discoveryItem).max(5) })
+export const discoveryImport = z.strictObject({ sources: z.array(sourceRecord).max(10), items: z.array(discoveryItem).max(5) }).refine(v => v.sources.length + 8*v.items.length + 3 <= 50, 'Split source and asset batches to preserve the Workers Free D1 query budget.')
 const score = z.number().min(0).max(1)
 export const understanding = z.strictObject({ versionId, imageSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   categoryScores: z.record(z.enum(categories), score), aestheticScores: z.record(z.enum(lifestyles), score),

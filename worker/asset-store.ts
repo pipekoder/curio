@@ -24,11 +24,12 @@ export class AssetStore {
   }
   async discovered(items: DiscoveryItem[]) {
     if (!items.length) return
-    await this.db.batch(items.map(raw => {
-      const item = discoveryItem.parse(raw)
-      return this.db.prepare('INSERT INTO discovered_images(image_url,source_id,candidate_json,discovered_at) VALUES(?,?,?,?) ON CONFLICT(image_url) DO NOTHING')
-        .bind(item.candidate.imageUrl, item.candidate.sourceId, JSON.stringify(item), item.candidate.retrievedAt)
-    }))
+    const validated = items.map(item => discoveryItem.parse(item))
+    // One statement for a gallery batch, preserving the Workers Free D1 query
+    // budget even when a page exposes 100 links. JSON is bound, never SQL text.
+    await this.db.prepare(`INSERT INTO discovered_images(image_url,source_id,candidate_json,discovered_at)
+      SELECT json_extract(value,'$.candidate.imageUrl'),json_extract(value,'$.candidate.sourceId'),value,json_extract(value,'$.candidate.retrievedAt')
+      FROM json_each(?) WHERE true ON CONFLICT(image_url) DO NOTHING`).bind(JSON.stringify(validated)).run()
   }
   async recordSource(sourceId: string, page: string, status: string, httpStatus: number | null, hash: string | null, count: number) {
     await this.db.prepare('INSERT INTO source_observations(source_id,page_url,status,transport,http_status,content_sha256,discovered_count,observed_at) VALUES(?,?,?,?,?,?,?,?)')

@@ -39,7 +39,7 @@ export class D1AssetRetriever implements AssetRetriever {
         AND (json_extract(?1,'$.aestheticFilter') IS NULL OR COALESCE(json_extract(intelligence_json,'$.aestheticScores."'||json_extract(?1,'$.aestheticFilter')||'"'),0)>=0.5 OR intelligence_json IS NULL AND EXISTS(SELECT 1 FROM json_each(hints_json,'$.aesthetics') h WHERE h.value=json_extract(?1,'$.aestheticFilter')))
     ), scores AS (
       SELECT components.*,0.6*category_score+0.3*aesthetic_score+0.1*tag_score AS relevance,
-        ((sequence%2147483647)*48271+json_extract(?1,'$.seed'))%2147483647/2147483647.0 AS exploration FROM components
+        ((sequence%2147483647)*1103515245+json_extract(?1,'$.seed')*12345)%2147483647/2147483647.0 AS exploration FROM components
     ), varied AS (
       SELECT scores.*,(1-json_extract(?1,'$.serendipity'))*relevance+json_extract(?1,'$.serendipity')*exploration AS score,
         ROW_NUMBER() OVER(PARTITION BY brand_key ORDER BY relevance DESC,asset_id) AS brand_rank FROM scores WHERE relevance>0
