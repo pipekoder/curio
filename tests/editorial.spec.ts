@@ -62,6 +62,8 @@ for (const width of [1280, 390])
     );
     await dialog.locator(".related-rail button").first().click();
     await expect(dialog.locator("h2")).not.toHaveText("Paper Moon Lamp");
+    await expect(dialog.locator("h2")).toBeFocused();
+    expect(await dialog.evaluate((e) => e.scrollTop)).toBe(0);
     await dialog.getByRole("button", { name: "Close exploration" }).click();
     await first
       .getByRole("button", { name: "Explore the story", exact: true })

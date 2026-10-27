@@ -12,6 +12,7 @@ import { importAssetManifest } from "./asset-intelligence-import.mjs";
 const token = "FAKE_OPERATOR_TOKEN_32_CHARACTERS_ONLY",
   origin = "https://curio.test";
 let calls = 0;
+const attemptedDestinations = [];
 let redirectNext = false;
 const state = await mkdtemp(join(tmpdir(), "curio-editorial-"));
 const mf = new Miniflare(
@@ -37,6 +38,7 @@ const mf = new Miniflare(
       MAGAZINE_MAX_CALLS: "2",
     },
     outboundService: async (request) => {
+      attemptedDestinations.push(request.url);
       assert.equal(request.url, "https://api.meta.ai/v1/chat/completions");
       const body = await request.json();
       assert.equal(body.model, "muse-spark-1.3");
@@ -161,6 +163,11 @@ try {
     calls,
     2,
     "redirects are rejected without forwarding API credentials",
+  );
+  assert.deepEqual(
+    [...new Set(attemptedDestinations)],
+    ["https://api.meta.ai/v1/chat/completions"],
+    "no redirect destination may receive a request",
   );
   console.log(
     "PASS: editorial Worker + D1 retrieval excludes 33 pending assets; consent, mocked Meta plan/cache and shared DO cooldown; no editorial D1 writes, no real model calls",
