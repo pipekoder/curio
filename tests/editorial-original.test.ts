@@ -230,6 +230,7 @@ it("reports an invalid response as a charged reservation with measured usage, ne
   };
   expect(data.source).toBe("deterministic");
   expect(data.fallbackReason).toBe("invalid_output");
+  expect(data).toHaveProperty("validationDiagnostic", { code: "visual_vocabulary_or_characters", field: "title" });
   expect(data.inference.reservedUnits).toBe(1);
   expect(data.inference.attempted).toBe(true);
   expect(data.inference.usage.outputTokens).toBe(420);
