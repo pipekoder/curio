@@ -1,4 +1,5 @@
 // @vitest-environment node
+import type { VisualObservations } from "../shared/visual-observations"
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { AssetStore } from '../worker/asset-store'
@@ -105,18 +106,23 @@ it('serializes concurrent mocked Meta jobs, reserves once and invalidates cached
   const env={CATALOG_DB:context.db,ASSET_AI_ENABLED:'true',META_SPARK_MODEL:'muse-spark-1.3',META_API_KEY:'FAKE'}
   let finish!:()=>void;const gate=new Promise<void>(r=>{finish=r})
   const reserve=vi.fn(async()=>({allowed:true,retryAfter:60})),media=vi.fn(async()=>{await gate;return 'data:image/jpeg;base64,VEVTVA=='})
-  const classify=vi.fn(async()=>({...mockUnderstanding(versionId),imageSha256:item.candidate.sha256}))
+  const observations: VisualObservations={subjects:['lighting'],materialAppearance:['paper-like'],environments:['interior-like'],relationships:['light-and-shadow']}
+  const classify=vi.fn(async()=>({...mockUnderstanding(versionId),imageSha256:item.candidate.sha256,observations}))
   const overrides={permits:{[versionId]:{imageUrl:item.candidate.imageUrl,sha256:item.candidate.sha256,width:1000,height:750,mime:'image/jpeg' as const,analysisEvidence:'docs/FIXTURE_ONLY.md'}},media,reserve,classify}
   const input={versionId,mode:'meta',consent:true}
   const first=runClassification(input,env,'ip',overrides)
   await vi.waitFor(()=>expect(media).toHaveBeenCalledOnce())
   await expect(runClassification(input,env,'ip',overrides)).rejects.toMatchObject({status:409})
   finish();await first
+  const before=await new D1AssetRetriever(context.db).retrieve(preferences)
+  expect(JSON.parse(String(before.items[0].intelligence_json)).observations).toEqual(observations)
+  expect(before.items[0].image_sha256).toBe(item.candidate.sha256)
   expect((await runClassification(input,env,'ip',overrides)).cached).toBe(true);expect(reserve).toHaveBeenCalledOnce()
   expect((await store.stages()).counts?.ai_enriched).toBe(1)
   await catalog.review(versionId,review('ai_analysis','blocked',1))
   await expect(runClassification(input,env,'ip',overrides)).rejects.toMatchObject({status:403})
   expect((await store.stages()).counts?.ai_enriched).toBe(0)
+  expect((await new D1AssetRetriever(context.db).retrieve(preferences)).items[0].intelligence_json).toBeNull()
 })
 it('rejects stale versions, unexpected model keys and ungrounded reader reviews',async()=>{
   const {versionId}=await imported(),item=fixtureItem();item.candidate.versionKey='fixture-v2'

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { authoredDemo, containRect, relatedDiscovery, type DecoderRegion } from '../shared/decoder'
-import type { CatalogItem } from '../shared/catalog'
+import { curationCatalog, type CatalogItem } from '../shared/catalog'
+import { authoredVisualContext, relatedVisualStory, visualLabel } from '../shared/visual-observations'
 import CatalogImage from './CatalogImage'
 
-export default function LivingAdvertisement({ ad, eager = false }: { ad: CatalogItem; eager?: boolean }) {
+export default function LivingAdvertisement({ ad, eager = false, onExploreStory }: { ad: CatalogItem; eager?: boolean; onExploreStory?: (next: CatalogItem, detail: string, relationship: string) => void }) {
   const demo = authoredDemo(ad)
   const [selected, setSelected] = useState<DecoderRegion | null>(null)
   const [question, setQuestion] = useState(false)
@@ -38,6 +39,8 @@ export default function LivingAdvertisement({ ad, eager = false }: { ad: Catalog
   }
   const detail = ad.discoverableObjects.find(item => item.id === selected?.detailId)
   const next = relatedDiscovery(ad)
+  const visualContext = authoredVisualContext(ad)
+  const visualStory = relatedVisualStory(ad, curationCatalog)
   return <div className="living-ad" onKeyDown={event => { if (event.key === 'Escape' && selected) { event.preventDefault(); close() } }}>
     <div className="living-visual" ref={visual}>
       <CatalogImage ad={ad} eager={eager} onImageReady={onReady} onImageUnavailable={unavailable} />
@@ -53,16 +56,30 @@ export default function LivingAdvertisement({ ad, eager = false }: { ad: Catalog
           onClick={() => { setSelected(region); setQuestion(false); setRelated(false) }}>{index + 1}</button>)}
       </div>}
     </div>
-    {demo && <p className="decoder-disclosure">Living advertisement demo · authored regions and commentary, not SAM detections. No model call. {ready ? 'Select a numbered detail to explore.' : 'Details become available when the original illustration loads.'}</p>}
+    {demo && <p className="decoder-disclosure">Living advertisement demo · authored regions and commentary (mock segmentation), not SAM detections. No model call. {ready ? 'Select a numbered detail to explore.' : 'Details become available when the original illustration loads.'}</p>}
     <div id={panelId} hidden={!selected}>
     {selected && detail && ready && <section className="editorial-reveal" role="region" aria-label={`${detail.label} editorial reveal`}>
       <div className="reveal-heading"><p className="eyebrow">LOOK CLOSER / AUTHORED DEMO</p><button type="button" onClick={close}>Return to original image</button></div>
       <h4>{detail.label}</h4><p>{detail.description}</p>
+      {visualContext && <aside className="visual-observation" aria-label="Visual detail context">
+        <p className="eyebrow">01 / NOTICE THE RELATIONSHIP</p>
+        <p className="visual-motif">{visualLabel(visualStory?.relationship ?? visualContext.observations.relationships[0])}</p>
+        <dl><div><dt>Visual subject</dt><dd>{visualContext.observations.subjects.map(visualLabel).join(", ")}</dd></div>
+          <div><dt>Material appearance</dt><dd>{visualContext.observations.materialAppearance.map(visualLabel).join(", ")}</dd></div>
+          <div><dt>Drawn environment</dt><dd>{visualContext.observations.environments.map(visualLabel).join(", ")}</dd></div></dl>
+        <p>Image-level authored observations of this original illustration, not AI image analysis or verified material facts. They do not identify the selected detail’s material. A drawn appearance does not identify a real product.</p>
+        {visualStory && onExploreStory && <div className="visual-next-story">
+          <p className="eyebrow">02 / FOLLOW A VISUAL THREAD</p>
+          <CatalogImage ad={visualStory.ad} />
+          <p>Look for {visualLabel(visualStory.relationship)} in another composition. This is an authored visual connection, not evidence of shared origin or influence.</p>
+          <button type="button" onClick={() => onExploreStory(visualStory.ad, detail.label, visualStory.relationship)}>Read the connected story: {visualStory.ad.name} →</button>
+        </div>}
+      </aside>}
       <p className="source-label">{ad.advertiser?.name ?? 'No real advertiser · fictional study'} · {ad.campaign.title}</p>
-      <p>Source: {ad.id} / {ad.image.id}. Region is an approximate authored box, not a measured mask. No model confidence or verified product identity is claimed.</p>
+      <details className="annotation-provenance"><summary>How this detail was annotated</summary><p>Source: {ad.id} / {ad.image.id}. Region is an approximate authored box, not a measured mask. No model confidence or verified product identity is claimed.</p></details>
       <button type="button" aria-expanded={question} onClick={() => setQuestion(!question)}>Why does this composition feel calm?</button>
       {question && <p className="context-annotation">Authored interpretation: the spacing around this drawn detail and its relationship to the surrounding shapes can suggest a slower visual rhythm. This is a subjective reading, not a material, brand or product claim.</p>}
-      {next && <><button type="button" aria-expanded={related} onClick={() => setRelated(!related)}>Explore a related discovery</button>
+      {next && !onExploreStory && <><button type="button" aria-expanded={related} onClick={() => setRelated(!related)}>Explore a related discovery</button>
         {related && <aside className="related-discovery" aria-label="Related catalog discovery"><strong>{next.name}</strong><p>{next.description}</p><p>Connection: another approved {ad.category} catalog study. This is a local selection, not a newly generated page or an AI recommendation.</p><p>{next.provenance.attribution} · {next.sourceType}</p></aside>}</>}
       <p className="source-label" aria-live="polite">Selected: {detail.label}. Escape returns to the unchanged original image.</p>
     </section>}
