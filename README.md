@@ -1,5 +1,8 @@
 # Curio
 
+Persistent catalog development: see [D1 foundation, local ingestion and release sequence](docs/CATALOG_D1.md).
+The private metadata catalog is off by default and does not publish pending brand images.
+
 **From Advertising to Discovery.**
 
 Curio is an AI-powered personalized advertising magazine. Readers choose lifestyles, control the editorial mix, and explore stories and details behind advertising.
