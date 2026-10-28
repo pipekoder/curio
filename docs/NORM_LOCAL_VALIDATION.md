@@ -82,14 +82,14 @@ CURIO_NORM_APPROVAL=norm-one-image-editorial npm run validate:norm -- --stage=im
 
 # Wait at least 61 seconds; requires separately verified SAM eligibility,
 # JPEG support, price and provider spending cap, plus a new explicit approval.
-CURIO_NORM_SAM_PREFLIGHT=eligibility-jpeg-pricing-provider-cap-verified CURIO_NORM_APPROVAL=norm-one-sam-segmentation npm run validate:norm -- --stage=sam-segmentation --execute --evidence=/tmp/curio-norm-live-sam-01
+CURIO_NORM_APPROVED_CONCEPT='<approved eligible concept>' CURIO_NORM_SAM_PREFLIGHT=eligibility-jpeg-pricing-provider-cap-verified CURIO_NORM_APPROVAL=norm-one-sam-segmentation npm run validate:norm -- --stage=sam-segmentation --prompt='<approved discovery intent>' --concept='<approved eligible concept>' --execute --evidence=/tmp/curio-norm-live-sam-01
 ```
 
 Model/request limits:
 
 - Muse image: exactly one chat-completions call, `muse-spark-1.3`, max 1,200 completion tokens, minimal reasoning, 15-second abort.
 - Editorial: exactly one chat-completions call, same model, max 2,200 completion tokens, strict existing prose/asset validation, 15-second provider abort. Requires a succeeded **Meta** image result from the same private D1 store; mocked observations cannot satisfy a live editorial prerequisite. No implicit extra image-analysis call.
-- SAM: exactly one streaming Responses request, `sam-3.1`, fixed `seating` concept, no additional commentary/model call; bounded existing SSE parsing (1 MiB, 128 events, max eight boxes).
+- SAM: exactly one streaming Responses request, `sam-3.1`, one eligible Muse-guided concept from matching persisted image observations, separately approved via `CURIO_NORM_APPROVED_CONCEPT`, no additional commentary/model call; bounded existing SSE parsing (1 MiB, 128 events, max eight boxes).
 - Existing HMAC/SQLite budget: lifetime ceiling three calls, hourly/cooldown checks, SAM once-per-asset. Each stage also has an atomic persisted one-attempt guard. Failures are not refunded or automatically retried; do not switch state directories to circumvent the guard. Successful cached image/SAM results make zero new calls.
 
 The USD ceiling is an approval/accounting check, **not a hard provider billing limit**. Request caps and no retries bound call counts; a provider-side cap is needed for hard currency enforcement. Abort cannot guarantee cancellation or prevent billing. Token usage may be absent on transport failure; SAM usage/cost are unknown unless separately obtained from Meta. Never report unknown cost as zero.
@@ -113,3 +113,5 @@ Confirm `dev/` is absent from both deployed bundles; the JPEG bytes are absent f
 - Production dependency audit: zero vulnerabilities.
 
 Actual paid calls: **0**. Actual paid usage/cost: **0 / $0**. Mock latency is local execution timing, not provider performance. No genuine Norm Muse/SAM response, token count, live latency or provider cost has been claimed.
+
+For concept selection, cached older observations, one-call safeguards and additional integration requirements, see [Muse-guided localization](MUSE_GUIDED_LOCALIZATION.md). Never reset existing live state or reservations to obtain a different concept call. The historical seven-box seating result remains an offline replay, not a reason to force all future requests to seating.
