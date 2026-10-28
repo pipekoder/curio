@@ -66,6 +66,8 @@ dense sci-fi network was added. Mouse hover is an enhancement, never a requireme
 - Actual detail/relationship/current-story trail → related discovery → Collect.
 - Close/Escape → refine and focus prompt → collection → reload → revisit story.
 - Remove the exact saved story → close with focus restored → reload confirms zero.
+  Collection capture additionally asserts heading focus and returns the scroll
+  position to the top so its real count/header and featured item are visible.
 - Reduced motion yields static assembly; no external requests or paid inference.
 
 A separate normal-motion test checks focus-responsive HUD, a real prompt-validation
