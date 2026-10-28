@@ -14,6 +14,7 @@ export default ts.config(
       "scripts/norm-local-validation.mjs",
       "scripts/replay-norm-sam.mjs",
       "discovery/*.ts",
+      "tests/discovery*.ts",
       "shared/discovery.ts",
       "shared/reader-catalog.ts",
       "worker/discovery-store.ts",

@@ -223,3 +223,25 @@ broker. No login, CAPTCHA bypass or credentialed scraping is implemented.
 - Production migration/activation and additional external SAM media support each
   require separate review and authorization. No production configuration changes,
   model calls, merge or deployment are part of this PR.
+
+## Verification on 2026-10-28
+
+- `npm ci` (local install used `--ignore-scripts`): passed.
+- `npm run typecheck`, `npm run lint`, existing additional SAM/grounding lint: passed.
+- `npm test`: **248 passed, 10 skipped**, 26 files passed. Skips require private
+  owner files/captured inference evidence and are not simulated as live results.
+- `npm run build`: passed (373.57 kB JavaScript, 115.37 kB gzip).
+- `npm run worker:check`: passed, dry-run only; production variables unchanged.
+- `npm run test:integration`: passed, compiled Worker/local D1/Durable Object
+  security, permissions, cache, budget, API and SPA checks; zero real model calls.
+- `CHROMIUM_PATH=/usr/bin/chromium npm run test:browser`: **36 passed** (1.4 min).
+  Includes JS-gallery extraction via a test-only broker, authoritative Reader
+  publication checks, Collect reload, keyboard/mobile/reduced-motion regressions.
+- `npm run discover:acceptance`: local persistence succeeded; six real-source
+  attempts blocked by managed-proxy/DNS-pinning incompatibility, **0 images**.
+
+The automated Muse/provider requests are mocked. Existing genuine private Muse
+and SAM evidence is neither reproduced nor committed. No new live inference,
+production D1 write, migration, activation, deployment or merge was performed.
+GitHub CI runs the same required suites on the PR; its result/link is recorded in
+the PR conversation rather than claiming a local run is remote CI evidence.
