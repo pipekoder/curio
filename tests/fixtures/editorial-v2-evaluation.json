@@ -28,5 +28,41 @@
     "field": "narrative",
     "text": "The paper shade holds light around the silhouette.",
     "expected": "unsupported_language"
+  },
+  {
+    "case": "generic-feature-headline",
+    "field": "headline",
+    "text": "Quiet calm soft light",
+    "expected": "generic_headline"
+  },
+  {
+    "case": "repeated-title-word",
+    "field": "title",
+    "text": "Space space space around light",
+    "expected": "repetitive_copy"
+  },
+  {
+    "case": "unsupported-psychological-effect",
+    "field": "narrative",
+    "text": "The shade creates calm around the silhouette.",
+    "expected": "unsupported_effect"
+  },
+  {
+    "case": "unsupported-image-subject",
+    "field": "narrative",
+    "text": "The seating holds light around the shade.",
+    "expected": "unsupported_subject"
+  },
+  {
+    "case": "grounded-observation",
+    "field": "narrative",
+    "text": "The shade frames the light and leaves space around its silhouette.",
+    "expected": null
+  },
+  {
+    "case": "grounded-discovery-question",
+    "field": "discoveryQuestion",
+    "text": "How might another shade guide light across a surface?",
+    "expected": null
   }
 ]

@@ -1,3 +1,4 @@
+import { EDITORIAL_QUALITY_VERSION } from '../shared/editorial-v2';
 import { editorialQualityFetch, requireGroundedEditorial } from "./editorial-quality";
 import { CatalogPublications,publicationApprovals } from './catalog-publications';
 import { approvedExternalAssets,type ExternalAssetApprovals } from '../shared/url-policy';
@@ -140,7 +141,7 @@ editorialApi.post("/", async (c) => {
     return fallback();
   if(!pool.items.some(a=>a.provenance.origin==='authored_geometry'||a.permissions.aiAnalysis.status==='approved'&&a.permissions.aiAnalysis.evidence)) {fallbackReason='analysis_permissions';return fallback();}
   const key = await catalogDigest(
-    JSON.stringify(["editorial-v4-prompt", PROMPT_INTENT_VERSION, VISUAL_LANGUAGE_VERSION, p, pool.items, pool.visualContexts]),
+    JSON.stringify(["editorial-v4-prompt", EDITORIAL_QUALITY_VERSION, PROMPT_INTENT_VERSION, VISUAL_LANGUAGE_VERSION, p, pool.items, pool.visualContexts]),
   );
   const cached = plans.get(key);
   if (cached && cached.expires > Date.now())
