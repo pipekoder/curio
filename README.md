@@ -99,3 +99,5 @@ Asset Intelligence v1 adds private on-demand gallery discovery, URL-only D1 meta
 Visual Asset & Image Intelligence: [PR #17 implementation, rights and SAM readiness](docs/PR17_VISUAL_INTELLIGENCE.md).
 
 Final QA: [PR #18 acceptance checklist, live-test limits and integration status](docs/PR18_ACCEPTANCE_RUNBOOK.md). Run `npm run accept:demo` for local checks.
+
+Adaptive on-demand discovery and the implemented D1 publication/Reader API are documented in [docs/ADAPTIVE_GALLERY_DISCOVERY.md](docs/ADAPTIVE_GALLERY_DISCOVERY.md), including actual source counts, local setup and permission prerequisites.
