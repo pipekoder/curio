@@ -49,7 +49,7 @@ export default function LivingAdvertisement({ ad, eager = false, samResult, obje
   const next = relatedDiscovery(ad)
   const visualContext = authoredVisualContext(ad)
   const visualStory = relatedVisualStory(ad, curationCatalog)
-  return <div className="living-ad" onKeyDown={event => { if (event.key === 'Escape' && selected) { event.preventDefault(); close() } }}>
+  return <div className="living-ad" data-exploring={Boolean(selected)} onKeyDown={event => { if (event.key === 'Escape' && selected) { event.preventDefault(); close() } }}>
     <div className="living-visual" ref={visual}>
       <CatalogImage ad={ad} eager={eager} onImageReady={onReady} onImageUnavailable={unavailable} />
       {ready && rect && demo && <div className="living-overlay" style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}>

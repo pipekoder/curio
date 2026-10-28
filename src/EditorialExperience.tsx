@@ -1,3 +1,4 @@
+import { EntryHud, EditionAssembly, DiscoveryTrail } from './JourneyVisuals';
 import { ReaderCatalogContext } from './ReaderCatalog';
 import { loadReaderItems } from './load-reader-catalog';
 import { readerApprovals } from '../shared/reader-catalog';
@@ -249,12 +250,17 @@ export default function EditorialExperience() {
     <ReaderCatalogContext.Provider value={readerCatalog}><section
       className="editorial-experience"
       aria-labelledby="personal-edition"
+      data-state={busy ? "loading" : promptError ? "error" : edition ? edition.source === "meta" ? "generated" : "fallback" : prompt.trim() ? "typing" : "empty"}
+      data-view={panel === "collection" ? "collection" : panel ? "story" : "reader"}
+      data-has-collection={saved.length > 0}
     >
+      <div className="discovery-entry">
+      <EntryHud />
       <div className="edition-intro">
         <p className="eyebrow">FROM ADVERTISING TO DISCOVERY</p>
         <div className="opening-copy">
           <h1 id="personal-edition" tabIndex={-1}>
-            Follow your <em>curiosity.</em>
+            What are you <em>curious about?</em>
           </h1>
           <p className="opening-deck">
             One prompt. A visual magazine. A trail of discoveries.
@@ -281,14 +287,15 @@ export default function EditorialExperience() {
           Your collection ({saved.length})
         </button>
       </div>
-      <form className="editorial-controls prompt-composer" id="edition-builder" onSubmit={event => { event.preventDefault(); void create(); }}>
+      {busy && <EditionAssembly items={editorialDemoCatalog} />}
+      <form className="editorial-controls prompt-composer" aria-busy={busy} id="edition-builder" onSubmit={event => { event.preventDefault(); void create(); }}>
         <div className="builder-heading">
           <p className="eyebrow">01 / FOLLOW AN IDEA</p>
-          <h2>What would you like to discover?</h2>
+          <h2 className="sr-only">What would you like to discover?</h2>
           <p id="prompt-help">Describe a mood, an interest, or a connection. We’ll turn it into a visual magazine.</p>
         </div>
         <label className="prompt-label" htmlFor="discovery-prompt">Your discovery prompt</label>
-        <textarea ref={promptInput} id="discovery-prompt" value={prompt} maxLength={1000} rows={4} required disabled={busy}
+        <textarea ref={promptInput} id="discovery-prompt" value={prompt} maxLength={1000} rows={2} required disabled={busy}
           aria-describedby="prompt-help prompt-privacy" aria-invalid={Boolean(promptError)}
           placeholder="A quiet world of paper lamps, reading rooms and Scandinavian simplicity…"
           onChange={event => { setPrompt(event.target.value); setConsent(false); setPromptError(""); }}
@@ -305,8 +312,9 @@ export default function EditorialExperience() {
         <button type="submit" className="generate" disabled={busy || !editorialPrompt.safeParse({ prompt, consent }).success}>
           {busy ? "Composing your issue…" : "Generate magazine →"}
         </button>
-        <p role="status" className="edition-status">{message || "Start with your own words. Only authorized imagery appears in your edition."}</p>
+        <p role="status" className="edition-status">{busy ? "Waiting for the editorial response…" : message || "Start with your own words. Only authorized imagery appears in your edition."}</p>
       </form>
+      </div>
       {edition && (
         <div
           className={`personal-edition direction-${editionMode.toLowerCase().replaceAll(" ", "-")}`}
@@ -365,6 +373,7 @@ export default function EditorialExperience() {
               <article
                 id={`personal-${feature.assetId}`}
                 key={feature.assetId}
+                data-asset-id={ad.image.id}
                 className={`personal-feature composition-${feature.layout} feature-motion motion-${feature.motion}`}
                 data-layout={feature.layout}
                 aria-label={`${ad.name} feature`}
@@ -421,6 +430,7 @@ export default function EditorialExperience() {
       <dialog
         ref={dialog}
         className="discovery-dialog"
+        data-panel={story ? "story" : "collection"}
         onClose={() => {
           setPanel(null);
           branchId.current++;
@@ -440,6 +450,7 @@ export default function EditorialExperience() {
           <>
             <p className="eyebrow">EXPLORE / UNDERSTAND</p>
             <h2 tabIndex={-1}>{story.name}</h2>
+            <DiscoveryTrail title={story.name} thread={visualThread} />
             {visualThread && <aside className="visual-story-arrival" role="status">
               <p className="eyebrow">YOUR VISUAL THREAD</p>
               <p>From {visualThread.detail} to {visualLabel(visualThread.relationship)}.</p>
@@ -558,7 +569,9 @@ export default function EditorialExperience() {
                   </aside>
                 ) : null;
               })}
-            <h4>Related discoveries</h4>
+            <section className="journey-map" aria-label="Related discovery journey">
+            <div className="journey-origin"><p className="eyebrow">04 / FOLLOW A THREAD</p><strong>{story.name}</strong><p>Continue from this story into another approved visual study.</p></div>
+            <div className="journey-choices"><h4>Related discoveries</h4>
             <div className="related-rail">
               {related.map((ad) => (
                 <button key={ad.id} onClick={() => openStory(ad)}>
@@ -567,6 +580,7 @@ export default function EditorialExperience() {
                 </button>
               ))}
             </div>
+            </div></section>
             <label>
               Collection name
               <input
@@ -588,6 +602,7 @@ export default function EditorialExperience() {
           <>
             <p className="eyebrow">COLLECT / YOUR PRIVATE FIELD NOTES</p>
             <h2 tabIndex={-1}>Your collection</h2>
+            <p className="collection-count">{saved.length} saved {saved.length === 1 ? "discovery" : "discoveries"} / in this browser</p>
             <p>
               Saved only in this browser. No account, synchronization or
               tracking. Interests and AI prose are never stored.
