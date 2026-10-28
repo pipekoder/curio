@@ -1,18 +1,18 @@
 {
   "qualityVersion": 2,
-  "title": "The Architecture of Light",
-  "deck": "Look at the shade and the space around the silhouette.",
+  "title": "The Space a Shade Leaves",
+  "deck": "The shade and the seating reveal how contrast guides the eye across a composition.",
   "features": [
     {
       "catalogId": "home-lamp",
       "assetId": "asset-home-lamp-v1",
-      "headline": "How shade frames light",
-      "narrative": "The shade holds light around the rounded silhouette.",
+      "headline": "What the shade leaves open",
+      "narrative": "The drawn shade frames a small stand; the contrast leaves space around the light.",
       "observationKeys": [
         "subjects.lighting",
         "relationships.light-and-shadow"
       ],
-      "discoveryQuestion": "How might shadow frame the seating in another room?",
+      "discoveryQuestion": "How might another shade guide light across a surface?",
       "layout": "hero",
       "motion": "still",
       "theme": "Scandinavian"
@@ -20,12 +20,12 @@
     {
       "catalogId": "home-chair",
       "assetId": "asset-home-chair-v1",
-      "headline": "Space around seating",
-      "narrative": "The rounded seating leaves space around the silhouette.",
+      "headline": "Room around a rounded silhouette",
+      "narrative": "The rounded seating holds the foreground; the space around its silhouette creates contrast.",
       "observationKeys": [
         "subjects.seating"
       ],
-      "discoveryQuestion": "How might curves guide the eye around another surface?",
+      "discoveryQuestion": "How might a path guide the eye between shapes?",
       "layout": "split",
       "motion": "reveal",
       "theme": "Quiet Luxury"
@@ -35,7 +35,7 @@
     {
       "fromAssetId": "asset-home-lamp-v1",
       "toAssetId": "asset-home-chair-v1",
-      "thread": "Compare the space around the shade with the space around seating."
+      "thread": "Compare how the shade frames light with how seating leaves space around a silhouette."
     }
   ]
 }
