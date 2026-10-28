@@ -1,10 +1,10 @@
+import { editorialPrompt, interpretEditorialPrompt, promptSuggestions, PromptIntentError } from "../shared/editorial-intent";
 import { authoredVisualContext, visualLabel } from "../shared/visual-observations";
 import { useEffect, useRef, useState } from "react";
 import { curationCatalog, type CatalogItem } from "../shared/catalog";
 import {
   defaultPreferences,
   editorialDemoCatalog,
-  editorialPreferences,
   fallbackPlan,
   validatePlan,
   validateOriginalPlan,
@@ -15,12 +15,15 @@ import {
   type EditorialPreferences,
   type CollectionRecord,
 } from "../shared/editorial";
-import { lifestyles, categories } from "../shared/catalog";
 import LivingAdvertisement from "./LivingAdvertisement";
 import CatalogImage from "./CatalogImage";
 import Attribution from "./Attribution";
 const STORAGE = "curio.collection.v1";
 export default function EditorialExperience() {
+  const [prompt, setPrompt] = useState("");
+  const [consent, setConsent] = useState(false);
+  const [promptError, setPromptError] = useState("");
+  const promptInput = useRef<HTMLTextAreaElement>(null);
   const [prefs, setPrefs] = useState<EditorialPreferences>(defaultPreferences);
   const [editionMode, setEditionMode] =
     useState<EditorialPreferences["mode"]>("Balanced");
@@ -55,6 +58,9 @@ export default function EditorialExperience() {
     if (!panel && dialog.current?.open) dialog.current.close();
   }, [panel]);
   useEffect(() => {
+    if (edition) editionHeading.current?.focus();
+  }, [edition]);
+  useEffect(() => {
     if (!edition || typeof IntersectionObserver === "undefined") return;
     const observer = new IntersectionObserver(
       (entries) =>
@@ -71,14 +77,17 @@ export default function EditorialExperience() {
       .forEach((e) => observer.observe(e));
     return () => observer.disconnect();
   }, [edition]);
-  const total = Object.values(prefs.allocations).reduce((a, b) => a + b, 0);
   async function create() {
-    if (!editorialPreferences.safeParse(prefs).success || busy) return;
+    if (busy) return;
+    let preferences: EditorialPreferences;
+    try { preferences = interpretEditorialPrompt({ prompt, consent }); }
+    catch (error) { setPromptError(error instanceof PromptIntentError ? error.message : "Describe what you’d like to discover in up to 1,000 characters."); promptInput.current?.focus(); return; }
+    setPromptError("");
     setBusy(true);
     setMessage("");
     const id = ++requestId.current;
     let result: EditorialEdition = {
-      plan: fallbackPlan(prefs),
+      plan: fallbackPlan(preferences),
       items: editorialDemoCatalog,
       source: "deterministic",
       retrieval: "fictional",
@@ -88,7 +97,7 @@ export default function EditorialExperience() {
       const response = await fetch("/api/editorial", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(prefs),
+        body: JSON.stringify({ prompt: preferences.interests, consent }),
         signal: AbortSignal.timeout(20000),
       });
       if (response.ok) {
@@ -100,7 +109,7 @@ export default function EditorialExperience() {
           throw Error("Invalid source");
         const allowed = curationCatalog.filter(
           (a) =>
-            prefs.allocations[a.category] > 0 &&
+            preferences.allocations[a.category] > 0 &&
             data.items.some(
               (item) => item.id === a.id && item.image.id === a.image.id,
             ),
@@ -110,7 +119,7 @@ export default function EditorialExperience() {
           items: allowed,
           plan:
             data.source === "meta"
-              ? validateOriginalPlan(data.plan, allowed, prefs)
+              ? validateOriginalPlan(data.plan, allowed, preferences)
               : validatePlan(data.plan, allowed),
         };
       }
@@ -118,7 +127,8 @@ export default function EditorialExperience() {
       /* Fully local deterministic edition remains available offline. */
     }
     if (id !== requestId.current) return;
-    setEditionMode(prefs.mode);
+    setPrefs(preferences);
+    setEditionMode(preferences.mode);
     setEdition(result);
     setBusy(false);
     setMessage(
@@ -126,7 +136,6 @@ export default function EditorialExperience() {
         ? "Your Muse Spark edition is ready."
         : "Your authored fallback edition is ready.",
     );
-    requestAnimationFrame(() => editionHeading.current?.focus());
   }
   function persist(next: CollectionRecord[]) {
     setSaved(next);
@@ -217,16 +226,13 @@ export default function EditorialExperience() {
         <p className="eyebrow">FROM ADVERTISING TO DISCOVERY</p>
         <div className="opening-copy">
           <h1 id="personal-edition" tabIndex={-1}>
-            An edition
-            <br />
-            of <em>your own.</em>
+            Follow your <em>curiosity.</em>
           </h1>
           <p className="opening-deck">
-            Quiet rooms. Unexpected silhouettes. Somewhere you have never been.
-            Begin with what moves you.
+            One prompt. A visual magazine. A trail of discoveries.
           </p>
           <p className="opening-caption">
-            Six original fictional studies. Infinite ways to look closer.
+            Original illustrations. A new point of view.
           </p>
         </div>
         <div
@@ -247,142 +253,32 @@ export default function EditorialExperience() {
           Your collection ({saved.length})
         </button>
       </div>
-      <div className="editorial-controls" id="edition-builder">
+      <form className="editorial-controls prompt-composer" id="edition-builder" onSubmit={event => { event.preventDefault(); void create(); }}>
         <div className="builder-heading">
-          <p className="eyebrow">01 / SET YOUR DIRECTION</p>
-          <h2>What catches your eye?</h2>
-          <p>Start with a mood, then make it yours.</p>
+          <p className="eyebrow">01 / FOLLOW AN IDEA</p>
+          <h2>What would you like to discover?</h2>
+          <p id="prompt-help">Describe a mood, an interest, or a connection. We’ll turn it into a visual magazine.</p>
         </div>
-        <div
-          className="edition-presets"
-          role="group"
-          aria-label="Edition starting points"
-        >
-          <button
-            onClick={() =>
-              setPrefs({
-                ...prefs,
-                interests: "paper quiet lamp reading rooms",
-                aesthetics: ["Scandinavian"],
-                allocations: { home: 100, fashion: 0, travel: 0 },
-                mode: "Focused",
-              })
-            }
-          >
-            Quiet rooms <span>Paper / light / stillness →</span>
-          </button>
-          <button
-            onClick={() =>
-              setPrefs({
-                ...prefs,
-                interests: "woodland path walking outdoors",
-                aesthetics: ["Nature & Outdoor"],
-                allocations: { home: 0, fashion: 0, travel: 100 },
-                mode: "Surprise Me",
-              })
-            }
-          >
-            Into the wild <span>Paths / landscape / possibility →</span>
-          </button>
+        <label className="prompt-label" htmlFor="discovery-prompt">Your discovery prompt</label>
+        <textarea ref={promptInput} id="discovery-prompt" value={prompt} maxLength={1000} rows={4} required disabled={busy}
+          aria-describedby="prompt-help prompt-privacy" aria-invalid={Boolean(promptError)}
+          placeholder="A quiet world of paper lamps, reading rooms and Scandinavian simplicity…"
+          onChange={event => { setPrompt(event.target.value); setConsent(false); setPromptError(""); }}
+          onKeyDown={event => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
+        <div className="prompt-suggestions" role="group" aria-label="Prompt inspiration">
+          {promptSuggestions.map(suggestion => <button type="button" key={suggestion.name} disabled={busy} aria-label={`Try a prompt: ${suggestion.name}`}
+            onClick={() => { setPrompt(suggestion.text); setConsent(false); setPromptError(""); promptInput.current?.focus(); }}>{suggestion.name} <span aria-hidden="true">→</span></button>)}
         </div>
-        <label>
-          Your editorial interests
-          <textarea
-            value={prefs.interests}
-            maxLength={1000}
-            placeholder="Paper, quiet rooms, sculptural shapes…"
-            onChange={(e) => setPrefs({ ...prefs, interests: e.target.value })}
-          />
+        <label className="consent" id="prompt-privacy">
+          <input type="checkbox" checked={consent} disabled={busy} onChange={event => setConsent(event.target.checked)} />
+          Use Meta AI for this prompt, if available. Optional; avoid personal information. Leave unchecked for an edition without AI.
         </label>
-        <fieldset>
-          <legend>Your visual language</legend>
-          <div className="chips">
-            {lifestyles.map((style) => (
-              <button
-                key={style}
-                aria-pressed={prefs.aesthetics.includes(style)}
-                className={`chip ${prefs.aesthetics.includes(style) ? "active" : ""}`}
-                onClick={() =>
-                  setPrefs({
-                    ...prefs,
-                    aesthetics: prefs.aesthetics.includes(style)
-                      ? prefs.aesthetics.filter((s) => s !== style)
-                      : [...prefs.aesthetics, style],
-                  })
-                }
-              >
-                {style}
-              </button>
-            ))}
-          </div>
-        </fieldset>
-        <fieldset>
-          <legend>Editorial direction</legend>
-          <div className="direction">
-            {(["Focused", "Balanced", "Surprise Me"] as const).map((mode) => (
-              <button
-                key={mode}
-                aria-pressed={prefs.mode === mode}
-                onClick={() => setPrefs({ ...prefs, mode })}
-              >
-                {mode}
-                <small>
-                  {mode === "Focused"
-                    ? "A closer study"
-                    : mode === "Balanced"
-                      ? "Connections across worlds"
-                      : "A little unexpected"}
-                </small>
-              </button>
-            ))}
-          </div>
-        </fieldset>
-        <fieldset className="editorial-mix">
-          <legend>Your category emphasis · {total}%</legend>
-          {categories.map((c) => (
-            <label key={c}>
-              {categoryLabel(c)}
-              <input
-                aria-label={`Editorial ${c} weight`}
-                type="number"
-                min="0"
-                max="100"
-                value={prefs.allocations[c]}
-                onChange={(e) =>
-                  setPrefs({
-                    ...prefs,
-                    allocations: {
-                      ...prefs.allocations,
-                      [c]: Number(e.target.value),
-                    },
-                  })
-                }
-              />
-            </label>
-          ))}
-        </fieldset>
-        <label className="consent">
-          <input
-            type="checkbox"
-            checked={prefs.consent}
-            onChange={(e) => setPrefs({ ...prefs, consent: e.target.checked })}
-          />
-          Allow this edition's preferences to be sent to Meta Muse Spark if
-          enabled. Optional; avoid personal information. Local editions work
-          without AI.
-        </label>
-        <button
-          className="generate"
-          disabled={busy || total !== 100 || !prefs.aesthetics.length}
-          onClick={create}
-        >
-          {busy ? "Composing your issue…" : "Compose my edition →"}
+        {promptError && <p className="prompt-error" role="alert">{promptError}</p>}
+        <button type="submit" className="generate" disabled={busy || !editorialPrompt.safeParse({ prompt, consent }).success}>
+          {busy ? "Composing your issue…" : "Generate magazine →"}
         </button>
-        <p role="status" className="edition-status">
-          {message ||
-            "The public demo uses authorized fictional illustrations. Real image candidates stay private."}
-        </p>
-      </div>
+        <p role="status" className="edition-status">{message || "Start with your own words. Only authorized imagery appears in your edition."}</p>
+      </form>
       {edition && (
         <div
           className={`personal-edition direction-${editionMode.toLowerCase().replaceAll(" ", "-")}`}
@@ -398,7 +294,7 @@ export default function EditorialExperience() {
             <small>
               {edition.source === "meta"
                 ? "AI-generated visual interpretation"
-                : "Deterministic authored edition · no AI output"}{" "}
+                : "Curio-authored edition · AI not used"}{" "}
               /{" "}
               {edition.retrieval === "d1"
                 ? "approved catalog selection"
@@ -413,6 +309,7 @@ export default function EditorialExperience() {
               <p>LOOK / CONNECT / DISCOVER</p>
             </div>
           </header>
+          <button className="refine-edition" onClick={() => { promptInput.current?.scrollIntoView({ block: "center" }); promptInput.current?.focus(); }}>Refine with a new prompt ↑</button>
           <nav className="edition-toc" aria-label="Edition contents">
             {edition.plan.features.map((feature, i) => {
               const ad = curationCatalog.find(

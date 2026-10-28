@@ -37,17 +37,8 @@ for (const width of [1280, 390])
       path: `test-results/demo-landing-${width}.png`,
       fullPage: true,
     });
-    await page.getByLabel("Your editorial interests").fill("paper quiet lamp");
-    await page.getByRole("button", { name: "Focused A closer study" }).click();
-    for (const [category, value] of [
-      ["home", "100"],
-      ["fashion", "0"],
-      ["travel", "0"],
-    ])
-      await page
-        .getByRole("spinbutton", { name: `Editorial ${category} weight` })
-        .fill(value);
-    await page.getByRole("button", { name: "Compose my edition" }).click();
+    await page.getByLabel("Your discovery prompt").fill("paper quiet lamp");
+    await page.getByRole("button", { name: "Generate magazine" }).click();
     await expect(
       page.getByRole("heading", { name: "The art of quiet rooms" }),
     ).toBeVisible();
@@ -116,20 +107,9 @@ for (const width of [1280, 390])
     ).toBeVisible();
     await page.keyboard.press("Escape");
     await page
-      .getByLabel("Your editorial interests")
-      .fill("woodland path walking");
-    await page
-      .getByRole("button", { name: "Surprise Me A little unexpected" })
-      .click();
-    for (const [category, value] of [
-      ["home", "0"],
-      ["fashion", "0"],
-      ["travel", "100"],
-    ])
-      await page
-        .getByRole("spinbutton", { name: `Editorial ${category} weight` })
-        .fill(value);
-    await page.getByRole("button", { name: "Compose my edition" }).click();
+      .getByLabel("Your discovery prompt")
+      .fill("Surprise me with woodland paths and walking outdoors");
+    await page.getByRole("button", { name: "Generate magazine" }).click();
     await expect(
       page.getByRole("heading", { name: "Into the open" }),
     ).toBeVisible();
@@ -159,7 +139,8 @@ test("reduced motion, keyboard collection controls and unavailable local storage
     };
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "Compose my edition" }).click();
+  await page.getByLabel("Your discovery prompt").fill("A magazine of unexpected connections");
+  await page.getByRole("button", { name: "Generate magazine" }).click();
   await expect(page.locator(".personal-feature")).toHaveCount(6);
   expect(
     await page
@@ -222,12 +203,12 @@ for (const profile of ["home", "travel"] as const)
       .getByRole("button", {
         name:
           profile === "home"
-            ? "Quiet rooms Paper / light / stillness →"
-            : "Into the wild Paths / landscape / possibility →",
+            ? "Try a prompt: Quiet rooms"
+            : "Try a prompt: Into the wild",
       })
       .click();
     await page.getByRole("checkbox").check();
-    await page.getByRole("button", { name: "Compose my edition" }).click();
+    await page.getByRole("button", { name: "Generate magazine" }).click();
     await expect(
       page.getByRole("heading", { name: plans[profile].title }),
     ).toBeVisible();

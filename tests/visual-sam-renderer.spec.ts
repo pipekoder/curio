@@ -1,0 +1,30 @@
+import { expect, test } from '@playwright/test'
+for (const width of [1440, 390]) test(`mock SAM regions render without inference at ${width}px`, async ({page}) => {
+  await page.setViewportSize({width,height:1000}); await page.emulateMedia({reducedMotion:'reduce'})
+  const requests: string[] = []
+  await page.route('**/api/**', route => { requests.push(route.request().url()); return route.abort() })
+  await page.route('**/catalog/operator-preview.png', route => route.fulfill({path:'tests/fixtures/original-home-lamp.png',contentType:'image/png'}))
+  await page.goto('http://127.0.0.1:4174/tests/browser/sam.html')
+  await expect(page.getByRole('heading',{name:'MOCK SAM RESULT REPLAY'})).toBeVisible()
+  const hotspot = page.getByRole('button',{name:'Explore Paper shade'})
+  await expect(hotspot).toBeVisible(); await hotspot.focus(); await page.keyboard.press('Enter')
+  await expect(page.getByText('LOOK CLOSER / MODEL ESTIMATE')).toBeVisible()
+  expect(await hotspot.evaluate(e=>e.getBoundingClientRect().width)).toBeGreaterThanOrEqual(44)
+  const point=await hotspot.boundingBox(),image=await page.locator('img').boundingBox()
+  expect(point!.x+point!.width/2).toBeCloseTo(image!.x+760/1200*image!.width,0)
+  await expect(hotspot).toBeFocused()
+  // Complete keyboard assertions before full-page capture temporarily resizes the viewport.
+  await page.keyboard.press('Escape'); await expect(hotspot).toBeFocused()
+  await expect(hotspot).toHaveAttribute('aria-expanded','false')
+  await page.keyboard.press('Enter')
+  await expect(page.getByText('LOOK CLOSER / MODEL ESTIMATE')).toBeVisible()
+  await page.screenshot({path:`test-results/sam-mock-qa-${width}.png`,fullPage:true})
+  expect(requests).toEqual([])
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+})
+test('revoked analysis rights hide SAM regions without silently presenting them as authored detections',async({page})=>{
+  await page.route('**/catalog/operator-preview.png',route=>route.fulfill({path:'tests/fixtures/original-home-lamp.png',contentType:'image/png'}))
+  await page.goto('http://127.0.0.1:4174/tests/browser/sam.html?blocked')
+  await expect(page.getByRole('status')).toHaveText('Segmentation unavailable or no longer authorized. No model call.')
+  await expect(page.locator('.image-hotspot')).toHaveCount(0)
+})

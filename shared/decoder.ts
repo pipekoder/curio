@@ -62,3 +62,14 @@ export function relatedDiscovery(ad: CatalogItem) {
   return catalog.find(item => item.id !== ad.id && isPublishable(item) && item.category === ad.category && item.lifestyleTags.some(tag => ad.lifestyleTags.includes(tag))) ??
     catalog.find(item => item.id !== ad.id && isPublishable(item) && item.category === ad.category)
 }
+
+// Result input is supplied only by an authenticated operator capture/replay, never
+// fetched by the public reader. Live API authentication stays on the Worker.
+export function readerSegmentation(ad: CatalogItem, result?: unknown): Segmentation | null {
+  if (result === undefined) return authoredDemo(ad)
+  if (!isPublishable(ad) || ad.image.externalUrl || !ad.image.path?.endsWith('.png') || ad.permissions.aiAnalysis.status !== 'approved' || !ad.permissions.aiAnalysis.evidence) return authoredDemo(ad)
+  try {
+    const parsed = bindSegmentation(result, ad)
+    return parsed.source === 'sam_detection' && parsed.model === 'sam-3.1' ? parsed : authoredDemo(ad)
+  } catch { return authoredDemo(ad) }
+}

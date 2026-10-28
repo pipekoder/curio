@@ -1,3 +1,5 @@
+import { curationCatalog } from "../shared/catalog"
+import { retrievedVisualContext } from "./editorial-visual-context"
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { boundedText } from './meta'
@@ -20,7 +22,7 @@ const body = async (request: Request) => {
 assetApi.onError((error,c) => {
   if (error instanceof z.ZodError || error instanceof SyntaxError) return c.json({ error: 'Invalid asset intelligence input.' },400)
   if (error instanceof RangeError) return c.json({ error: 'Body exceeds 64 KiB.' },413)
-  if (error instanceof AssetAnalysisError) return c.json({ status: error.code },error.status)
+  if (error instanceof AssetAnalysisError) return c.json({ status: error.code, ...(error.inference ? { inference: error.inference } : {}) },error.status)
   if (error instanceof CatalogConflict) return c.json({ error: error.message },409)
   return c.json({ error: 'Asset intelligence operation unavailable. Check local schema/configuration.' },503)
 })
@@ -46,13 +48,16 @@ assetApi.post('/discover', async c => {
 })
 assetApi.post('/access', async c => {
   const r = z.strictObject({ versionId }).parse(await body(c.req.raw))
-  return c.json(await new AssetStore(c.env.CATALOG_DB!).checkAccess(r.versionId))
+  return c.json(await new AssetStore(c.env.CATALOG_DB!).checkAccess(r.versionId,fetch,c.env.ASSETS))
 })
 assetApi.post('/classify', async c => c.json(await runClassification(await body(c.req.raw),c.env,c.req.header('CF-Connecting-IP')!)))
 assetApi.get('/versions/:id/readiness', async c => {
   const id = versionId.parse(c.req.param('id')), store = new AssetStore(c.env.CATALOG_DB!), row = await store.version(id)
   if (!row) return c.json({ error: 'Not found.' },404)
-  return c.json({ versionId: id, analysis: mediaReadiness(row), access: await store.access(id), jobs: await store.analysisJobs(id), liveEnabled: c.env.ASSET_AI_ENABLED === 'true' })
+  const hits = await new D1AssetRetriever(c.env.CATALOG_DB!).retrieve({ allocations: { home: 34, fashion: 33, travel: 33 }, aesthetics: [], tags: [], scope: 'reader', limit: 50 })
+  const hit = hits.items.find(h => h.version_id === id)
+  const context = hit ? curationCatalog.flatMap(ad => { const v = retrievedVisualContext(hit,ad); return v ? [v] : [] })[0] : null
+  return c.json({ imageSha256: row.sha256, samAssetId: c.env.SAM_LIVE_ASSET_ID ?? null, samCommentaryEnabled: c.env.DECODER_COMMENTARY_ENABLED === "true", editorialContextAssetId: context?.assetId ?? null, inferenceMaxCalls: c.env.MAGAZINE_MAX_CALLS ?? null, editorialEnabled: c.env.MAGAZINE_AI_ENABLED === 'true', versionId: id, analysis: mediaReadiness(row), access: await store.access(id), jobs: await store.analysisJobs(id), liveEnabled: c.env.ASSET_AI_ENABLED === 'true' })
 })
 assetApi.post('/retrieve', async c => c.json(await new D1AssetRetriever(c.env.CATALOG_DB!).retrieve(await body(c.req.raw))))
 assetApi.post('/reviews/identity', async c => { await new AssetStore(c.env.CATALOG_DB!).reviewIdentity(await body(c.req.raw)); return c.json({ reviewed: true }) })
