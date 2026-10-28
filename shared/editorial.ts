@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { observationKey, editorialV2Text, evaluateEditorialV2 } from "./editorial-v2";
 import { visualPhrase, visualNarrative } from "./editorial-language";
 import {
   categories,
@@ -43,6 +44,7 @@ const prose = z
   );
 export const editorialPlan = z
   .strictObject({
+    qualityVersion: z.literal(2).optional(),
     title: prose,
     deck: prose,
     connections: z
@@ -60,6 +62,8 @@ export const editorialPlan = z
         z.strictObject({
           catalogId: z.string().max(80),
           assetId: z.string().max(100),
+          observationKeys: z.array(observationKey).min(1).max(5).optional(),
+          discoveryQuestion: prose.optional(),
           headline: prose,
           narrative: prose,
           layout: z.enum(["hero", "split", "layered", "horizontal", "essay"]),
@@ -71,6 +75,7 @@ export const editorialPlan = z
       .max(6),
   })
   .superRefine((p, ctx) => {
+    if (p.qualityVersion !== 2 && p.features.some(f=>f.observationKeys || f.discoveryQuestion)) ctx.addIssue({code:"custom",message:"Versioned editorial grounding required."});
     if (new Set(p.features.map((f) => f.assetId)).size !== p.features.length)
       ctx.addIssue({ code: "custom", message: "Duplicate assets." });
   });
@@ -85,9 +90,9 @@ export function validatePlan(input: unknown, pool: readonly CatalogItem[]) {
     if (!ad) throw Error("Unapproved editorial asset");
     const copy = editorialCopy(ad);
     if (
-      !(copy.headlines.includes(f.headline) || visualPhrase(f.headline)) ||
+      !(copy.headlines.includes(f.headline) || (p.qualityVersion === 2 ? editorialV2Text(f.headline) : visualPhrase(f.headline))) ||
       !(
-        copy.narratives.includes(f.narrative) || visualNarrative(f.narrative)
+        copy.narratives.includes(f.narrative) || (p.qualityVersion === 2 ? editorialV2Text(f.narrative) : visualNarrative(f.narrative))
       ) ||
       !ad.lifestyleTags.some((t) => t === f.theme)
     )
@@ -98,10 +103,11 @@ export function validatePlan(input: unknown, pool: readonly CatalogItem[]) {
       connection.fromAssetId === connection.toAssetId ||
       !p.features.some((f) => f.assetId === connection.fromAssetId) ||
       !p.features.some((f) => f.assetId === connection.toAssetId) ||
-      !visualNarrative(connection.thread)
+      !(p.qualityVersion === 2 ? editorialV2Text(connection.thread) : visualNarrative(connection.thread))
     )
       throw Error("Ungrounded editorial connection");
   }
+  if (p.qualityVersion === 2 && evaluateEditorialV2(p)) throw Error("Original visual interpretation required");
   return p;
 }
 export function interestTags(text: string) {
@@ -259,7 +265,7 @@ export function validateOriginalPlan(
 ) {
   const eligible = pool.filter((a) => prefs.allocations[a.category] > 0);
   const plan = validatePlan(input, eligible);
-  if (
+  if (plan.qualityVersion !== 2 && (
     !visualPhrase(plan.title) ||
     plan.title.length > 80 ||
     plan.title.split(/\s+/).length > 12 ||
@@ -271,7 +277,7 @@ export function validateOriginalPlan(
         f.headline.split(/\s+/).length > 12 ||
         !visualNarrative(f.narrative),
     )
-  )
+  ))
     throw Error("Original visual interpretation required");
   if (
     new Set(plan.features.map((f) => f.headline)).size !==
