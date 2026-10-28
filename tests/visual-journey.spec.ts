@@ -68,7 +68,7 @@ for(const width of [1440,390])test.describe(`connected visual journey ${width}`,
    await expect(collectionHeading).toBeFocused()
    await dialog.evaluate(element=>{element.scrollTop=0})
    await expect(collectionHeading).toBeInViewport()
-   await dialog.screenshot({path:`${directory}/collect-${width}.png`})
+   await page.screenshot({path:`${directory}/collect-${width}.png`})
    await page.reload();await page.getByRole('button',{name:'Your collection (1)'}).click()
    await dialog.getByRole('button',{name:'Continue exploring'}).click();await expect(dialog.locator('h2')).toHaveText(savedStory!)
    await page.keyboard.press('Escape')
