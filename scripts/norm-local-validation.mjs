@@ -67,7 +67,7 @@ export async function main(args = process.argv.slice(2)) {
       env: { MAGAZINE_MAX_CALLS: '3', RATE_LIMIT_SALT: 'local-norm-validation-isolated-budget-v1', INFERENCE_BUDGET: await mf.getDurableObjectNamespace('INFERENCE_BUDGET'), ...(mode === 'live' ? { META_API_KEY: process.env.META_API_KEY, META_SPARK_MODEL: 'muse-spark-1.3' } : {}) },
       approval: process.env.CURIO_NORM_APPROVAL, consent: process.env.CURIO_NORM_CONSENT === 'true', maxUsd: Number(process.env.CURIO_APPROVED_MAX_USD), rates,
       samPriceConfirmed: process.env.CURIO_NORM_SAM_PREFLIGHT === 'eligibility-jpeg-pricing-provider-cap-verified',
-      prompt: value('prompt'),
+      prompt: value('prompt'), concept: value('concept'), approvedConcept: process.env.CURIO_NORM_APPROVED_CONCEPT,
     });
     await evidence(stage, result);
     const { output: privateOutput, ...safe } = result;
