@@ -9,6 +9,10 @@ export default ts.config(
   {
     files: [
       "shared/editorial*.ts",
+      "dev/*.ts",
+      "tests/norm*.ts",
+      "scripts/norm-local-validation.mjs",
+      "scripts/replay-norm-sam.mjs",
       "scripts/*acceptance*.mjs",
       "scripts/production-smoke.mjs",
       "scripts/prepare-original-raster.mjs",
@@ -32,6 +36,12 @@ export default ts.config(
       "src/EditorialExperience.tsx",
       "src/App.tsx",
       "tests/editorial*.ts",
+      "shared/object-groups.ts",
+      "shared/object-localization.ts",
+      "tests/object-localization.test.ts",
+      "shared/reader-media.ts",
+      "worker/editorial-quality.ts",
+      "tests/object-groups.test.ts",
     ],
     extends: [js.configs.recommended, ...ts.configs.recommended],
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
