@@ -44,6 +44,7 @@ export default ts.config(
       "src/EditorialExperience.tsx",
       "src/App.tsx",
       "tests/editorial*.ts",
+      "tests/demo-readiness.spec.ts",
       "shared/object-groups.ts",
       "shared/object-localization.ts",
       "tests/object-localization.test.ts",

@@ -1,0 +1,14 @@
+{
+  "width": 1440,
+  "touch": false,
+  "reducedMotion": false,
+  "journey": "intent/magazine/image/hotspot/story/related/collect/reload/refine",
+  "homeId": "personal-asset-home-lamp-v1",
+  "travelId": "personal-asset-travel-walk-v1",
+  "homeLayout": "hero",
+  "travelLayout": "layered",
+  "source": "authored illustrations; model unavailable by test interception",
+  "externalRequests": 0,
+  "paidInference": 0,
+  "collectionRestored": true
+}
