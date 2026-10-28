@@ -1,0 +1,32 @@
+[
+  {
+    "case": "generic-adjective-pile",
+    "field": "title",
+    "text": "quiet light spacious calm",
+    "expected": "generic_headline"
+  },
+  {
+    "case": "unsupported-designer",
+    "field": "narrative",
+    "text": "Designed by Norm Architects.",
+    "expected": "unsupported_language"
+  },
+  {
+    "case": "unsupported-material",
+    "field": "narrative",
+    "text": "The seating is made of oak.",
+    "expected": "unsupported_language"
+  },
+  {
+    "case": "unrelated-curiosity",
+    "field": "discoveryQuestion",
+    "text": "How might this feel?",
+    "expected": "irrelevant_discovery"
+  },
+  {
+    "case": "unverified-bare-material",
+    "field": "narrative",
+    "text": "The paper shade holds light around the silhouette.",
+    "expected": "unsupported_language"
+  }
+]
