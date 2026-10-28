@@ -21,6 +21,7 @@
     "vite.config.ts",
     "vitest.config.ts",
     "tests",
+    "dev",
     "playwright.config.ts"
   ]
 }
