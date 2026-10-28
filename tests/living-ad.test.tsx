@@ -75,3 +75,18 @@ it('renders only permission-bound SAM result regions, while authored commentary 
   view.rerender(<LivingAdvertisement ad={ad} eager samResult={{ ...result, regions: [] }} />)
   expect(screen.getByText(/No matching regions were returned/)).toBeTruthy()
 })
+it('keeps every overlapping SAM object reachable through the optional detail index', async () => {
+  const { catalogItem } = await import('../shared/catalog')
+  const ad = catalogItem.parse({...catalog[0],image:{...catalog[0].image,id:'test-overlap-v1',path:'/catalog/test-overlap.png',role:'supplied_image'},licensing:{status:'cleared',rightsHolder:'Synthetic test only',evidence:'docs/TEST_ONLY.md'},permissions:{...catalog[0].permissions,aiAnalysis:{status:'approved',evidence:'docs/TEST_ONLY.md'}}})
+  const result={adId:ad.id,assetId:ad.image.id,width:1200,height:900,source:'sam_detection',model:'sam-3.1',regions:['a','b'].map(id=>({id,detailId:'home-lamp-detail',box:{x:.2,y:.2,width:.4,height:.4},confidence:null,uncertainty:'model_estimate_not_identity'}))}
+  render(<LivingAdvertisement ad={ad} eager samResult={result}/>)
+  const image=screen.getByRole('img')
+  Object.defineProperties(image,{naturalWidth:{value:1200},naturalHeight:{value:900}})
+  vi.spyOn(image,'getBoundingClientRect').mockReturnValue({left:0,top:0,width:600,height:450} as DOMRect)
+  fireEvent.load(image)
+  await userEvent.click(screen.getByText('Explore image details'))
+  const nav=screen.getByRole('navigation',{name:'Image details'})
+  expect(nav.querySelectorAll('button')).toHaveLength(2)
+  await userEvent.click(screen.getByRole('button',{name:'Open Paper shade context 2'}))
+  expect(screen.getByRole('region',{name:'Paper shade editorial reveal'})).toBeTruthy()
+})
