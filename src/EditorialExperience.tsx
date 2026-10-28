@@ -357,6 +357,7 @@ export default function EditorialExperience() {
                   </p>
                   <h3>{feature.headline}</h3>
                   <p className="feature-narrative">{feature.narrative}</p>
+                  {feature.discoveryQuestion && <button type="button" className="editorial-curiosity" onClick={() => openStory(ad)}>{feature.discoveryQuestion} →</button>}
                   <p className="source-label">
                     {edition.source === "meta"
                       ? "AI-generated hypothetical interpretation"
@@ -366,7 +367,7 @@ export default function EditorialExperience() {
                   {visualContext && <div className="visual-reading-note">
                     <span className="eyebrow">A WAY OF SEEING</span>
                     <p>{visualContext.observations.relationships.map(visualLabel).join(" / ")}</p>
-                    <small>Select a numbered detail in the image to follow a visual thread.</small>
+                    <small>Follow a small light in the image to explore a visual thread.</small>
                   </div>}
                   <Attribution ad={ad} />
                   <div className="feature-actions">
