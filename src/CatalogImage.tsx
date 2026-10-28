@@ -1,11 +1,13 @@
+import { useReaderCatalog } from './ReaderCatalog'
 import { useEffect, useRef, useState } from 'react'
 import { displaySource, type CatalogItem } from '../shared/catalog'
-import { approvedExternalAssets, type ExternalAssetApprovals } from '../shared/url-policy'
+import { type ExternalAssetApprovals } from '../shared/url-policy'
 
-export default function CatalogImage({ ad, eager = false, externalApprovals = approvedExternalAssets, onImageReady, onImageUnavailable }: {
+export default function CatalogImage({ ad, eager = false, externalApprovals, onImageReady, onImageUnavailable }: {
   ad: CatalogItem; eager?: boolean; externalApprovals?: ExternalAssetApprovals; onImageReady?: (image: { src: string; width: number; height: number }) => void; onImageUnavailable?: () => void
 }) {
-  const primary = displaySource(ad, externalApprovals)
+  const context=useReaderCatalog()
+  const primary = displaySource(ad, externalApprovals??context.approvals)
   const [attempt, setAttempt] = useState<'primary' | 'fallback' | 'missing'>(primary ? 'primary' : 'missing')
   const [ready, setReady] = useState(false)
   const [visible, setVisible] = useState(eager)
