@@ -68,6 +68,10 @@ export async function segmentWithMeta(input: SamInput, key: string, signal: Abor
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Accept: 'text/event-stream' },
     body: JSON.stringify({ model: 'sam-3.1', stream: true, input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: input.concept }, { type: 'input_image', image_url: input.imageDataUrl }] }] }),
   })
+  return parseSamResponse(response, input)
+}
+// Shared bounded parser; byte authorization remains the caller's responsibility.
+export async function parseSamResponse(response: Response, input: SamInput): Promise<Segmentation> {
   if (!response.ok || !response.headers.get('Content-Type')?.includes('text/event-stream')) { await response.body?.cancel(); throw new Error('Meta SAM request failed') }
   const result = await parseImageStream(responseEvents(response.body)).finalResult
   return normalizeSamResult(result, input.ad, input.detailId)

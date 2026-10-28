@@ -9,6 +9,10 @@ export default ts.config(
   {
     files: [
       "shared/editorial*.ts",
+      "dev/*.ts",
+      "tests/norm*.ts",
+      "scripts/norm-local-validation.mjs",
+      "scripts/replay-norm-sam.mjs",
       "scripts/*acceptance*.mjs",
       "scripts/production-smoke.mjs",
       "scripts/prepare-original-raster.mjs",
