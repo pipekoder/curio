@@ -22,6 +22,7 @@
     "vitest.config.ts",
     "tests",
     "dev",
-    "playwright.config.ts"
+    "playwright.config.ts",
+    "discovery"
   ]
 }

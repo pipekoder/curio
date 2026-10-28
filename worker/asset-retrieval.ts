@@ -11,6 +11,7 @@ export class D1AssetRetriever implements AssetRetriever {
     let seed = 2166136261; for (const c of r.seed) seed = Math.imul(seed ^ c.charCodeAt(0), 16777619) >>> 0
     const params = JSON.stringify({ ...r, tags: r.tags.map(t => t.toLowerCase()), seed: seed % 2147483647 })
     const eligible = readerEligibility('v.id')
+    const publicationFilter=r.publishedOnly?`AND EXISTS(SELECT 1 FROM catalog_publications pub JOIN content_catalog_links l ON l.asset_version=pub.version_id JOIN content_versions cv ON cv.id=l.content_version JOIN content_nodes n ON n.id=cv.node_id WHERE pub.version_id=v.id AND n.latest_version=cv.id AND n.availability='active')`:''
     const result = await this.db.prepare(`WITH pool AS (
       SELECT a.id AS asset_id,a.image_url,v.id AS version_id,v.sequence,v.sha256 AS image_sha256,
         COALESCE(s.canonical_brand_id,p.source_id,a.id) AS brand_key,
@@ -26,7 +27,7 @@ export class D1AssetRetriever implements AssetRetriever {
         AND (origin='meta' AND permission.status='approved' AND permission_revision=permission.revision OR origin='mock' AND json_extract(?1,'$.includeMock')=1)
         ORDER BY CASE origin WHEN 'meta' THEN 0 ELSE 1 END,updated_at DESC,cache_key LIMIT 1)
       LEFT JOIN asset_intelligence i ON i.id=job.intelligence_id
-      WHERE a.archived_at IS NULL AND (json_extract(?1,'$.scope')='review' OR ${eligible})
+      WHERE a.archived_at IS NULL AND (json_extract(?1,'$.scope')='review' OR ${eligible}) ${publicationFilter}
     ), components AS (
       SELECT pool.*,
         CASE WHEN intelligence_json IS NOT NULL THEN (SELECT COALESCE(SUM(CAST(c.value AS REAL)*COALESCE(json_extract(?1,'$.allocations.'||c.key),0)/100),0) FROM json_each(intelligence_json,'$.categoryScores') c)

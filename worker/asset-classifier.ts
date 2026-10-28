@@ -20,6 +20,8 @@ export function mockUnderstanding(id: string): Understanding {
 export function mediaReadiness(row: Awaited<ReturnType<AssetStore['version']>>, permits = analysisMediaPermits) {
   const permit = row ? permits[row.id] : null, blockers: string[] = []
   if (!row || row.archived_at || row.latest_version !== row.id) blockers.push('active_exact_version_required')
+  if (row?.content_current === 0) blockers.push('active_content_version_required')
+  if (row?.content_analysis_status && row.content_analysis_status !== 'approved') blockers.push('content_analysis_review_required')
   if (row?.analysis_status !== 'approved' || !row.analysis_evidence) blockers.push('ai_analysis_permission_required')
   if (!row?.sha256 || !row.width || !row.height) blockers.push('reviewed_fingerprint_and_dimensions_required')
   if (!permit || !row || permit.imageUrl !== row.image_url || permit.sha256 !== row.sha256 || permit.width !== row.width || permit.height !== row.height || permit.analysisEvidence !== row.analysis_evidence) blockers.push('exact_server_media_permit_required')
