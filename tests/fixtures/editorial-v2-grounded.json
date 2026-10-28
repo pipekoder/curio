@@ -1,0 +1,41 @@
+{
+  "qualityVersion": 2,
+  "title": "The Architecture of Light",
+  "deck": "Look at the shade and the space around the silhouette.",
+  "features": [
+    {
+      "catalogId": "home-lamp",
+      "assetId": "asset-home-lamp-v1",
+      "headline": "How shade frames light",
+      "narrative": "The shade holds light around the rounded silhouette.",
+      "observationKeys": [
+        "subjects.lighting",
+        "relationships.light-and-shadow"
+      ],
+      "discoveryQuestion": "How might shadow frame the seating in another room?",
+      "layout": "hero",
+      "motion": "still",
+      "theme": "Scandinavian"
+    },
+    {
+      "catalogId": "home-chair",
+      "assetId": "asset-home-chair-v1",
+      "headline": "Space around seating",
+      "narrative": "The rounded seating leaves space around the silhouette.",
+      "observationKeys": [
+        "subjects.seating"
+      ],
+      "discoveryQuestion": "How might curves guide the eye around another surface?",
+      "layout": "split",
+      "motion": "reveal",
+      "theme": "Quiet Luxury"
+    }
+  ],
+  "connections": [
+    {
+      "fromAssetId": "asset-home-lamp-v1",
+      "toAssetId": "asset-home-chair-v1",
+      "thread": "Compare the space around the shade with the space around seating."
+    }
+  ]
+}
