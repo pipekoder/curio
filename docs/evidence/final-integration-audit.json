@@ -1,0 +1,366 @@
+{
+  "review_date": "2026-10-28T15:10:30.938025+01:00",
+  "main": "7aba1be6969d90d79eb7a3c4c1b7cb9575fdece9",
+  "sources": {
+    "PR19": "3fcef9e1d970733319b47bfa5ce84169c957905c",
+    "PR20": "125396a01f6309d665aa62a6f93fc531cfe3bfe0",
+    "integration_snapshot": "21f68ea2978e30bcf54806a14e0a3013f4ee553d",
+    "PR21": "6e8e6427b7ca44d148efd9f20f920132a043c876"
+  },
+  "prepared_commits": {
+    "PR19": "3fcef9e1d970733319b47bfa5ce84169c957905c",
+    "PR20": "ef629757a944b5bd6807b4e0de05aed899faaf82",
+    "replay": "93754e7f39bd7b184da5ed69b6e21d325906d918",
+    "PR21": "28afdc1b9656736234d9b4d19716ae1aceb5dbde"
+  },
+  "candidate_tree": "eb3a194841b2b9a5afcae5816690539ae385012a",
+  "checks": {
+    "PR19_matches_source": true,
+    "PR19_then_PR20_matches_snapshot_foundation": true,
+    "focused_replay_matches_integration_snapshot": true,
+    "candidate_matches_CI_passed_PR21": true,
+    "file_union_exact": true,
+    "protected_policy_and_production_paths_unchanged": true,
+    "no_tracked_private_JPEG_or_ZIP": true
+  },
+  "overlap": {
+    "PR19 + PR20": [
+      "eslint.config.js",
+      "worker/editorial.ts"
+    ],
+    "PR19 + replay": [
+      "eslint.config.js"
+    ],
+    "PR19 + PR21": [
+      "dev/norm-asset.ts",
+      "dev/norm-workflow.ts",
+      "docs/NORM_LOCAL_VALIDATION.md",
+      "eslint.config.js",
+      "scripts/norm-local-validation.mjs",
+      "tests/norm-local.test.ts"
+    ],
+    "PR20 + replay": [
+      ".github/workflows/ci.yml",
+      "eslint.config.js"
+    ],
+    "PR20 + PR21": [
+      ".github/workflows/ci.yml",
+      "eslint.config.js"
+    ],
+    "replay + PR21": [
+      ".github/workflows/ci.yml",
+      "eslint.config.js"
+    ]
+  },
+  "protected_paths": [
+    "wrangler.jsonc",
+    "migrations",
+    "worker/budget.ts",
+    "worker/inference-budget.ts",
+    "worker/catalog-api.ts",
+    "worker/catalog-store.ts",
+    "shared/catalog.ts",
+    "shared/url-policy.ts",
+    "shared/reviewed-catalog.ts"
+  ],
+  "files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "stages": [
+        "PR20",
+        "replay",
+        "PR21"
+      ],
+      "blob": "4cbfa40327bcb976baaadccc4a8b32cb9a9ff189"
+    },
+    {
+      "path": "dev/norm-asset.ts",
+      "stages": [
+        "PR19",
+        "PR21"
+      ],
+      "blob": "2b6e1fba3eaf035f84c75f8685cf7465efc16eb3"
+    },
+    {
+      "path": "dev/norm-replay.ts",
+      "stages": [
+        "replay"
+      ],
+      "blob": "7d7b130799da7636963ba79f98cb78d8fc20bdfe"
+    },
+    {
+      "path": "dev/norm-workflow.ts",
+      "stages": [
+        "PR19",
+        "PR21"
+      ],
+      "blob": "06594dd3e516a3836a3919ce24a200b161e0d59d"
+    },
+    {
+      "path": "docs/EDITORIAL_UX_V2.md",
+      "stages": [
+        "PR20"
+      ],
+      "blob": "f0fd70e877f220ad5e62f3a5268f2d506da63129"
+    },
+    {
+      "path": "docs/INTEGRATION_DEMO_READINESS.md",
+      "stages": [
+        "replay"
+      ],
+      "blob": "3a0f8b88af482f65dc40b8bc0ac3db653ab18664"
+    },
+    {
+      "path": "docs/MUSE_GUIDED_LOCALIZATION.md",
+      "stages": [
+        "PR21"
+      ],
+      "blob": "33bafd85c394ea516b14a8c6f0a51836696fff86"
+    },
+    {
+      "path": "docs/NORM_LOCAL_VALIDATION.md",
+      "stages": [
+        "PR19",
+        "PR21"
+      ],
+      "blob": "53ff142e55a0776befc98733e93d237955e05980"
+    },
+    {
+      "path": "docs/PR21_KEYBOARD_FOCUS_REGRESSION.md",
+      "stages": [
+        "PR21"
+      ],
+      "blob": "3cf3457ae5898ec38b4ad5249a9d0f12676743bc"
+    },
+    {
+      "path": "docs/evidence/ux-v2-desktop.png",
+      "stages": [
+        "PR20"
+      ],
+      "blob": "4e3daf652ef5cb248f70d1934237740ba15c2087"
+    },
+    {
+      "path": "docs/evidence/ux-v2-mobile.png",
+      "stages": [
+        "PR20"
+      ],
+      "blob": "cbe1a0b06a62066ab6a4f623a5409e8b294ce541"
+    },
+    {
+      "path": "eslint.config.js",
+      "stages": [
+        "PR19",
+        "PR20",
+        "replay",
+        "PR21"
+      ],
+      "blob": "b0e301a99a9a511e38cc924b14e8f2bee32d3b76"
+    },
+    {
+      "path": "package-lock.json",
+      "stages": [
+        "PR19"
+      ],
+      "blob": "97c04895250a2335d7a69509a9aa3bfe5c11721f"
+    },
+    {
+      "path": "package.json",
+      "stages": [
+        "PR19"
+      ],
+      "blob": "8eda0c8715ba8973c5dfe4547793fe5cf19378d8"
+    },
+    {
+      "path": "scripts/norm-local-validation.mjs",
+      "stages": [
+        "PR19",
+        "PR21"
+      ],
+      "blob": "6ad0dbf2368b0f0607e05b0b43a34986b84e9b5f"
+    },
+    {
+      "path": "scripts/replay-norm-sam.mjs",
+      "stages": [
+        "replay"
+      ],
+      "blob": "147f4732e94aeb78df102c2da9a03a343ea1e3c7"
+    },
+    {
+      "path": "shared/editorial-language.ts",
+      "stages": [
+        "PR20"
+      ],
+      "blob": "f2f3db32141b9c5c7d77daf8d3dbd9f0e3ef7400"
+    },
+    {
+      "path": "shared/editorial-v2.ts",
+      "stages": [
+        "PR20"
+      ],
+      "blob": "d3b3a6788701a3e864d8f0302fb87729682480c2"
+    },
+    {
+      "path": "shared/editorial.ts",
+      "stages": [
+        "PR20"
+      ],
+      "blob": "6e114c1120e092a186dc4864fc45c1215542aefc"
+    },
+    {
+      "path": "shared/object-groups.ts",
+      "stages": [
+        "PR20"
+      ],
+      "blob": "df22a87c61ac8ab9a7fbfef83f9fb0ab4d7395e9"
+    },
+    {
+      "path": "shared/object-localization.ts",
+      "stages": [
+        "PR21"
+      ],
+      "blob": "770418d078b3aa6195db5e1257404398765eb346"
+    },
+    {
+      "path": "shared/reader-media.ts",
+      "stages": [
+        "PR20"
+      ],
+      "blob": "e41709d227b2771a7870f22b3e64217dda072ad8"
+    },
+    {
+      "path": "src/EditorialExperience.tsx",
+      "stages": [
+        "PR20"
+      ],
+      "blob": "a670ad60ed4fddcba278fccb02a35b4ecbd88666"
+    },
+    {
+      "path": "src/LivingAdvertisement.tsx",
+      "stages": [
+        "PR20"
+      ],
+      "blob": "56d821b67bc731c3dac25eb73abb3429db3b4de6"
+    },
+    {
+      "path": "src/styles.css",
+      "stages": [
+        "PR20"
+      ],
+      "blob": "fc9331e5d0048827db1472511e41fdfd8f9da45f"
+    },
+    {
+      "path": "tests/editorial-v2.test.ts",
+      "stages": [
+        "PR20"
+      ],
+      "blob": "110238499a5eaaed5590b7db5166e5f08312024e"
+    },
+    {
+      "path": "tests/fixtures/editorial-v2-evaluation.json",
+      "stages": [
+        "PR20"
+      ],
+      "blob": "e607edf2733864aa5123535aecaf5f99cb19d839"
+    },
+    {
+      "path": "tests/fixtures/editorial-v2-grounded.json",
+      "stages": [
+        "PR20"
+      ],
+      "blob": "b23935aa6444a5de247e2fa4bd2d5cb9495867d7"
+    },
+    {
+      "path": "tests/living-ad.test.tsx",
+      "stages": [
+        "PR20"
+      ],
+      "blob": "f3179909293f15099ed1432846655e0d8dc3e17c"
+    },
+    {
+      "path": "tests/norm-local.test.ts",
+      "stages": [
+        "PR19",
+        "PR21"
+      ],
+      "blob": "bfa6b2fcfaf21aafea8d98605e87a770f024a7d4"
+    },
+    {
+      "path": "tests/norm-replay.test.ts",
+      "stages": [
+        "replay"
+      ],
+      "blob": "c2644e85cb995ff2f88c0cf74ca5a8f16c1f6383"
+    },
+    {
+      "path": "tests/object-groups.test.ts",
+      "stages": [
+        "PR20"
+      ],
+      "blob": "61621e017f42ed4cb6b8d014949fb184efdc2129"
+    },
+    {
+      "path": "tests/object-localization.test.ts",
+      "stages": [
+        "PR21"
+      ],
+      "blob": "5b3b8735f213441b6a53e0846041f20c4addaebb"
+    },
+    {
+      "path": "tests/ux-v2.spec.ts",
+      "stages": [
+        "PR20"
+      ],
+      "blob": "d74cfceaedcfe047d907370c3cdf62e429664a79"
+    },
+    {
+      "path": "tests/visual-acceptance.spec.ts",
+      "stages": [
+        "PR21"
+      ],
+      "blob": "ee4cb67a30b33d2aad300eba31e8bf03e771fda9"
+    },
+    {
+      "path": "tsconfig.tools.json",
+      "stages": [
+        "PR19"
+      ],
+      "blob": "4aaf082b940192153344f6e3f84e90a6e91e30ef"
+    },
+    {
+      "path": "worker/asset-classifier.ts",
+      "stages": [
+        "PR21"
+      ],
+      "blob": "9b896e7e64127795463c35085b9916a85ebc05a8"
+    },
+    {
+      "path": "worker/asset-contracts.ts",
+      "stages": [
+        "PR21"
+      ],
+      "blob": "48e5300f613b656f9f509c9d0ab0d227a7ecc00f"
+    },
+    {
+      "path": "worker/editorial-quality.ts",
+      "stages": [
+        "PR20"
+      ],
+      "blob": "2b5cfbe2944dcbd4df5f47fd8d3d809bb10b4387"
+    },
+    {
+      "path": "worker/editorial.ts",
+      "stages": [
+        "PR19",
+        "PR20"
+      ],
+      "blob": "8678e26591665949ddaee10dea8b2c38ffb45462"
+    },
+    {
+      "path": "worker/sam-client.ts",
+      "stages": [
+        "PR19"
+      ],
+      "blob": "ff94de3d109e86e8e2b2a6ce5a77de0b47fd0156"
+    }
+  ]
+}
