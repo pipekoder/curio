@@ -1,3 +1,4 @@
+import { approvedExternalAssets,type ExternalAssetApprovals } from './url-policy';
 import {
   editorialPlan,
   validateOriginalPlan,
@@ -27,9 +28,10 @@ export function diagnoseOriginalPlan(
   input: unknown,
   pool: readonly CatalogItem[],
   prefs: EditorialPreferences,
+  approvals:ExternalAssetApprovals=approvedExternalAssets,
 ): EditorialDiagnostic | null {
   try {
-    validateOriginalPlan(input, pool, prefs);
+    validateOriginalPlan(input, pool, prefs, approvals);
     return null;
   } catch (error) {
     const parsed = editorialPlan.safeParse(input);

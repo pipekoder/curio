@@ -1,0 +1,287 @@
+{
+  "provenance": "Six web-connector opens on 2026-10-28; titles and short shell excerpts only, not an engine crawl. HTTP byte/time/status metrics unavailable, zero placeholders are not measurements.",
+  "manifests": [
+    {
+      "schemaVersion": 1,
+      "jobId": "observation-141d16e6c96a3e224539c57fd1f576dbcd670f4c",
+      "sourceId": "source-b0e4682e91dbfe5e127dc7fc64211f5f8b6334df",
+      "startUrl": "https://press.hm.com/image-gallery/hm-home",
+      "observedAt": "2026-10-28T09:20:00.936Z",
+      "status": "partial",
+      "stopReasons": [
+        "metadata_only_observation",
+        "rendered_content_unavailable"
+      ],
+      "pages": [
+        {
+          "url": "https://press.hm.com/image-gallery/hm-home",
+          "depth": 0,
+          "parent": null,
+          "status": "fetched",
+          "httpStatus": null
+        }
+      ],
+      "nodes": [
+        {
+          "id": "content-9e395b0922d2c8eca1bebd5e87eebe149eabf8cb9b93286b56f4da5b30bf1970",
+          "url": "https://press.hm.com/image-gallery/hm-home",
+          "kind": "gallery",
+          "title": "H&M HOME",
+          "description": "Welcome to H&M HOME Image Gallery.",
+          "text": null,
+          "attribution": null,
+          "fingerprint": "bb671967d3e582c43934b64416506679f66cf441b8b2413e55c1a99cee666077",
+          "image": null,
+          "method": "web_connector"
+        }
+      ],
+      "edges": [],
+      "metrics": {
+        "requests": 0,
+        "bytes": 0,
+        "duplicates": 0,
+        "elapsedMs": 0,
+        "maxDepth": 0,
+        "dynamicInteractions": 0
+      },
+      "displayPermission": "pending_review",
+      "analysisPermission": "pending_review",
+      "editsPermission": "pending_review"
+    },
+    {
+      "schemaVersion": 1,
+      "jobId": "observation-cc8d2da51ff9c2bbb3a8b22c59b3e6bf91bd2584",
+      "sourceId": "source-b0e4682e91dbfe5e127dc7fc64211f5f8b6334df",
+      "startUrl": "https://press.hm.com/image-gallery/events",
+      "observedAt": "2026-10-28T09:20:00.941Z",
+      "status": "partial",
+      "stopReasons": [
+        "metadata_only_observation",
+        "rendered_content_unavailable"
+      ],
+      "pages": [
+        {
+          "url": "https://press.hm.com/image-gallery/events",
+          "depth": 0,
+          "parent": null,
+          "status": "fetched",
+          "httpStatus": null
+        }
+      ],
+      "nodes": [
+        {
+          "id": "content-06b84ba9afe203f0e5bfedf219e653c875503d5bd4213b6b11bb28c51ca40202",
+          "url": "https://press.hm.com/image-gallery/events",
+          "kind": "gallery",
+          "title": "EVENTS",
+          "description": "Welcome to the H&M Event Image Gallery.",
+          "text": null,
+          "attribution": null,
+          "fingerprint": "9e9bd9eecd267fd428b1e75d68e5dc00bb282dee7e961b9cc4b327e1163288c7",
+          "image": null,
+          "method": "web_connector"
+        }
+      ],
+      "edges": [],
+      "metrics": {
+        "requests": 0,
+        "bytes": 0,
+        "duplicates": 0,
+        "elapsedMs": 0,
+        "maxDepth": 0,
+        "dynamicInteractions": 0
+      },
+      "displayPermission": "pending_review",
+      "analysisPermission": "pending_review",
+      "editsPermission": "pending_review"
+    },
+    {
+      "schemaVersion": 1,
+      "jobId": "observation-13765e3c0fd9959f4455e12ab841fead64f49f87",
+      "sourceId": "source-b0e4682e91dbfe5e127dc7fc64211f5f8b6334df",
+      "startUrl": "https://press.hm.com/image-gallery/hm-move",
+      "observedAt": "2026-10-28T09:20:00.942Z",
+      "status": "partial",
+      "stopReasons": [
+        "metadata_only_observation",
+        "rendered_content_unavailable"
+      ],
+      "pages": [
+        {
+          "url": "https://press.hm.com/image-gallery/hm-move",
+          "depth": 0,
+          "parent": null,
+          "status": "fetched",
+          "httpStatus": null
+        }
+      ],
+      "nodes": [
+        {
+          "id": "content-616241a642bf32caad850b737c60e9a455ff2808a8845f6866dc3e9e8028967a",
+          "url": "https://press.hm.com/image-gallery/hm-move",
+          "kind": "gallery",
+          "title": "H&M MOVE",
+          "description": "Welcome to the Image Gallery of H&M Move.",
+          "text": null,
+          "attribution": null,
+          "fingerprint": "b05990d727819ff3021ca93403ffefd2df50ea000260309c9b332ca69a948814",
+          "image": null,
+          "method": "web_connector"
+        }
+      ],
+      "edges": [],
+      "metrics": {
+        "requests": 0,
+        "bytes": 0,
+        "duplicates": 0,
+        "elapsedMs": 0,
+        "maxDepth": 0,
+        "dynamicInteractions": 0
+      },
+      "displayPermission": "pending_review",
+      "analysisPermission": "pending_review",
+      "editsPermission": "pending_review"
+    },
+    {
+      "schemaVersion": 1,
+      "jobId": "observation-46d4505dc56dddd426dfaff65b2cd0217c29cfc8",
+      "sourceId": "source-3d6bfd757e48ba1adc6ad010abf1344bcdbd91fa",
+      "startUrl": "https://www.zara.com/integration/pressapi/microsite/news/?countryiso=WW&languageiso=pt",
+      "observedAt": "2026-10-28T09:20:00.942Z",
+      "status": "partial",
+      "stopReasons": [
+        "metadata_only_observation",
+        "rendered_content_unavailable"
+      ],
+      "pages": [
+        {
+          "url": "https://www.zara.com/integration/pressapi/microsite/news/?countryiso=WW&languageiso=pt",
+          "depth": 0,
+          "parent": null,
+          "status": "fetched",
+          "httpStatus": null
+        }
+      ],
+      "nodes": [
+        {
+          "id": "content-0ad0e77ce7fc9cec2820e7cd622e8c543a10b0e0f8627b8a7af62a2a5418b875",
+          "url": "https://www.zara.com/integration/pressapi/microsite/news/?countryiso=WW&languageiso=pt",
+          "kind": "gallery",
+          "title": "Zara Press",
+          "description": "You need to enable JavaScript to run this app.",
+          "text": null,
+          "attribution": null,
+          "fingerprint": "0cf5b82ec7fd95750f5a5f013f8b0f5fa09209720aa1f3c35137f4f18811895b",
+          "image": null,
+          "method": "web_connector"
+        }
+      ],
+      "edges": [],
+      "metrics": {
+        "requests": 0,
+        "bytes": 0,
+        "duplicates": 0,
+        "elapsedMs": 0,
+        "maxDepth": 0,
+        "dynamicInteractions": 0
+      },
+      "displayPermission": "pending_review",
+      "analysisPermission": "pending_review",
+      "editsPermission": "pending_review"
+    },
+    {
+      "schemaVersion": 1,
+      "jobId": "observation-f70c49efb2b58a6bb2de50667b56a465fa3c478c",
+      "sourceId": "source-b143a44c6dd07ec3ae9578371b51f0e8a0afa0e6",
+      "startUrl": "https://normcph.presscloud.com/digitalshowroom/#/gallery",
+      "observedAt": "2026-10-28T09:20:00.943Z",
+      "status": "partial",
+      "stopReasons": [
+        "metadata_only_observation",
+        "rendered_content_unavailable"
+      ],
+      "pages": [
+        {
+          "url": "https://normcph.presscloud.com/digitalshowroom/#/gallery",
+          "depth": 0,
+          "parent": null,
+          "status": "fetched",
+          "httpStatus": null
+        }
+      ],
+      "nodes": [
+        {
+          "id": "content-6f7e838f8ebe9dfd8f0648c76b6691e259efab5a6f19359406d87b103fb9c3b9",
+          "url": "https://normcph.presscloud.com/digitalshowroom/#/gallery",
+          "kind": "gallery",
+          "title": "VOCAST Digital Showroom",
+          "description": null,
+          "text": null,
+          "attribution": null,
+          "fingerprint": "72172b58834b889d477be0fb4760384e9ae8c18246f4daefb6bcfffd6aa8b85d",
+          "image": null,
+          "method": "web_connector"
+        }
+      ],
+      "edges": [],
+      "metrics": {
+        "requests": 0,
+        "bytes": 0,
+        "duplicates": 0,
+        "elapsedMs": 0,
+        "maxDepth": 0,
+        "dynamicInteractions": 0
+      },
+      "displayPermission": "pending_review",
+      "analysisPermission": "pending_review",
+      "editsPermission": "pending_review"
+    },
+    {
+      "schemaVersion": 1,
+      "jobId": "observation-1a9374cd8843778f2555d4498242448ce7a78cad",
+      "sourceId": "source-b143a44c6dd07ec3ae9578371b51f0e8a0afa0e6",
+      "startUrl": "https://normcph.presscloud.com/digitalshowroom/#/gallery/Norm-Residence",
+      "observedAt": "2026-10-28T09:20:00.944Z",
+      "status": "partial",
+      "stopReasons": [
+        "metadata_only_observation",
+        "rendered_content_unavailable"
+      ],
+      "pages": [
+        {
+          "url": "https://normcph.presscloud.com/digitalshowroom/#/gallery/Norm-Residence",
+          "depth": 0,
+          "parent": null,
+          "status": "fetched",
+          "httpStatus": null
+        }
+      ],
+      "nodes": [
+        {
+          "id": "content-8cd64679f447618ab71a055ecfdfc6edf058047a987d2379f25261b3d86d3be0",
+          "url": "https://normcph.presscloud.com/digitalshowroom/#/gallery/Norm-Residence",
+          "kind": "gallery",
+          "title": "VOCAST Digital Showroom",
+          "description": null,
+          "text": null,
+          "attribution": null,
+          "fingerprint": "beff6c731f454e9d0db574762dacfce61d6e692af4d87f25da162898dc39a5ba",
+          "image": null,
+          "method": "web_connector"
+        }
+      ],
+      "edges": [],
+      "metrics": {
+        "requests": 0,
+        "bytes": 0,
+        "duplicates": 0,
+        "elapsedMs": 0,
+        "maxDepth": 0,
+        "dynamicInteractions": 0
+      },
+      "displayPermission": "pending_review",
+      "analysisPermission": "pending_review",
+      "editsPermission": "pending_review"
+    }
+  ]
+}

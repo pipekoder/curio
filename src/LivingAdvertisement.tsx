@@ -1,11 +1,13 @@
+import { useReaderCatalog } from './ReaderCatalog'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { groupObjects, type ObjectHint } from '../shared/object-groups'
 import { readerSegmentation, containRect, relatedDiscovery } from '../shared/decoder'
-import { curationCatalog, type CatalogItem } from '../shared/catalog'
+import { type CatalogItem } from '../shared/catalog'
 import { authoredVisualContext, relatedVisualStory, visualLabel } from '../shared/visual-observations'
 import CatalogImage from './CatalogImage'
 
 export default function LivingAdvertisement({ ad, eager = false, samResult, objectHints, onExploreStory }: { ad: CatalogItem; eager?: boolean; samResult?: unknown; objectHints?: Readonly<Record<string, ObjectHint>>; onExploreStory?: (next: CatalogItem, detail: string, relationship: string) => void }) {
+  const {items:curationCatalog}=useReaderCatalog()
   const demo = readerSegmentation(ad, samResult)
   const grouped = demo ? groupObjects(demo, objectHints) : null
   const [hovered, setHovered] = useState<string | null>(null)
