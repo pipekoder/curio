@@ -1,0 +1,10 @@
+{
+  "width": 390,
+  "baseline": true,
+  "reducedMotion": true,
+  "ai": "disabled mocked endpoint; authored annotations",
+  "externalRequests": 0,
+  "requests": 1,
+  "collectReloadRevisitRemove": true,
+  "reverseNavigation": true
+}

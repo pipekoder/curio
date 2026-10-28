@@ -103,3 +103,5 @@ Final QA: [PR #18 acceptance checklist, live-test limits and integration status]
 Adaptive on-demand discovery and the implemented D1 publication/Reader API are documented in [docs/ADAPTIVE_GALLERY_DISCOVERY.md](docs/ADAPTIVE_GALLERY_DISCOVERY.md), including actual source counts, local setup and permission prerequisites.
 
 Final approved-content rehearsal and evidence: [Demo readiness acceptance](docs/DEMO_READINESS_ACCEPTANCE.md). Future content must follow the [local owner gallery intake runbook](docs/OWNER_GALLERY_INTAKE.md).
+
+Visual V1 connects the five journey references to existing state: [component/state mapping](docs/VISUAL_JOURNEY_MAPPING.md) and [acceptance, before/after evidence and limitations](docs/VISUAL_V1_ACCEPTANCE.md).
