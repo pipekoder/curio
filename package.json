@@ -14,14 +14,16 @@
     "worker:check": "wrangler deploy --dry-run --outdir .wrangler/dry-run",
     "test:integration": "node scripts/smoke.mjs",
     "test:browser": "playwright test",
-    "lint": "eslint shared/editorial*.ts worker/editorial.ts src/EditorialExperience.tsx src/App.tsx tests/editorial*.ts scripts/editorial-live-check.mjs scripts/editorial-validation-smoke.mjs scripts/production-review.mjs shared/visual-observations.ts worker/editorial-visual-context.ts worker/asset-contracts.ts worker/asset-classifier.ts worker/asset-retrieval.ts src/LivingAdvertisement.tsx tests/visual*.ts scripts/live-ai-acceptance.mjs scripts/production-smoke.mjs scripts/demo-acceptance.mjs scripts/prepare-original-raster.mjs scripts/acceptance-smoke.mjs worker/asset-api.ts worker/asset-store.ts worker/asset-sources.ts shared/decoder.ts tests/living-ad.test.tsx tests/browser/sam.tsx dev/*.ts tests/norm*.ts scripts/norm-local-validation.mjs",
+    "lint": "eslint shared/editorial*.ts worker/editorial.ts src/EditorialExperience.tsx src/App.tsx tests/editorial*.ts scripts/editorial-live-check.mjs scripts/editorial-validation-smoke.mjs scripts/production-review.mjs shared/visual-observations.ts worker/editorial-visual-context.ts worker/asset-contracts.ts worker/asset-classifier.ts worker/asset-retrieval.ts src/LivingAdvertisement.tsx tests/visual*.ts scripts/live-ai-acceptance.mjs scripts/production-smoke.mjs scripts/demo-acceptance.mjs scripts/prepare-original-raster.mjs scripts/acceptance-smoke.mjs worker/asset-api.ts worker/asset-store.ts worker/asset-sources.ts shared/decoder.ts tests/living-ad.test.tsx tests/browser/sam.tsx dev/*.ts tests/norm*.ts scripts/norm-local-validation.mjs discovery/*.ts shared/discovery.ts shared/reader-catalog.ts worker/discovery-store.ts worker/catalog-publications.ts src/ReaderCatalog.tsx src/load-reader-catalog.ts",
     "review:production": "node scripts/production-review.mjs",
     "validate:editorial": "node scripts/editorial-live-check.mjs",
     "accept:demo": "node scripts/demo-acceptance.mjs",
     "validate:live": "node scripts/live-ai-acceptance.mjs",
     "smoke:production": "node scripts/production-smoke.mjs",
     "prepare:original": "node scripts/prepare-original-raster.mjs",
-    "validate:norm": "node scripts/norm-local-validation.mjs"
+    "validate:norm": "node scripts/norm-local-validation.mjs",
+    "discover": "node scripts/discover.mjs",
+    "discover:acceptance": "node scripts/discovery-acceptance.mjs"
   },
   "dependencies": {
     "@meta-sam/parser": "^0.1.0",
@@ -45,6 +47,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.13.0",
     "jsdom": "^27.0.0",
+    "linkedom": "^0.18.14",
     "miniflare": "^5.20261023.0-beta",
     "typescript": "^5.9.0",
     "typescript-eslint": "^8.72.1",

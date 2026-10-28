@@ -1,3 +1,5 @@
+import { DiscoveryStore } from './discovery-store'
+import { CatalogPublications } from './catalog-publications'
 import { curationCatalog } from "../shared/catalog"
 import { retrievedVisualContext } from "./editorial-visual-context"
 import { Hono } from 'hono'
@@ -21,7 +23,7 @@ const body = async (request: Request) => {
 }
 assetApi.onError((error,c) => {
   if (error instanceof z.ZodError || error instanceof SyntaxError) return c.json({ error: 'Invalid asset intelligence input.' },400)
-  if (error instanceof RangeError) return c.json({ error: 'Body exceeds 64 KiB.' },413)
+  if (error instanceof RangeError) return c.json({ error: error.message === 'Discovery run exceeds 256,000 bytes.' ? error.message : 'Body exceeds 64 KiB.' },413)
   if (error instanceof AssetAnalysisError) return c.json({ status: error.code, ...(error.inference ? { inference: error.inference } : {}) },error.status)
   if (error instanceof CatalogConflict) return c.json({ error: error.message },409)
   return c.json({ error: 'Asset intelligence operation unavailable. Check local schema/configuration.' },503)
@@ -62,3 +64,15 @@ assetApi.get('/versions/:id/readiness', async c => {
 assetApi.post('/retrieve', async c => c.json(await new D1AssetRetriever(c.env.CATALOG_DB!).retrieve(await body(c.req.raw))))
 assetApi.post('/reviews/identity', async c => { await new AssetStore(c.env.CATALOG_DB!).reviewIdentity(await body(c.req.raw)); return c.json({ reviewed: true }) })
 assetApi.post('/reviews/reader', async c => { await new AssetStore(c.env.CATALOG_DB!).reviewReader(await body(c.req.raw)); return c.json({ reviewed: true }) })
+
+assetApi.post('/discovery/runs',async c=>{
+  let text:string
+  try{text=await boundedText(c.req.raw.body,256000)}catch{throw new RangeError('Discovery run exceeds 256,000 bytes.')}
+  const data=JSON.parse(text) as unknown
+  return c.json(await new DiscoveryStore(c.env.CATALOG_DB!).save(data),201)
+})
+assetApi.get('/discovery/content',async c=>c.json({items:await new DiscoveryStore(c.env.CATALOG_DB!).list(c.req.query('cursor')??'',Number(c.req.query('limit')??20))}))
+assetApi.get('/discovery/content/:id',async c=>c.json(await new DiscoveryStore(c.env.CATALOG_DB!).get(c.req.param('id'))))
+assetApi.post('/discovery/reviews',async c=>c.json(await new DiscoveryStore(c.env.CATALOG_DB!).review(await body(c.req.raw))))
+assetApi.post('/discovery/promote',async c=>{const r=z.strictObject({versionId:z.string().max(80)}).parse(await body(c.req.raw));return c.json(await new DiscoveryStore(c.env.CATALOG_DB!).promote(r.versionId))})
+assetApi.post('/discovery/publish',async c=>c.json(await new CatalogPublications(c.env.CATALOG_DB!).publish(await body(c.req.raw))))

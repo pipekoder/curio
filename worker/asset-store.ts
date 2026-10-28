@@ -36,12 +36,14 @@ export class AssetStore {
       .bind(sourceId, page, status, 'worker_fetch', httpStatus, hash, count, stamp()).run()
   }
   async version(id: string) {
-    return this.db.prepare(`SELECT v.*,a.image_url,a.archived_at,p.status AS analysis_status,p.evidence AS analysis_evidence,p.revision AS analysis_revision,
+    const row=await this.db.prepare(`SELECT v.*,a.image_url,a.archived_at,p.status AS analysis_status,p.evidence AS analysis_evidence,p.revision AS analysis_revision,
       (SELECT id FROM asset_versions WHERE asset_id=a.id ORDER BY sequence DESC LIMIT 1) AS latest_version
       FROM asset_versions v JOIN catalog_assets a ON a.id=v.asset_id JOIN asset_permissions p ON p.version_id=v.id AND p.purpose='ai_analysis' WHERE v.id=?`).bind(id).first<{
         id: string; asset_id: string; image_url: string; sha256: string | null; width: number | null; height: number | null; archived_at: string | null;
-        analysis_status: string; analysis_evidence: string | null; analysis_revision: number; latest_version: string
+        analysis_status: string; analysis_evidence: string | null; analysis_revision: number; latest_version: string; content_analysis_status?:string; content_current?:number
       }>()
+    if(row && await this.db.prepare("SELECT name FROM sqlite_master WHERE name='content_reviews'").first()) {const content=await this.db.prepare("SELECT cr.status FROM content_reviews cr JOIN content_catalog_links l ON l.content_version=cr.version_id WHERE l.asset_version=? AND cr.purpose='ai_analysis' ORDER BY cr.sequence DESC LIMIT 1").bind(id).first<{status:string}>();if(content)row.content_analysis_status=content.status;const linked=await this.db.prepare("SELECT (n.latest_version=l.content_version AND n.availability='active') AS current FROM content_catalog_links l JOIN content_versions cv ON cv.id=l.content_version JOIN content_nodes n ON n.id=cv.node_id WHERE l.asset_version=?").bind(id).first<{current:number}>();if(linked)row.content_current=linked.current}
+    return row
   }
   async access(id: string) { return this.db.prepare('SELECT * FROM asset_access_checks WHERE version_id=? ORDER BY sequence DESC LIMIT 1').bind(id).first() }
   async checkAccess(id: string, send: typeof fetch = fetch, assets?: Fetcher) {

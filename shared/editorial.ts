@@ -1,3 +1,4 @@
+import { approvedExternalAssets,type ExternalAssetApprovals } from './url-policy';
 import { z } from "zod";
 import { observationKey, editorialV2Text, evaluateEditorialV2 } from "./editorial-v2";
 import { visualPhrase, visualNarrative } from "./editorial-language";
@@ -80,12 +81,12 @@ export const editorialPlan = z
       ctx.addIssue({ code: "custom", message: "Duplicate assets." });
   });
 export type EditorialPlan = z.infer<typeof editorialPlan>;
-export function validatePlan(input: unknown, pool: readonly CatalogItem[]) {
+export function validatePlan(input: unknown, pool: readonly CatalogItem[], approvals:ExternalAssetApprovals=approvedExternalAssets) {
   const p = editorialPlan.parse(input);
   for (const f of p.features) {
     const ad = pool.find(
       (a) =>
-        isPublishable(a) && a.id === f.catalogId && a.image.id === f.assetId,
+        isPublishable(a,approvals) && a.id === f.catalogId && a.image.id === f.assetId,
     );
     if (!ad) throw Error("Unapproved editorial asset");
     const copy = editorialCopy(ad);
@@ -166,10 +167,11 @@ export function fallbackPlan(
   p: EditorialPreferences,
   pool: readonly CatalogItem[] = editorialDemoCatalog,
   preserveOrder = false,
+  approvals:ExternalAssetApprovals=approvedExternalAssets,
 ): EditorialPlan {
   const ranked = (
     preserveOrder
-      ? pool.filter((a) => isPublishable(a) && p.allocations[a.category] > 0)
+      ? pool.filter((a) => isPublishable(a,approvals) && p.allocations[a.category] > 0)
       : rankDemo(p, pool)
   ).slice(0, p.mode === "Focused" ? 3 : 6);
   const top = ranked[0];
@@ -195,7 +197,7 @@ export function fallbackPlan(
         theme: a.lifestyleTags[0],
       })),
     },
-    pool,
+    pool, approvals,
   );
 }
 export type EditorialEdition = {
@@ -218,15 +220,15 @@ export const collectionRecord = z.strictObject({
   shelf: z.string().trim().min(1).max(40),
 });
 export type CollectionRecord = z.infer<typeof collectionRecord>;
-export function readCollection(raw: string | null): CollectionRecord[] {
+export function readCollection(raw: string | null,pool:readonly CatalogItem[]=curationCatalog,approvals:ExternalAssetApprovals=approvedExternalAssets): CollectionRecord[] {
   try {
     return z
       .array(collectionRecord)
       .max(60)
       .parse(JSON.parse(raw ?? "[]"))
       .filter((r) =>
-        curationCatalog.some(
-          (a) => a.image.id === r.assetId && isPublishable(a),
+        pool.some(
+          (a) => a.image.id === r.assetId && isPublishable(a,approvals),
         ),
       );
   } catch {
@@ -262,9 +264,10 @@ export function validateOriginalPlan(
   input: unknown,
   pool: readonly CatalogItem[],
   prefs: EditorialPreferences,
+  approvals:ExternalAssetApprovals=approvedExternalAssets,
 ) {
   const eligible = pool.filter((a) => prefs.allocations[a.category] > 0);
-  const plan = validatePlan(input, eligible);
+  const plan = validatePlan(input, eligible, approvals);
   if (plan.qualityVersion !== 2 && (
     !visualPhrase(plan.title) ||
     plan.title.length > 80 ||

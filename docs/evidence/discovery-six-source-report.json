@@ -1,0 +1,171 @@
+{
+  "observedAt": "2026-10-28T09:20:04.817Z",
+  "transport": "secure_operator_engine; separate web_connector shell observations",
+  "reports": [
+    {
+      "source": "norm-gallery",
+      "url": "https://normcph.presscloud.com/digitalshowroom/#/gallery",
+      "status": "blocked",
+      "stopReasons": [
+        "proxy_dns_pinning_unverified"
+      ],
+      "pagesVisited": 0,
+      "pagesAttempted": 1,
+      "depth": 0,
+      "imageCandidates": 0,
+      "validImageUrls": 0,
+      "verifiedImageBytes": 0,
+      "thumbnailResolution": "unverified",
+      "duplicates": 0,
+      "imageMetadataCompleteness": null,
+      "rights": "pending_review",
+      "resources": {
+        "requests": 0,
+        "bytes": 0,
+        "duplicates": 0,
+        "elapsedMs": 4,
+        "maxDepth": 0,
+        "dynamicInteractions": 0
+      }
+    },
+    {
+      "source": "hm-home",
+      "url": "https://press.hm.com/image-gallery/hm-home",
+      "status": "blocked",
+      "stopReasons": [
+        "proxy_dns_pinning_unverified"
+      ],
+      "pagesVisited": 0,
+      "pagesAttempted": 1,
+      "depth": 0,
+      "imageCandidates": 0,
+      "validImageUrls": 0,
+      "verifiedImageBytes": 0,
+      "thumbnailResolution": "unverified",
+      "duplicates": 0,
+      "imageMetadataCompleteness": null,
+      "rights": "pending_review",
+      "resources": {
+        "requests": 0,
+        "bytes": 0,
+        "duplicates": 0,
+        "elapsedMs": 1,
+        "maxDepth": 0,
+        "dynamicInteractions": 0
+      }
+    },
+    {
+      "source": "hm-events",
+      "url": "https://press.hm.com/image-gallery/events",
+      "status": "blocked",
+      "stopReasons": [
+        "proxy_dns_pinning_unverified"
+      ],
+      "pagesVisited": 0,
+      "pagesAttempted": 1,
+      "depth": 0,
+      "imageCandidates": 0,
+      "validImageUrls": 0,
+      "verifiedImageBytes": 0,
+      "thumbnailResolution": "unverified",
+      "duplicates": 0,
+      "imageMetadataCompleteness": null,
+      "rights": "pending_review",
+      "resources": {
+        "requests": 0,
+        "bytes": 0,
+        "duplicates": 0,
+        "elapsedMs": 0,
+        "maxDepth": 0,
+        "dynamicInteractions": 0
+      }
+    },
+    {
+      "source": "hm-move",
+      "url": "https://press.hm.com/image-gallery/hm-move",
+      "status": "blocked",
+      "stopReasons": [
+        "proxy_dns_pinning_unverified"
+      ],
+      "pagesVisited": 0,
+      "pagesAttempted": 1,
+      "depth": 0,
+      "imageCandidates": 0,
+      "validImageUrls": 0,
+      "verifiedImageBytes": 0,
+      "thumbnailResolution": "unverified",
+      "duplicates": 0,
+      "imageMetadataCompleteness": null,
+      "rights": "pending_review",
+      "resources": {
+        "requests": 0,
+        "bytes": 0,
+        "duplicates": 0,
+        "elapsedMs": 1,
+        "maxDepth": 0,
+        "dynamicInteractions": 0
+      }
+    },
+    {
+      "source": "zara-press",
+      "url": "https://www.zara.com/integration/pressapi/microsite/news/?countryiso=WW&languageiso=pt",
+      "status": "blocked",
+      "stopReasons": [
+        "proxy_dns_pinning_unverified"
+      ],
+      "pagesVisited": 0,
+      "pagesAttempted": 1,
+      "depth": 0,
+      "imageCandidates": 0,
+      "validImageUrls": 0,
+      "verifiedImageBytes": 0,
+      "thumbnailResolution": "unverified",
+      "duplicates": 0,
+      "imageMetadataCompleteness": null,
+      "rights": "pending_review",
+      "resources": {
+        "requests": 0,
+        "bytes": 0,
+        "duplicates": 0,
+        "elapsedMs": 1,
+        "maxDepth": 0,
+        "dynamicInteractions": 0
+      }
+    },
+    {
+      "source": "norm-residence",
+      "url": "https://normcph.presscloud.com/digitalshowroom/#/gallery/Norm-Residence",
+      "status": "blocked",
+      "stopReasons": [
+        "proxy_dns_pinning_unverified"
+      ],
+      "pagesVisited": 0,
+      "pagesAttempted": 1,
+      "depth": 0,
+      "imageCandidates": 0,
+      "validImageUrls": 0,
+      "verifiedImageBytes": 0,
+      "thumbnailResolution": "unverified",
+      "duplicates": 0,
+      "imageMetadataCompleteness": null,
+      "rights": "pending_review",
+      "resources": {
+        "requests": 0,
+        "bytes": 0,
+        "duplicates": 0,
+        "elapsedMs": 1,
+        "maxDepth": 0,
+        "dynamicInteractions": 0
+      }
+    }
+  ],
+  "localPersistence": {
+    "sources": 3,
+    "content_nodes": 6,
+    "publications": 0
+  },
+  "publishedRealImages": 0,
+  "modelCalls": 0,
+  "productionWrites": 0,
+  "notes": "Connector observations preserve source/gallery metadata only. No image URL or dynamic extraction success is invented. Network policy/DNS-pinning blockers are environment limitations, not evidence the sites denied access."
+}

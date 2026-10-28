@@ -1,7 +1,11 @@
+import { ReaderCatalogContext } from './ReaderCatalog';
+import { loadReaderItems } from './load-reader-catalog';
+import { readerApprovals } from '../shared/reader-catalog';
+import { approvedExternalAssets } from '../shared/url-policy';
 import { editorialPrompt, interpretEditorialPrompt, promptSuggestions, PromptIntentError } from "../shared/editorial-intent";
 import { authoredVisualContext, visualLabel } from "../shared/visual-observations";
 import { useEffect, useRef, useState } from "react";
-import { curationCatalog, type CatalogItem } from "../shared/catalog";
+import { curationCatalog as staticCatalog, type CatalogItem } from "../shared/catalog";
 import {
   defaultPreferences,
   editorialDemoCatalog,
@@ -20,6 +24,9 @@ import CatalogImage from "./CatalogImage";
 import Attribution from "./Attribution";
 const STORAGE = "curio.collection.v1";
 export default function EditorialExperience() {
+  const [readerCatalog,setReaderCatalog]=useState({items:staticCatalog,approvals:approvedExternalAssets});
+  const curationCatalog=readerCatalog.items;
+  const readerApprovalsCurrent=readerCatalog.approvals;
   const [prompt, setPrompt] = useState("");
   const [consent, setConsent] = useState(false);
   const [promptError, setPromptError] = useState("");
@@ -47,6 +54,17 @@ export default function EditorialExperience() {
     editionHeading = useRef<HTMLHeadingElement>(null);
   const requestId = useRef(0),
     branchId = useRef(0);
+  useEffect(() => {
+    let active=true;
+    try {
+      const raw=localStorage.getItem(STORAGE), values=JSON.parse(raw??'[]') as unknown;
+      if(Array.isArray(values)) {
+        const ids=values.slice(0,60).flatMap(v=>v&&typeof v==='object'&&'assetId' in v&&typeof v.assetId==='string'?[v.assetId]:[]);
+        if(ids.some(id=>/^version-[a-f0-9]{64}$/.test(id)))void loadReaderItems(ids).then(items=>{if(active&&items.length){const combined=[...staticCatalog,...items],approvals={...approvedExternalAssets,...readerApprovals(items)};setReaderCatalog({items:combined,approvals});setSaved(readCollection(raw,combined,approvals));}}).catch(()=>{});
+      }
+    }catch{/* corrupt/blocked storage remains private */}
+    return()=>{active=false;};
+  }, []);
   useEffect(() => {
     if (panel && dialog.current) {
       if (!dialog.current.open) dialog.current.showModal();
@@ -107,7 +125,12 @@ export default function EditorialExperience() {
           !["d1", "fictional"].includes(data.retrieval)
         )
           throw Error("Invalid source");
-        const allowed = curationCatalog.filter(
+        const unknown=[...new Set([...curationCatalog.filter(a=>/^version-[a-f0-9]{64}$/.test(a.image.id)).map(a=>a.image.id),...data.items.filter(a=>!curationCatalog.some(x=>x.image.id===a.image.id)).map(a=>a.image.id)])];
+        const published=unknown.length?await loadReaderItems(unknown):[];
+        const currentItems=unknown.length?[...staticCatalog,...published]:curationCatalog;
+        const approvals=unknown.length?{...approvedExternalAssets,...readerApprovals(published)}:readerApprovalsCurrent;
+        if(unknown.length){setReaderCatalog({items:currentItems,approvals});setSaved(previous=>previous.filter(s=>currentItems.some(a=>a.image.id===s.assetId)));}
+        const allowed = currentItems.filter(
           (a) =>
             preferences.allocations[a.category] > 0 &&
             data.items.some(
@@ -119,8 +142,8 @@ export default function EditorialExperience() {
           items: allowed,
           plan:
             data.source === "meta"
-              ? validateOriginalPlan(data.plan, allowed, preferences)
-              : validatePlan(data.plan, allowed),
+              ? validateOriginalPlan(data.plan, allowed, preferences,approvals)
+              : validatePlan(data.plan, allowed,approvals),
         };
       }
     } catch {
@@ -205,9 +228,14 @@ export default function EditorialExperience() {
       });
       if (r.ok) {
         const d = (await r.json()) as EditorialEdition;
-        const plan = validatePlan(d.plan, curationCatalog);
+        const ids=[...new Set([...curationCatalog.filter(a=>/^version-[a-f0-9]{64}$/.test(a.image.id)).map(a=>a.image.id),...d.items.map(a=>a.image.id).filter(id=>/^version-[a-f0-9]{64}$/.test(id))])];
+        const published=ids.length?await loadReaderItems(ids):[];
+        const current=ids.length?[...staticCatalog,...published]:curationCatalog;
+        const approvals=ids.length?{...approvedExternalAssets,...readerApprovals(published)}:readerApprovalsCurrent;
+        if(ids.length){setReaderCatalog({items:current,approvals});setSaved(previous=>previous.filter(s=>current.some(a=>a.image.id===s.assetId)));}
+        const plan = validatePlan(d.plan, current,approvals);
         ranked = plan.features.flatMap((f) =>
-          curationCatalog.filter((a) => a.id === f.catalogId),
+          current.filter((a) => a.id === f.catalogId),
         );
       }
     } catch {
@@ -218,7 +246,7 @@ export default function EditorialExperience() {
   }
   const story = curationCatalog.find((a) => a.id === panel);
   return (
-    <section
+    <ReaderCatalogContext.Provider value={readerCatalog}><section
       className="editorial-experience"
       aria-labelledby="personal-edition"
     >
@@ -303,7 +331,7 @@ export default function EditorialExperience() {
             </div>
             <div className="cover-contact-sheet" aria-label="A preview of your visual edition">
               {edition.plan.features.slice(0, 2).map((f, i) => {
-                const ad = edition.items.find(a => a.image.id === f.assetId)!;
+                const ad = curationCatalog.find(a => a.image.id === f.assetId);if(!ad)return null;
                 return <div key={f.assetId}><CatalogImage ad={ad} eager /><span>{String(i + 1).padStart(2, "0")} / {ad.name}</span></div>;
               })}
               <p>LOOK / CONNECT / DISCOVER</p>
@@ -314,7 +342,8 @@ export default function EditorialExperience() {
             {edition.plan.features.map((feature, i) => {
               const ad = curationCatalog.find(
                 (a) => a.id === feature.catalogId,
-              )!;
+              );
+              if(!ad)return null;
               return (
                 <a href={`#personal-${feature.assetId}`} key={feature.assetId}>
                   <CatalogImage ad={ad} />
@@ -329,7 +358,8 @@ export default function EditorialExperience() {
             const ad = curationCatalog.find(
               (a) =>
                 a.id === feature.catalogId && a.image.id === feature.assetId,
-            )!;
+            );
+            if(!ad)return null;
             const visualContext = authoredVisualContext(ad);
             return (
               <article
@@ -570,7 +600,7 @@ export default function EditorialExperience() {
                 <h3>{group}</h3>
                 <div className="collection-grid">
                   {saved
-                    .filter((s) => s.shelf === group)
+                    .filter((s) => s.shelf === group&&curationCatalog.some(a=>a.image.id===s.assetId))
                     .map((item) => {
                       const ad = curationCatalog.find(
                         (a) => a.image.id === item.assetId,
@@ -630,6 +660,6 @@ export default function EditorialExperience() {
         )}
         {storageError && <p role="status">{storageError}</p>}
       </dialog>
-    </section>
+    </section></ReaderCatalogContext.Provider>
   );
 }

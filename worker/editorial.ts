@@ -1,4 +1,6 @@
 import { editorialQualityFetch, requireGroundedEditorial } from "./editorial-quality";
+import { CatalogPublications,publicationApprovals } from './catalog-publications';
+import { approvedExternalAssets,type ExternalAssetApprovals } from '../shared/url-policy';
 import { resolveEditorialInput, PROMPT_INTENT_VERSION } from "../shared/editorial-intent";
 import { authoredVisualContext, type VisualContext } from "../shared/visual-observations";
 import { retrievedVisualContext, observationAssetMatches } from "./editorial-visual-context";
@@ -34,7 +36,7 @@ import type { Bindings } from "./index";
 export async function editorialPool(
   env: Bindings,
   p: EditorialPreferences,
-): Promise<{ items: CatalogItem[]; retrieval: "d1" | "fictional"; visualContexts: VisualContext[] }> {
+): Promise<{ items: CatalogItem[]; retrieval: "d1" | "fictional"; visualContexts: VisualContext[]; approvals:ExternalAssetApprovals }> {
   if (env.CATALOG_DB)
     try {
       const ranked = await new D1AssetRetriever(env.CATALOG_DB).retrieve({
@@ -46,24 +48,27 @@ export async function editorialPool(
           p.mode === "Surprise Me" ? 0.25 : p.mode === "Balanced" ? 0.1 : 0,
         seed: p.interests,
         scope: "reader",
+        publishedOnly:env.CATALOG_PUBLIC_ENABLED === "true",
         limit: 50,
       });
+      const published=env.CATALOG_PUBLIC_ENABLED === 'true'?await new CatalogPublications(env.CATALOG_DB).list('',50,ranked.items.map(h=>String(h.version_id))):{items:[]}
+      const approvals={...approvedExternalAssets,...publicationApprovals(published.items)}
       const visualContexts: VisualContext[] = [];
       const items = ranked.items.flatMap((hit) => {
-        const item = curationCatalog.find(
+        const item = [...curationCatalog,...published.items].find(
           (a) =>
-            observationAssetMatches(hit, a),
+            observationAssetMatches(hit, a,approvals),
         );
         if (!item || p.allocations[item.category] <= 0) return [];
-        const context = retrievedVisualContext(hit, item);
+        const context = retrievedVisualContext(hit, item,approvals);
         if (context) visualContexts.push(context);
         return [item];
       });
-      if (items.length) return { items, retrieval: "d1", visualContexts };
+      if (items.length) return { items, retrieval: "d1", visualContexts, approvals };
     } catch {
       /* Missing local schema or unavailable D1 fails closed to approved demos. */
     }
-  return { items: editorialDemoCatalog, retrieval: "fictional", visualContexts: editorialDemoCatalog.flatMap(a => { const v = authoredVisualContext(a); return v ? [v] : []; }) };
+  return { items: editorialDemoCatalog, retrieval: "fictional", approvals:approvedExternalAssets, visualContexts: editorialDemoCatalog.flatMap(a => { const v = authoredVisualContext(a); return v ? [v] : []; }) };
 }
 // Bounded isolate-local cache: no D1 writes, raw preferences, images or secrets.
 // Every hit is revalidated against freshly permission-filtered authoritative pool.
@@ -106,7 +111,7 @@ editorialApi.post("/", async (c) => {
   let fallbackReason = "disabled";
   const fallback = () =>
     c.json({
-      plan: fallbackPlan(p, pool.items, pool.retrieval === "d1"),
+      plan: fallbackPlan(p, pool.items, pool.retrieval === "d1", pool.approvals),
       items: pool.items,
       source: "deterministic",
       retrieval: pool.retrieval,
@@ -133,6 +138,7 @@ editorialApi.post("/", async (c) => {
     env.RATE_LIMIT_SALT.length < 32
   )
     return fallback();
+  if(!pool.items.some(a=>a.provenance.origin==='authored_geometry'||a.permissions.aiAnalysis.status==='approved'&&a.permissions.aiAnalysis.evidence)) {fallbackReason='analysis_permissions';return fallback();}
   const key = await catalogDigest(
     JSON.stringify(["editorial-v4-prompt", PROMPT_INTENT_VERSION, VISUAL_LANGUAGE_VERSION, p, pool.items, pool.visualContexts]),
   );
@@ -140,7 +146,7 @@ editorialApi.post("/", async (c) => {
   if (cached && cached.expires > Date.now())
     try {
       return c.json({
-        plan: validateOriginalPlan(cached.plan, pool.items, p),
+        plan: validateOriginalPlan(cached.plan, pool.items, p, pool.approvals),
         items: pool.items,
         source: "meta",
         retrieval: pool.retrieval,
@@ -165,6 +171,8 @@ editorialApi.post("/", async (c) => {
       pool.items,
       env.META_API_KEY,
       pool.visualContexts,
+      undefined,
+      pool.approvals,
     );
     const { plan } = result;
     inference = { ...inference, ...result.measurement };
@@ -208,8 +216,9 @@ export async function generateEditorialResult(
   key: string,
   visualContexts: readonly VisualContext[] = pool.flatMap(a => { const v = authoredVisualContext(a); return v ? [v] : []; }),
   privateReferences: readonly PrivateEditorialReference[] = [],
+  approvals:ExternalAssetApprovals=approvedExternalAssets,
 ) {
-  const eligible = pool.filter((a) => p.allocations[a.category] > 0);
+  const eligible = pool.filter((a) => p.allocations[a.category] > 0 && (a.provenance.origin === "authored_geometry" || a.permissions.aiAnalysis.status === "approved" && a.permissions.aiAnalysis.evidence));
   const output = editorialPlan.safeExtend({
     title: editorialPlan.shape.title.max(80),
     connections: editorialPlan.shape.connections.unwrap(),
@@ -329,11 +338,11 @@ export async function generateEditorialResult(
     const structured = output.parse(raw);
     diagnostic = { code: "original_language", field: "plan" };
     requireGroundedEditorial(structured, visualContexts);
-    diagnostic = diagnoseOriginalPlan(structured, eligible, p) ?? {
+    diagnostic = diagnoseOriginalPlan(structured, eligible, p, approvals) ?? {
       code: "plan_schema",
       field: "plan",
     };
-    const plan = validateOriginalPlan(structured, eligible, p);
+    const plan = validateOriginalPlan(structured, eligible, p, approvals);
     measurement.latencyMs = Math.round(performance.now() - started);
     return { plan, measurement };
   } catch {
