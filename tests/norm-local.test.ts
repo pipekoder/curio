@@ -89,6 +89,7 @@ privateIt('private JPEG: blocks missing approval, wrong context origin, revoked 
   await expect(runNormStage(base, { reserve: never })).rejects.toThrow('approval')
   await runNormStage({ ...base, mode: 'mock' })
   await expect(runNormStage({ ...base, stage: 'image-editorial' }, { reserve: never })).rejects.toThrow('persisted')
+  await expect(runNormStage({ ...base, stage: 'sam-segmentation' }, { reserve: never })).rejects.toThrow('persisted')
   expect(never).not.toHaveBeenCalled()
   await context.db.prepare("UPDATE asset_permissions SET status='blocked' WHERE purpose='ai_analysis'").run()
   await expect(runNormStage({ ...base, mode: 'mock' })).rejects.toThrow('stale or unavailable')
@@ -119,14 +120,18 @@ privateIt('private JPEG: exercises real Muse request/validation and private cont
 })
 privateIt('private JPEG: sends the exact JPEG to genuine SAM transport with a fully mocked empty SSE result', async () => {
   const bytes = new Uint8Array(readFileSync(privateFile!)); await initializeNorm(context.db, bytes)
+  // Test-only persisted Muse-shaped observations; not a real model capture.
+  const exact = await candidateIds(normAsset.originalUrl,normAsset.versionKey)
+  await context.db.prepare('INSERT INTO local_norm_results(stage,origin,version_id,fingerprint,output_json) VALUES(?,?,?,?,?)').bind('muse-image','meta',exact.versionId,normAsset.sha256,JSON.stringify({...mockUnderstanding(exact.versionId),imageSha256:normAsset.sha256,objects:['seating'],observations:{subjects:['seating'],materialAppearance:[],environments:[],relationships:[]}})).run()
   const send = vi.fn(async (_url: unknown, init?: RequestInit) => {
     const request = JSON.parse(String(init?.body))
+    expect(request.input[0].content[0].text).toBe('seating')
     expect(request.model).toBe('sam-3.1')
     expect(Buffer.from(request.input[0].content[1].image_url.split(',')[1], 'base64')).toEqual(Buffer.from(bytes))
     return new Response('data: {"type":"response.completed"}\n\n', { headers: { 'Content-Type': 'text/event-stream' } })
   })
   vi.stubGlobal('fetch', send)
-  const result = await runNormStage({ stage: 'sam-segmentation', mode: 'live', bytes, db: context.db, env: { META_API_KEY: 'FAKE', META_SPARK_MODEL: 'muse-spark-1.3', MAGAZINE_MAX_CALLS: '3' }, consent: true, approval: 'norm-one-sam-segmentation', maxUsd: 0.1, samPriceConfirmed: true }, { reserve: async () => ({ allowed: true, retryAfter: 60 }) })
+  const result = await runNormStage({ stage: 'sam-segmentation', mode: 'live', bytes, db: context.db, env: { META_API_KEY: 'FAKE', META_SPARK_MODEL: 'muse-spark-1.3', MAGAZINE_MAX_CALLS: '3' }, consent: true, approval: 'norm-one-sam-segmentation', maxUsd: 0.1, samPriceConfirmed: true, approvedConcept:'seating' }, { reserve: async () => ({ allowed: true, retryAfter: 60 }) })
   expect(result).toMatchObject({ responseValid: true, output: { source: 'sam_detection', regions: [] } })
   expect(send).toHaveBeenCalledTimes(1)
 })
@@ -145,4 +150,29 @@ it('rejects Git-contained, symlinked and broadly readable private data paths', a
     await mkdir(join(dir, '.git')); await writeFile(join(dir, '.git/HEAD'), 'ref: refs/heads/test\n')
     await expect(privatePath(file)).rejects.toThrow('inside Git')
   } finally { await rm(dir, { recursive: true, force: true }) }
+})
+for(const concept of ['lamp','table','wall art','seating'] as const) privateIt(`private JPEG: Muse-guided ${concept} uses one bounded mocked SAM call and preserves the shared attempt guard`,async()=>{
+ const bytes=new Uint8Array(readFileSync(privateFile!)),exact=await initializeNorm(context.db,bytes)
+ const env={META_API_KEY:'FAKE',META_SPARK_MODEL:'muse-spark-1.3',MAGAZINE_MAX_CALLS:'3'}
+ const reserve=vi.fn(async()=>({allowed:true,retryAfter:60}))
+ const concepts=['lamp','table','wall art','seating'] as const
+ const analysis={...mockUnderstanding(exact.versionId),imageSha256:exact.sha256,objects:[...concepts],objectCandidates:concepts.map((concept,objectIndex)=>({concept,objectIndex,visualConfidence:.9,editorialRelevance:.8})),observations:{subjects:['seating' as const],materialAppearance:[],environments:[],relationships:[]}}
+ const classify=vi.fn(async()=>analysis)
+ const base={mode:'live' as const,bytes,db:context.db,env,consent:true,maxUsd:.1,rates:{input:1,cachedInput:1,output:1}}
+ await runNormStage({...base,stage:'muse-image',approval:'norm-one-muse-image'},{reserve,classify})
+ const send=vi.fn(async(_url:unknown,init?:RequestInit)=>{
+  const body=JSON.parse(String(init?.body));expect(body.input[0].content[0].text).toBe(concept);expect(body.input[0].content).toHaveLength(2)
+  return new Response('data: {"type":"response.completed"}\n\n',{headers:{'Content-Type':'text/event-stream'}})
+ });vi.stubGlobal('fetch',send)
+ const request={...base,stage:'sam-segmentation' as const,approval:'norm-one-sam-segmentation',samPriceConfirmed:true,approvedConcept:concept,prompt:`Explore ${concept}`}
+ const wrong=concept==='lamp'?'table':'lamp'
+ await expect(runNormStage({...request,approvedConcept:wrong},{reserve})).rejects.toThrow('selected Muse concept')
+ expect(send).not.toHaveBeenCalled();expect(reserve).toHaveBeenCalledTimes(1)
+ const result=await runNormStage(request,{reserve})
+ expect(result).toMatchObject({responseValid:true,localization:{concept,maxRequests:1},inference:{reservedUnits:1}})
+ expect((await runNormStage(request,{reserve})).cached).toBe(true)
+ expect(send).toHaveBeenCalledTimes(1);expect(classify).toHaveBeenCalledTimes(1);expect(reserve).toHaveBeenCalledTimes(2)
+ const other=concept==='lamp'?'table':'lamp'
+ await expect(runNormStage({...request,prompt:`Explore ${other}`,approvedConcept:other},{reserve})).rejects.toThrow('already attempted')
+ expect(send).toHaveBeenCalledTimes(1)
 })
