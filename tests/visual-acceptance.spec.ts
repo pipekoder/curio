@@ -1,5 +1,20 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { writeFileSync, readdirSync, statSync } from 'node:fs'
+// Navigation's load event can precede React's scheduled initial commit. Keyboard
+// input does not auto-wait like locator actions: wait for the reader, not a timer.
+async function expectKeyboardSkip(page: Page) {
+  const skip = page.getByRole('link', { name: 'Skip to magazine prompt', exact: true })
+  const prompt = page.getByRole('textbox', { name: 'Your discovery prompt', exact: true })
+  await expect(skip).toBeAttached()
+  await expect(prompt).toBeEditable()
+  // Assert startup did not autofocus a control; never focus/blur one to pass.
+  await expect(page.locator('body')).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(skip).toBeFocused()
+  await expect(skip).toBeInViewport()
+  await page.keyboard.press('Enter')
+  await expect(prompt).toBeFocused()
+}
 for (const width of [1440,390]) test(`reader accessibility, privacy and synthetic performance at ${width}px`, async({page})=>{
   await page.setViewportSize({width,height:1000}); await page.emulateMedia({reducedMotion:'reduce'})
   let outbound=0
@@ -9,8 +24,8 @@ for (const width of [1440,390]) test(`reader accessibility, privacy and syntheti
     if(url.pathname.startsWith('/api/'))return route.fulfill({status:503,json:{error:'AI disabled'}})
     return route.continue()
   })
-  await page.goto('/'); await page.keyboard.press('Tab')
-  await expect(page.locator('.skip-link')).toBeFocused()
+  await page.goto('/')
+  await expectKeyboardSkip(page)
   await page.getByRole('button',{name:'Try a prompt: Quiet rooms'}).click()
   const started=Date.now()
   await page.getByRole('button',{name:'Generate magazine'}).click()
@@ -41,4 +56,24 @@ for (const width of [1440,390]) test(`reader accessibility, privacy and syntheti
   const navigationMs=await page.evaluate(()=>performance.getEntriesByType('navigation')[0]?.duration??null)
   writeFileSync(`test-results/performance-${width}.json`,JSON.stringify({environment:'local synthetic, not production Core Web Vitals',width,composeMs,navigationMs,jsBytes,externalRequests:outbound,modelCalls:0},null,2))
   await page.locator('.issue-cover').screenshot({path:`test-results/acceptance-cover-${width}.png`})
+})
+
+for (const width of [1440,390]) test(`keyboard skip waits for delayed application startup at ${width}px`, async({page})=>{
+  await page.setViewportSize({width,height:1000})
+  await page.emulateMedia({reducedMotion:'reduce'})
+  let release!: () => void, requested!: () => void
+  const boot = new Promise<void>(resolve=>{release=resolve})
+  const bundleRequested = new Promise<void>(resolve=>{requested=resolve})
+  await page.route('**/assets/*.js',async route=>{requested();await boot;await route.continue()})
+  try {
+    // Intentionally navigate before the app bundle loads: a load-event/React
+    // scheduling gap must not allow the first Tab to be sent to an empty page.
+    await page.goto('/',{waitUntil:'commit'})
+    await bundleRequested
+    const keyboardCheck = expectKeyboardSkip(page)
+    await expect(page.locator('#root')).toBeEmpty()
+    await expect(page.locator('body')).toBeFocused()
+    release()
+    await keyboardCheck
+  } finally { release() }
 })
