@@ -101,3 +101,5 @@ Visual Asset & Image Intelligence: [PR #17 implementation, rights and SAM readin
 Final QA: [PR #18 acceptance checklist, live-test limits and integration status](docs/PR18_ACCEPTANCE_RUNBOOK.md). Run `npm run accept:demo` for local checks.
 
 Adaptive on-demand discovery and the implemented D1 publication/Reader API are documented in [docs/ADAPTIVE_GALLERY_DISCOVERY.md](docs/ADAPTIVE_GALLERY_DISCOVERY.md), including actual source counts, local setup and permission prerequisites.
+
+Final approved-content rehearsal and evidence: [Demo readiness acceptance](docs/DEMO_READINESS_ACCEPTANCE.md). Future content must follow the [local owner gallery intake runbook](docs/OWNER_GALLERY_INTAKE.md).

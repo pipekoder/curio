@@ -49,7 +49,7 @@ it('fails closed for pending/rejected/revoked/unregistered photographs and libra
  expect(eligibleReaderRecords([catalog[0]],catalog)[0].permissions.aiAnalysis.status).toBe('pending')
 })
 it('runs sanitized evaluation fixtures without treating writing examples as live evidence',()=>{
- const cases=JSON.parse(readFileSync('tests/fixtures/editorial-v2-evaluation.json','utf8')) as {field:string;text:string;expected:string}[]
+ const cases=JSON.parse(readFileSync('tests/fixtures/editorial-v2-evaluation.json','utf8')) as {field:string;text:string;expected:string|null}[]
  for(const c of cases){const input=c.field==='title'?{...plan,title:c.text}:{...plan,features:[{...plan.features[0],[c.field]:c.text}]};expect(evaluateEditorialV2(input,contexts)).toBe(c.expected)}
 })
 
@@ -59,4 +59,37 @@ it('accepts an independently registered display-only photograph without enabling
  expect(records[0].permissions.aiAnalysis.status).toBe('pending')
  expect(records[0].permissions.edits.status).toBe('pending')
  expect(eligibleReaderRecords([{...externalFixture,permissions:{...externalFixture.permissions,display:{status:'blocked',evidence:null}}}],catalog,testExternalApprovals)).toEqual(catalog)
+})
+
+it('rejects normalized repetition and near-duplicate copy across a sequence',()=>{
+ const repeatedHeadline={...plan,features:[plan.features[0],{...plan.features[1],headline:plan.features[0].headline.toUpperCase()+'.'}]}
+ expect(evaluateEditorialV2(repeatedHeadline,contexts)).toBe('repetitive_copy')
+ const repeatedNarrative={...plan,features:[plan.features[0],{...plan.features[1],narrative:'Around the rounded silhouette, the shade holds light.'}]}
+ expect(evaluateEditorialV2(repeatedNarrative,contexts)).toBe('repetitive_copy')
+ const repeatedQuestion={...plan,features:[plan.features[0],{...plan.features[1],discoveryQuestion:plan.features[0].discoveryQuestion}]}
+ expect(evaluateEditorialV2(repeatedQuestion,contexts)).toBe('repetitive_discovery')
+ // Shared themes are useful; distinct observations of the lamp and chair remain valid.
+ expect(evaluateEditorialV2(plan,contexts)).toBeNull()
+})
+it('strengthens the single-request editorial instruction without exposing image bytes or adding a model call',async()=>{
+ const send=vi.fn(async(_url:string,init:RequestInit)=>{
+  const body=JSON.parse(String(init.body))
+  expect(body.messages[0].content).toContain('each feature develops a different concrete detail')
+  expect(body.messages[0].content).toContain('not universal psychological facts')
+  expect(body.messages[1].content).not.toContain('data:image')
+  return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(plan)}}]})
+ });vi.stubGlobal('fetch',send)
+ await generateEditorialResult(prefs,[...catalog],'FAKE',contexts)
+ expect(send).toHaveBeenCalledTimes(1)
+})
+
+it('accepts the revised editorial fixture with distinct details and one coherent visual thread',()=>{
+ const fixture=JSON.parse(readFileSync('tests/fixtures/editorial-v2-grounded.json','utf8'))
+ expect(evaluateEditorialV2(fixture,contexts)).toBeNull()
+ expect(validateOriginalPlan(fixture,catalog,prefs)).toEqual(fixture)
+})
+
+it('requires a concrete comparative connection rather than an atmospheric transition',()=>{
+ expect(evaluateEditorialV2({...plan,connections:[{...plan.connections[0],thread:'Imagine gentle glow drifting through open space toward stillness and calm.'}]},contexts)).toBe('generic_connection')
+ expect(evaluateEditorialV2(plan,contexts)).toBeNull()
 })
