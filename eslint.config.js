@@ -9,9 +9,18 @@ export default ts.config(
   {
     files: [
       "shared/editorial*.ts",
+      "scripts/*acceptance*.mjs",
+      "scripts/production-smoke.mjs",
+      "scripts/prepare-original-raster.mjs",
       "shared/visual-observations.ts",
       "worker/editorial-visual-context.ts",
       "worker/asset-contracts.ts",
+      "worker/asset-api.ts",
+      "worker/asset-store.ts",
+      "worker/asset-sources.ts",
+      "shared/decoder.ts",
+      "tests/living-ad.test.tsx",
+      "tests/browser/sam.tsx",
       "worker/asset-classifier.ts",
       "worker/asset-retrieval.ts",
       "src/LivingAdvertisement.tsx",

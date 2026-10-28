@@ -1,5 +1,6 @@
 import {
   mkdir,
+  chmod,
   realpath,
   readdir,
   writeFile,
@@ -238,8 +239,9 @@ export async function privateRecorder(directory) {
   }
   if ((await readdir(canonical)).length)
     throw Error("Use a new empty evidence directory before making any calls");
+  await chmod(canonical, 0o700);
   return async (name, data) => {
-    if (!["focused-home", "surprise-travel"].includes(name))
+    if (!["focused-home", "surprise-travel", "muse-image", "image-editorial", "sam-segmentation", "muse-image-report", "image-editorial-report", "sam-segmentation-report", "original-raster"].includes(name))
       throw Error("Unknown evidence profile");
     return writeFile(
       join(canonical, `${name}.json`),

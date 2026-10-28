@@ -9,7 +9,7 @@ export const gallerySources: readonly GallerySource[] = [
   { id: 'norm-residence', name: 'Norm Residence', entryUrl: 'https://normcph.presscloud.com/digitalshowroom/#/gallery/Norm-Residence', mediaHosts: ['normcph.presscloud.com'], publisher: 'Norm Residence; identity unverified' },
   { id: 'norm-residence-project', name: 'Norm Architects · Norm Residence project', entryUrl: 'https://normcph.com/project/norm-residence/', mediaHosts: ['normcph.com'], publisher: 'Norm Architects' },
 ]
-export type AnalysisMediaPermit = { imageUrl: string; sha256: string; width: number; height: number; mime: 'image/jpeg' | 'image/png' | 'image/webp'; analysisEvidence: string }
+export type AnalysisMediaPermit = { imageUrl: string; sha256: string; width: number; height: number; mime: 'image/jpeg' | 'image/png' | 'image/webp'; analysisEvidence: string; bundledPath?: string }
 // Empty until exact pixels and analysis rights are separately reviewed. This is
 // independent from SAM's bundled-PNG permits and the public display registry.
 export const analysisMediaPermits: Readonly<Record<string, AnalysisMediaPermit>> = Object.freeze({})

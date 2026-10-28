@@ -1,0 +1,42 @@
+{
+  "checks": [
+    {
+      "check": "typecheck",
+      "passed": true,
+      "durationMs": 11791
+    },
+    {
+      "check": "lint",
+      "passed": true,
+      "durationMs": 3120
+    },
+    {
+      "check": "test",
+      "passed": true,
+      "durationMs": 32814
+    },
+    {
+      "check": "build",
+      "passed": true,
+      "durationMs": 13750
+    },
+    {
+      "check": "worker:check",
+      "passed": true,
+      "durationMs": 2269
+    },
+    {
+      "check": "test:integration",
+      "passed": true,
+      "durationMs": 22775
+    },
+    {
+      "check": "test:browser",
+      "passed": true,
+      "durationMs": 60534
+    }
+  ],
+  "completed": true,
+  "paidModelCalls": 0,
+  "productionWrites": 0
+}
