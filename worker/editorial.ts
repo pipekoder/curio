@@ -1,3 +1,4 @@
+import { editorialQualityFetch, requireGroundedEditorial } from "./editorial-quality";
 import { resolveEditorialInput, PROMPT_INTENT_VERSION } from "../shared/editorial-intent";
 import { authoredVisualContext, type VisualContext } from "../shared/visual-observations";
 import { retrievedVisualContext, observationAssetMatches } from "./editorial-visual-context";
@@ -223,7 +224,7 @@ export async function generateEditorialResult(
       .max(6),
   });
   const started = performance.now();
-  const response = await fetch("https://api.meta.ai/v1/chat/completions", {
+  const response = await editorialQualityFetch("https://api.meta.ai/v1/chat/completions", {
     method: "POST",
     redirect: "manual",
     signal: AbortSignal.timeout(15000),
@@ -323,6 +324,8 @@ export async function generateEditorialResult(
     const raw: unknown = JSON.parse(choices[0].message.content);
     diagnostic = { code: "provider_plan_schema", field: "plan" };
     const structured = output.parse(raw);
+    diagnostic = { code: "original_language", field: "plan" };
+    requireGroundedEditorial(structured, visualContexts);
     diagnostic = diagnoseOriginalPlan(structured, eligible, p) ?? {
       code: "plan_schema",
       field: "plan",
