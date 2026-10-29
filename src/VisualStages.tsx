@@ -49,8 +49,8 @@ export function VisualReader({edition,pool,headingRef,onStory,onCollect,onRefine
    setFocusTrace({x1:a.left+a.width/2-c.left,y1:a.top+a.height/2-c.top,x2:(mobile?b.left+b.width/2:b.left)-c.left,y2:(mobile?b.top:b.top+Math.min(85,b.height/2))-c.top});
   };
   const observer=new MutationObserver(update);observer.observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:['aria-expanded','hidden']});
-  const resize=new ResizeObserver(update);resize.observe(root);window.addEventListener('resize',update);update();
-  return()=>{observer.disconnect();resize.disconnect();window.removeEventListener('resize',update)};
+  const resize=typeof ResizeObserver==='undefined'?null:new ResizeObserver(update);resize?.observe(root);window.addEventListener('resize',update);update();
+  return()=>{observer.disconnect();resize?.disconnect();window.removeEventListener('resize',update)};
  },[currentIndex,exploring,detailOpen]);
  if(!features.length)return null
  const {ad,feature}=features[currentIndex]??features[0]
@@ -92,8 +92,8 @@ export function VisualJourney({story,related,topic,origin,canReturn,onReturn,onR
     return {x1:center.left+center.width/2-base.left,y1:center.top+center.height/2-base.top,x2:target.left+target.width/2-base.left,y2:target.top+target.height/2-base.top}
    }))
   }
-  const observer=new ResizeObserver(update);observer.observe(root);update();window.addEventListener('resize',update)
-  return()=>{observer.disconnect();window.removeEventListener('resize',update)}
+  const observer=typeof ResizeObserver==='undefined'?null:new ResizeObserver(update);observer?.observe(root);update();window.addEventListener('resize',update)
+  return()=>{observer?.disconnect();window.removeEventListener('resize',update)}
  },[story.image.id,related])
  return <section ref={rootRef} className="visual-stage visual-journey" aria-label="Curiosity Journey">
   <header className="visual-stage-label"><span>04</span><div>Curiosity Journey<small>Explore connections across objects, places, people and ideas</small></div></header>
