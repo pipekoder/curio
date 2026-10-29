@@ -1,14 +1,262 @@
 [
-  {"id":"curio-owner-01","filename":"01_boucle_lounge_chair.png","stage":"Discover","role":"left interior chair plane"},
-  {"id":"curio-owner-02","filename":"02_ceramic_vase.png","stage":"Discover","role":"upper small object plane"},
-  {"id":"curio-owner-03","filename":"03_arched_interior.png","stage":"Generate","role":"architectural page"},
-  {"id":"curio-owner-04","filename":"04_limestone_texture.png","stage":"Collect","role":"material collection plane"},
-  {"id":"curio-owner-05","filename":"05_designer_portrait.png","stage":"Discover","role":"right fashion or people plane"},
-  {"id":"curio-owner-06","filename":"06_coffee_ritual.png","stage":"Curiosity Journey","role":"ritual connection"},
-  {"id":"curio-owner-07","filename":"07_sculptural_living_room.png","stage":"Generate","role":"room page"},
-  {"id":"curio-owner-08","filename":"08_ochre_lounge_chair.png","stage":"Read & Explore","role":"primary object"},
-  {"id":"curio-owner-09","filename":"09_coastal_architecture.png","stage":"Curiosity Journey","role":"place connection"},
-  {"id":"curio-owner-10","filename":"10_winter_coast.png","stage":"Discover","role":"upper landscape plane"},
-  {"id":"curio-owner-11","filename":"11_stone_still_life.png","stage":"Discover","role":"lower-left object plane"},
-  {"id":"curio-owner-12","filename":"12_boucle_fabric_detail.png","stage":"Read & Explore","role":"material detail"}
+  {
+    "id": "curio-owner-01",
+    "filename": "01_boucle_lounge_chair.png",
+    "stage": "Discover",
+    "role": "left interior chair plane",
+    "sha256": "42421559cc42bc0cb89f6006a7f58fe1d49397e259075791b9f9b28fb40429dd",
+    "width": 368,
+    "height": 335,
+    "sourceFilename": "01_boucle_lounge_chair.png"
+  },
+  {
+    "id": "curio-owner-02",
+    "filename": "02_ceramic_vase.png",
+    "stage": "Discover",
+    "role": "upper small object plane",
+    "sha256": "7c86779b4e37b1f7dceb6885ed2b337df9a54daed299de68b4995a241b123517",
+    "width": 367,
+    "height": 335,
+    "sourceFilename": "02_ceramic_vase.png"
+  },
+  {
+    "id": "curio-owner-03",
+    "filename": "03_arched_interior.png",
+    "stage": "Generate",
+    "role": "architectural page",
+    "sha256": "238ae7357fe8f36d4465385c5446d773f6993eaaf0ef50b78fc4b72ddda8beb6",
+    "width": 367,
+    "height": 335,
+    "sourceFilename": "03_arched_interior.png"
+  },
+  {
+    "id": "curio-owner-04",
+    "filename": "04_limestone_texture.png",
+    "stage": "Collect",
+    "role": "material collection plane",
+    "sha256": "9dd0af3419339b3293323187391c9afd3a27657525dfd5b090998605ee39b0cb",
+    "width": 367,
+    "height": 335,
+    "sourceFilename": "04_limestone_texture.png"
+  },
+  {
+    "id": "curio-owner-05",
+    "filename": "05_designer_portrait.png",
+    "stage": "Discover",
+    "role": "right fashion or people plane",
+    "sha256": "bfd29728f876fcc89313e21e51964cb45121e2e252ea64e0763545941c5843ef",
+    "width": 368,
+    "height": 329,
+    "sourceFilename": "05_designer_portrait.png"
+  },
+  {
+    "id": "curio-owner-06",
+    "filename": "06_coffee_ritual.png",
+    "stage": "Curiosity Journey",
+    "role": "ritual connection",
+    "sha256": "f960c1a64cd1902801067175d5962c37707de393659abdf996a390d8875a3f30",
+    "width": 367,
+    "height": 329,
+    "sourceFilename": "06_coffee_ritual.png"
+  },
+  {
+    "id": "curio-owner-07",
+    "filename": "07_sculptural_living_room.png",
+    "stage": "Generate",
+    "role": "room page",
+    "sha256": "e64b0cd733c0f329d3a8f22a556dc12a6d50d84a96bc7b18e1e03bbb64ad05c5",
+    "width": 367,
+    "height": 329,
+    "sourceFilename": "07_sculptural_living_room.png"
+  },
+  {
+    "id": "curio-owner-08",
+    "filename": "08_ochre_lounge_chair.png",
+    "stage": "Read & Explore",
+    "role": "primary object",
+    "sha256": "0e97afa7c49f458654253dbde85f8b6bca681d436710d70b185ea13f095020ae",
+    "width": 367,
+    "height": 329,
+    "sourceFilename": "08_ochre_lounge_chair.png"
+  },
+  {
+    "id": "curio-owner-09",
+    "filename": "09_coastal_architecture.png",
+    "stage": "Curiosity Journey",
+    "role": "place connection",
+    "sha256": "b4e19f4f4a34aaeb0fa3315429ad00d29de8966234ed5517ffa2eae7def11dd3",
+    "width": 368,
+    "height": 334,
+    "sourceFilename": "09_coastal_architecture.png"
+  },
+  {
+    "id": "curio-owner-10",
+    "filename": "10_winter_coast.png",
+    "stage": "Discover",
+    "role": "upper landscape plane",
+    "sha256": "e2d96a07b161c7b191602f7a3209de7b8a548cb4392e7f7c8002e761771e4f9f",
+    "width": 367,
+    "height": 334,
+    "sourceFilename": "10_winter_coast.png"
+  },
+  {
+    "id": "curio-owner-11",
+    "filename": "11_stone_still_life.png",
+    "stage": "Discover",
+    "role": "lower-left object plane",
+    "sha256": "7a2eb415c36f3080a715996d4186a0debe7427791a43ea2c265e3934fb0144bf",
+    "width": 367,
+    "height": 334,
+    "sourceFilename": "11_stone_still_life.png"
+  },
+  {
+    "id": "curio-owner-12",
+    "filename": "12_boucle_fabric_detail.png",
+    "stage": "Read & Explore",
+    "role": "material detail",
+    "sha256": "91435b90a6f938139f037f7bd474ea59749cf739b408af7e53955e41e850a665",
+    "width": 367,
+    "height": 334,
+    "sourceFilename": "12_boucle_fabric_detail.png"
+  },
+  {
+    "id": "curio-owner-13",
+    "filename": "13_generate_vase.png",
+    "stage": "Generate",
+    "role": "vase",
+    "sourceFilename": "ChatGPT Image Oct 29, 2026, 02_06_57 PM-1.png",
+    "sha256": "b84a3cca72b6536e3fb905e1c1a3dafc6bded8b557c8dcb92da6156650201aab",
+    "width": 1122,
+    "height": 1402
+  },
+  {
+    "id": "curio-owner-14",
+    "filename": "14_generate_coast.png",
+    "stage": "Generate",
+    "role": "coastal architecture",
+    "sourceFilename": "ChatGPT Image Oct 29, 2026, 02_06_58 PM-2.png",
+    "sha256": "40a4a95dc3f929b2244c3f387b43fb4fe7f1aef228dd24dde56f82b2bfcb5444",
+    "width": 1122,
+    "height": 1402
+  },
+  {
+    "id": "curio-owner-15",
+    "filename": "15_generate_table.png",
+    "stage": "Generate",
+    "role": "ceramic tabletop",
+    "sourceFilename": "ChatGPT Image Oct 29, 2026, 02_06_59 PM-3.png",
+    "sha256": "6038bfc085f076c6189d33823cb498a288adf371e67c9f0b2078dbefb644efc4",
+    "width": 1122,
+    "height": 1402
+  },
+  {
+    "id": "curio-owner-16",
+    "filename": "16_read_chair.png",
+    "stage": "Read & Explore",
+    "role": "sculptural chair",
+    "sourceFilename": "ChatGPT Image Oct 29, 2026, 02_07_00 PM-4.png",
+    "sha256": "7d2224f85b5e40f0e3a3f3e235933eb1885672e41b1234dfde089050a1dd302c",
+    "width": 1122,
+    "height": 1402
+  },
+  {
+    "id": "curio-owner-17",
+    "filename": "17_read_soft_furnishing.png",
+    "stage": "Read & Explore",
+    "role": "soft furnishing",
+    "sourceFilename": "ChatGPT Image Oct 29, 2026, 02_07_01 PM-5.png",
+    "sha256": "46979b27732d1613728d4c1bca8a96bdd08ebd9c75412f2f7ae58a12d7df4a0b",
+    "width": 1122,
+    "height": 1402
+  },
+  {
+    "id": "curio-owner-18",
+    "filename": "18_read_portrait.png",
+    "stage": "Read & Explore",
+    "role": "fashion portrait",
+    "sourceFilename": "ChatGPT Image Oct 29, 2026, 02_07_02 PM-6.png",
+    "sha256": "dfdfa8dfb63d08d53de95aa5d2d19f2772b756876f4117f8021267d7fb185a69",
+    "width": 1122,
+    "height": 1402
+  },
+  {
+    "id": "curio-owner-19",
+    "filename": "19_journey_arched_space.png",
+    "stage": "Curiosity Journey",
+    "role": "arched space",
+    "sourceFilename": "ChatGPT Image Oct 29, 2026, 02_07_03 PM-7.png",
+    "sha256": "a721d640191c2bafc614dd5b7e4a6812f4ada26961c56f257b1d02b10a296df8",
+    "width": 1122,
+    "height": 1402
+  },
+  {
+    "id": "curio-owner-20",
+    "filename": "20_journey_living_room.png",
+    "stage": "Curiosity Journey",
+    "role": "living room",
+    "sourceFilename": "ChatGPT Image Oct 29, 2026, 02_07_05 PM-8.png",
+    "sha256": "8e9a157797bc26f266901ddeb96816597f710843b2441b9e4dbc752cdfb6c7b3",
+    "width": 1122,
+    "height": 1402
+  },
+  {
+    "id": "curio-owner-21",
+    "filename": "21_journey_objects.png",
+    "stage": "Curiosity Journey",
+    "role": "object still life",
+    "sourceFilename": "ChatGPT Image Oct 29, 2026, 02_07_06 PM-9.png",
+    "sha256": "e30ef99ac6ee0e7058030046fff53390250c2d85325c46effb9191cf156e34d2",
+    "width": 1122,
+    "height": 1402
+  },
+  {
+    "id": "curio-owner-22",
+    "filename": "22_journey_coastal_room.png",
+    "stage": "Curiosity Journey",
+    "role": "coastal room",
+    "sourceFilename": "ChatGPT Image Oct 29, 2026, 02_07_07 PM-10.png",
+    "sha256": "3f6a774165f6d92ef4bb6861e7e4322a71438f4c365a322f20c9dc02bacb07db",
+    "width": 1122,
+    "height": 1402
+  },
+  {
+    "id": "curio-owner-23",
+    "filename": "23_collect_tabletop.png",
+    "stage": "Collect",
+    "role": "tabletop ritual",
+    "sourceFilename": "ChatGPT Image Oct 29, 2026, 02_07_08 PM-11.png",
+    "sha256": "2f49e92ea5d4045f2e5fc76e1369b0329ebe8547c2ac54a13535b3567c200035",
+    "width": 1122,
+    "height": 1402
+  },
+  {
+    "id": "curio-owner-24",
+    "filename": "24_collect_chair.png",
+    "stage": "Collect",
+    "role": "chair portrait",
+    "sourceFilename": "ChatGPT Image Oct 29, 2026, 02_07_09 PM-12.png",
+    "sha256": "7f0f0a8513ff52c142d4d348057dadd97d58831aff949021cbb7c0d72ca0f914",
+    "width": 1122,
+    "height": 1402
+  },
+  {
+    "id": "curio-owner-25",
+    "filename": "25_collect_dining.png",
+    "stage": "Collect",
+    "role": "dining room",
+    "sourceFilename": "ChatGPT Image Oct 29, 2026, 02_07_10 PM-13.png",
+    "sha256": "635319182a2ba52b28403a472636e16f8b0d0fec1009e6d53b7a4495c73b248f",
+    "width": 1122,
+    "height": 1402
+  },
+  {
+    "id": "curio-owner-26",
+    "filename": "26_collect_coast.png",
+    "stage": "Collect",
+    "role": "coastal architecture",
+    "sourceFilename": "ChatGPT Image Oct 29, 2026, 02_07_12 PM-14.png",
+    "sha256": "b2ec9cf5191883e3187c14b23f56e2a15017f26b89b004a64dfe34276c38414a",
+    "width": 1122,
+    "height": 1402
+  }
 ]
