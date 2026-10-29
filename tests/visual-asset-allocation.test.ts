@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs'
 import {createHash} from 'node:crypto'
 import {fileURLToPath} from 'node:url'
 import {join,dirname} from 'node:path'
+import {demoMedia} from '../src/editorial-demo-media'
 
 const root=join(dirname(fileURLToPath(import.meta.url)),'..')
 const manifest=JSON.parse(readFileSync(join(root,'docs/DISCOVER_ASSET_ALLOCATION.json'),'utf8')) as Array<{id:string;filename:string;stage:string;sha256:string;width:number;height:number}>
@@ -24,11 +25,16 @@ describe('owner editorial image allocation',()=>{
    expect(bytes.readUInt32BE(20)).toBe(item.height)
   }
  })
- it('renders each source filename in exactly one coded stage',()=>{
+ it('maps each approved source to exactly one versioned stage record and coded media path',()=>{
   const source=readFileSync(join(root,'src/DiscoverPreview.tsx'),'utf8')+readFileSync(join(root,'src/VisualStages.tsx'),'utf8')
   for(const item of manifest){
-   expect(source.split(item.filename).length-1).toBe(1)
-   if(item.stage!=='Discover')expect(source).toContain(`${folders[item.stage]}/${item.filename}`)
+   const records=demoMedia.filter(record=>record.id===item.id)
+   expect(records).toHaveLength(1)
+   expect(records[0].stage).toBe(item.stage)
+   expect(records[0].assetId).toBe(`${item.id}-v1`)
+   expect(records[0].path).toBe(`/editorial/${folders[item.stage]}/${item.filename}`)
+   if(item.stage==='Discover')expect(source).toContain(item.filename)
+   if(item.stage!=='Discover'&&item.stage!=='Read & Explore')expect(source).toContain(`${folders[item.stage]}/${item.filename}`)
   }
  })
 })
