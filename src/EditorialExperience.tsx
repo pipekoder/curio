@@ -24,10 +24,12 @@ import LivingAdvertisement from "./LivingAdvertisement";
 import {VisualGenerate, VisualReader, VisualJourney, VisualCollect} from './VisualStages';
 import CatalogImage from "./CatalogImage";
 import Attribution from "./Attribution";
+import { chairDemo, chairDemoDetails } from './chair-demo';
 const STORAGE = "curio.collection.v1";
+const localReaderCatalog = [...staticCatalog, chairDemo];
 export default function EditorialExperience({discoverReview=false}:{discoverReview?:boolean}) {
   const [visualScreen,setVisualScreen]=useState<'discover'|'read'>('discover');
-  const [readerCatalog,setReaderCatalog]=useState({items:staticCatalog,approvals:approvedExternalAssets});
+  const [readerCatalog,setReaderCatalog]=useState({items:localReaderCatalog,approvals:approvedExternalAssets});
   const curationCatalog=readerCatalog.items;
   const readerApprovalsCurrent=readerCatalog.approvals;
   const [prompt, setPrompt] = useState("");
@@ -46,7 +48,7 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
     [related, setRelated] = useState<CatalogItem[]>([]);
   const [saved, setSaved] = useState<CollectionRecord[]>(() => {
     try {
-      return readCollection(localStorage.getItem(STORAGE));
+      return readCollection(localStorage.getItem(STORAGE), localReaderCatalog);
     } catch {
       return [];
     }
@@ -63,7 +65,7 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
       const raw=localStorage.getItem(STORAGE), values=JSON.parse(raw??'[]') as unknown;
       if(Array.isArray(values)) {
         const ids=values.slice(0,60).flatMap(v=>v&&typeof v==='object'&&'assetId' in v&&typeof v.assetId==='string'?[v.assetId]:[]);
-        if(ids.some(id=>/^version-[a-f0-9]{64}$/.test(id)))void loadReaderItems(ids).then(items=>{if(active&&items.length){const combined=[...staticCatalog,...items],approvals={...approvedExternalAssets,...readerApprovals(items)};setReaderCatalog({items:combined,approvals});setSaved(readCollection(raw,combined,approvals));}}).catch(()=>{});
+        if(ids.some(id=>/^version-[a-f0-9]{64}$/.test(id)))void loadReaderItems(ids).then(items=>{if(active&&items.length){const combined=[...localReaderCatalog,...items],approvals={...approvedExternalAssets,...readerApprovals(items)};setReaderCatalog({items:combined,approvals});setSaved(readCollection(raw,combined,approvals));}}).catch(()=>{});
       }
     }catch{/* corrupt/blocked storage remains private */}
     return()=>{active=false;};
@@ -130,11 +132,12 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
           throw Error("Invalid source");
         const unknown=[...new Set([...curationCatalog.filter(a=>/^version-[a-f0-9]{64}$/.test(a.image.id)).map(a=>a.image.id),...data.items.filter(a=>!curationCatalog.some(x=>x.image.id===a.image.id)).map(a=>a.image.id)])];
         const published=unknown.length?await loadReaderItems(unknown):[];
-        const currentItems=unknown.length?[...staticCatalog,...published]:curationCatalog;
+        const currentItems=unknown.length?[...localReaderCatalog,...published]:curationCatalog;
         const approvals=unknown.length?{...approvedExternalAssets,...readerApprovals(published)}:readerApprovalsCurrent;
         if(unknown.length){setReaderCatalog({items:currentItems,approvals});setSaved(previous=>previous.filter(s=>currentItems.some(a=>a.image.id===s.assetId)));}
         const allowed = currentItems.filter(
           (a) =>
+            a.id !== chairDemo.id &&
             preferences.allocations[a.category] > 0 &&
             data.items.some(
               (item) => item.id === a.id && item.image.id === a.image.id,
@@ -234,10 +237,10 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
         const d = (await r.json()) as EditorialEdition;
         const ids=[...new Set([...curationCatalog.filter(a=>/^version-[a-f0-9]{64}$/.test(a.image.id)).map(a=>a.image.id),...d.items.map(a=>a.image.id).filter(id=>/^version-[a-f0-9]{64}$/.test(id))])];
         const published=ids.length?await loadReaderItems(ids):[];
-        const current=ids.length?[...staticCatalog,...published]:curationCatalog;
+        const current=ids.length?[...localReaderCatalog,...published]:curationCatalog;
         const approvals=ids.length?{...approvedExternalAssets,...readerApprovals(published)}:readerApprovalsCurrent;
         if(ids.length){setReaderCatalog({items:current,approvals});setSaved(previous=>previous.filter(s=>current.some(a=>a.image.id===s.assetId)));}
-        const plan = validatePlan(d.plan, current,approvals);
+        const plan = validatePlan(d.plan, current.filter(a=>a.id!==chairDemo.id),approvals);
         ranked = plan.features.flatMap((f) =>
           current.filter((a) => a.id === f.catalogId),
         );
@@ -450,21 +453,24 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
             {visualThread && <aside className="visual-story-arrival" role="status">
               <p className="eyebrow">YOUR VISUAL THREAD</p>
               <p>From {visualThread.detail} to {visualLabel(visualThread.relationship)}.</p>
-              <p>Compare the drawn forms, then explore the context below. This is an authored connection, not a verified relationship between real products.</p>
+              <p>{story.id===chairDemo.id?'Compare the photographed chair with related Curio stories. The product identity and connection are fictional demo interpretations.':'Compare the drawn forms, then explore the context below. This is an authored connection, not a verified relationship between real products.'}</p>
             </aside>}
             <CatalogImage ad={story} eager />
             <Attribution ad={story} />
             <div className="story-chapter">
               <span>01 / THE RECORD</span>
-              <h3>Publisher record</h3>
+              <h3>{story.id===chairDemo.id?'Fictional demo record':'Publisher record'}</h3>
             </div>
             <p>
               {story.description}{" "}
-              {story.image.role === "placeholder"
+              {story.id === chairDemo.id
+                ? "This is a fictional Curio demo concept, not a verified merchant product. The maker, specifications, availability and material are unverified."
+                : story.image.role === "placeholder"
                 ? "This is a Curio-authored illustration, with no verified real brand, designer, material specification or purchasable product."
                 : "Only the reviewed publisher record and attribution are presented. Additional designer, material and manufacturing claims are omitted."}
             </p>
-            <a
+            {story.id === chairDemo.id && <aside className="chair-demo-story-facts"><p>Fictional demo price: {new Intl.NumberFormat('en-US',{style:'currency',currency:chairDemoDetails.price.currency}).format(chairDemoDetails.price.amount)} USD. Not purchasable.</p><ul>{chairDemoDetails.assumptions.map(a=><li key={a}>{a}</li>)}</ul><p>These attributes are fictional assumptions or visual observations, not verified product facts.</p></aside>}
+            {story.id !== chairDemo.id && <a
               href={
                 story.image.role === "placeholder"
                   ? `/editorial-sources.html#${story.id}`
@@ -474,8 +480,9 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
               target="_blank"
               rel="noopener noreferrer"
             >
-              Source: Curio illustration record →
-            </a>
+              Source: {story.image.role === 'placeholder' ? 'Curio illustration record' : 'Publisher record'} →
+            </a>}
+            {story.id === chairDemo.id && <p className="source-label">Source: Owner-supplied editorial photograph. Product identity and price are fictional demo data.</p>}
             <div className="story-chapter">
               <span>02 / THE CONTEXT</span>
               <h3>A wider design conversation</h3>
@@ -516,14 +523,14 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
                 </aside>
               )}
             <p>
-              Authored interpretation: follow the relationship between the drawn
-              silhouette and the space around it. What changes when you see it
-              as a rhythm rather than an object?
+              {story.id===chairDemo.id
+                ? 'Authored interpretation: follow how the curved seat, bright archway and low furniture create a sense of shelter within an open view. This describes the photograph, not a verified product specification.'
+                : 'Authored interpretation: follow the relationship between the drawn silhouette and the space around it. What changes when you see it as a rhythm rather than an object?'}
             </p>
             <p className="source-label">
-              Facts above are publisher records or cited historical context.
-              This interpretation is subjective. No AI-generated factual
-              enrichment is presented.
+              {story.id===chairDemo.id
+                ? 'The product record is fictional. Historical context is independently cited; visual interpretation is subjective. No AI-generated factual enrichment is presented.'
+                : 'Facts above are publisher records or cited historical context. This interpretation is subjective. No AI-generated factual enrichment is presented.'}
             </p>
             <div className="story-chapter">
               <span>03 / YOUR NEXT THREAD</span>
