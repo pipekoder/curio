@@ -11,7 +11,7 @@ npm run preview -- --host 127.0.0.1 --port 4188 --strictPort
 CHROMIUM_PATH=/usr/bin/chromium node scripts/check-discover-preview.mjs
 ```
 
-The real prompt, suggestions, consent and submission controller remain wired. In the static preview, submission uses the existing authored fallback and discloses AI was not used. The later four stages await visual approval.
+The real prompt, suggestions, consent and submission controller remain wired. In the static preview, submission uses the existing authored fallback and discloses AI was not used. The remaining four stages are implemented in this draft; see `FIVE_STAGE_VISUAL_REVIEW.md` for the cross-stage acceptance evidence and known differences.
 
 The Discover allocation has no missing image count: five supplied, five assigned. The other stages have seven reserved images in total. Exact additional image counts for those stages cannot be determined before their visual implementation and review; no additional media was sourced.
 
