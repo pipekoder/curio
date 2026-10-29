@@ -30,5 +30,5 @@ export function DiscoverPreview({prompt,consent,busy,error,promptRef,onPrompt,on
  </section>
  <div className="reference-required-controls"><label id="reference-consent-note"><input type="checkbox" checked={consent} disabled={busy} onChange={e=>onConsent(e.target.checked)}/> Use Meta AI for this prompt, if available. Optional; leave unchecked for an edition without AI.</label>
  {error&&<p role="alert">{error}</p>}{busy&&<p role="status">Composing your issue… An authored fallback remains available.</p>}
- <p>Discover frontend review · owner-supplied editorial photographs · AI disabled in this preview.</p><button onClick={onCollection}>Your collection</button></div></>
+ <button onClick={onCollection}>Your collection</button></div></>
 }
