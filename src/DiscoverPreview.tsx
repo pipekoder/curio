@@ -5,7 +5,12 @@ export function DiscoverPreview({prompt,consent,busy,error,promptRef,onPrompt,on
  prompt:string;consent:boolean;busy:boolean;error:string;promptRef:RefObject<HTMLTextAreaElement|null>;
  onPrompt:(value:string)=>void;onConsent:(value:boolean)=>void;onSubmit:()=>void;onCollection:()=>void;
 }){
- const suggestions=['Quiet luxury fashion','Modern ceramic design','Coffee culture in Tokyo','Scandinavian winter escapes']
+ const suggestions=[
+  'Create a quiet magazine about paper lamps and calm reading rooms, with Scandinavian simplicity. Focus on light and space.',
+  'Explore independent ceramic studios in Copenhagen and Tokyo through handmade textures, daily rituals, and their makers.',
+  'Follow contemporary jewelry and sculptural forms, with experimental materials and unexpected design connections.',
+  'Take me through winter coastal escapes, quiet interiors, and the rituals that make a place feel like home.',
+ ]
  return <><section className="reference-discover reference-canvas" data-input={prompt.trim()?'typing':'empty'} aria-labelledby="personal-edition">
   <header className="reference-stage-label"><span>01</span><div>Discovery entry<small>A simple and beautiful beginning</small></div></header>
   <svg className="reference-orbits" viewBox="0 0 573 543" aria-hidden="true">
