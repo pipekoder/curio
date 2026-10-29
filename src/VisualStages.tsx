@@ -1,8 +1,8 @@
 import {useEffect,useState,type RefObject} from 'react'
 import type {CatalogItem} from '../shared/catalog'
 import type {EditorialEdition} from '../shared/editorial'
-import LivingAdvertisement from './LivingAdvertisement'
 import CatalogImage from './CatalogImage'
+import {chairDemo,chairDemoDetails} from './chair-demo'
 
 const media=(file:string)=>`/editorial/${file}`
 
@@ -26,26 +26,22 @@ export function VisualGenerate({prompt,consent}: {prompt:string;consent:boolean}
 
 export function VisualReader({edition,pool,headingRef,onStory,onCollect,onRefine,onCollection}: {edition:EditorialEdition;pool:readonly CatalogItem[];headingRef:RefObject<HTMLHeadingElement|null>;onStory:(ad:CatalogItem,thread?:{detail:string;relationship:string})=>void;onCollect:(ad:CatalogItem)=>void;onRefine:()=>void;onCollection:()=>void}) {
  const features=edition.plan.features.flatMap(feature=>{const ad=pool.find(a=>a.id===feature.catalogId&&a.image.id===feature.assetId);return ad?[{feature,ad}]:[]})
- const [selected,setSelected]=useState<string|null>(null)
- const [detail,setDetail]=useState<string|null>(null)
- const current=features.find(({ad})=>ad.image.id===selected)??features[0]
- useEffect(()=>{headingRef.current?.focus()},[selected,headingRef])
- if(!current)return null
- const {ad,feature}=current
- const object=ad.discoverableObjects.find(o=>o.id===detail)??ad.discoverableObjects[0]
- return <><section className="visual-stage visual-reader" aria-label="Read and explore" data-asset-id={ad.image.id}>
+ const [chairOpen,setChairOpen]=useState(false)
+ useEffect(()=>{headingRef.current?.focus()},[headingRef])
+ if(!features.length)return null
+ const object=chairDemo.discoverableObjects[0]
+ return <><section className="visual-stage visual-reader" aria-label="Read and explore" data-asset-id={chairDemo.image.id}>
   <header className="visual-stage-label"><span>03</span><div>Read &amp; Explore<small>Tap a detail to discover more</small></div></header>
-  <div className="visual-reader-intro"><span>{ad.category==='home'?'Objects':ad.category==='travel'?'Places':'Style'}</span><h2 ref={headingRef} tabIndex={-1}>{feature.headline}</h2><p>{feature.narrative}</p></div>
-  <div className="visual-reader-back-photo"><img src={media('read/16_read_chair.png')} alt="Owner-provided editorial image of a sculptural chair"/></div>
-  <div className="visual-reader-image"><LivingAdvertisement key={ad.image.id} ad={ad} eager onExploreStory={(next,subject,relationship)=>onStory(next,{detail:subject,relationship})}/></div>
-  <aside className="visual-reader-context"><span>Visual detail</span><strong>{object?.label??'Look closer'}</strong><img src={media('read/12_boucle_fabric_detail.png')} alt="Owner-provided close-up of fabric"/><small>Photograph only; material identity is unverified.</small></aside>
+  <div className="visual-reader-intro"><span>Objects · fictional demo</span><h2 ref={headingRef} tabIndex={-1}>The Lounge Chair</h2><p>A rounded seat and enveloping back shape how this photographed corner feels. Maker and materials remain unverified.</p></div>
+  <div className="visual-reader-back-photo"><img src={media('read/16_read_chair.png')} alt={chairDemo.image.alt}/><button className="chair-demo-hotspot" type="button" style={{left:`${chairDemoDetails.hotspot.x*100}%`,top:`${chairDemoDetails.hotspot.y*100}%`}} aria-label="Explore rounded chair in photograph (manually annotated)" aria-expanded={chairOpen} aria-controls="chair-demo-detail" onClick={()=>setChairOpen(value=>!value)}><span aria-hidden="true">＋</span></button></div>
+  <aside className="visual-reader-context"><span>Visual detail</span><strong>{object.label}</strong><img src={media('read/12_boucle_fabric_detail.png')} alt="Owner-provided close-up of fabric"/><small>Photograph only; material identity is unverified.</small></aside>
   <div className="visual-reader-photo-rail" aria-label="Related editorial images"><img src={media('read/08_ochre_lounge_chair.png')} alt="Sculptural chair study"/><img src={media('read/17_read_soft_furnishing.png')} alt="Soft furnishing study"/><img src={media('read/18_read_portrait.png')} alt="Portrait study"/></div>
-  <div className="visual-reader-details" role="group" aria-label="Explore annotated details">{ad.discoverableObjects.map(o=><button key={o.id} aria-pressed={detail===o.id} onClick={()=>setDetail(o.id)}>{o.label}</button>)}</div>
-  <div className="visual-reader-caption"><strong>{ad.name}</strong><small>{ad.provenance.attribution}</small><p>{detail&&object?object.description:ad.description}</p><button onClick={()=>onStory(ad)} aria-label={`Open ${ad.name} story`}>→</button></div>
-  <nav className="visual-reader-pages" aria-label="Edition pages">{features.map(({ad:next},i)=><button key={next.image.id} aria-current={ad.image.id===next.image.id?'page':undefined} onClick={()=>{setSelected(next.image.id);setDetail(null)}}><span>{String(i+1).padStart(2,'0')}</span><CatalogImage ad={next}/></button>)}</nav>
-  <span className="visual-reader-count">{String(features.indexOf(current)+1).padStart(2,'0')} / {String(features.length).padStart(2,'0')}</span>
-  <button className="visual-reader-related" onClick={()=>onStory(ad)}>RELATED<br/>STORIES <span>→</span></button>
- </section><div className="visual-stage-controls"><p>{edition.source==='meta'?'Validated Meta editorial plan':'Curio-authored edition · AI not used'} · {edition.plan.title}</p><button onClick={()=>onCollect(ad)}>Collect image</button><button onClick={onCollection}>Your collection</button><button onClick={onRefine}>Refine with a new prompt</button></div></>
+  {chairOpen&&<aside className="chair-demo-detail" id="chair-demo-detail" aria-label="Fictional chair details"><button className="chair-demo-close" type="button" onClick={()=>setChairOpen(false)} aria-label="Close chair details">×</button><span>FICTIONAL DEMO PRODUCT · HOME</span><h3>{chairDemo.name}</h3><p>Curio Fictional Studio · unverified</p><p>{object.description}</p><p className="chair-demo-price">Demo price: $1,850 USD · fictional, not for sale</p><ul>{chairDemoDetails.assumptions.map(a=><li key={a}>{a}</li>)}</ul><small>Manually authored hotspot · no SAM inference. Material and specifications unverified.</small><button type="button" onClick={()=>onStory(chairDemo,{detail:object.label,relationship:'rounded silhouette and spatial comfort'})}>Explore related story →</button><button type="button" onClick={()=>onCollect(chairDemo)}>Collect this image</button></aside>}
+  <div className="visual-reader-caption"><strong>{chairDemo.name}</strong><small>Curio Fictional Studio · demo concept</small><p>{chairDemo.description}</p><button onClick={()=>onStory(chairDemo,{detail:object.label,relationship:'rounded silhouette and spatial comfort'})} aria-label={`Open ${chairDemo.name} story`}>→</button></div>
+  <nav className="visual-reader-pages" aria-label="Edition stories">{features.map(({ad:next},i)=><button key={next.image.id} aria-label={`Open edition story ${i+1}: ${next.name}`} onClick={()=>onStory(next)}><span>{String(i+1).padStart(2,'0')}</span><CatalogImage ad={next}/></button>)}</nav>
+  <span className="visual-reader-count">VISUAL DEMO / {String(features.length).padStart(2,'0')} EDITION STORIES</span>
+  <button className="visual-reader-related" onClick={()=>onStory(chairDemo)}>RELATED<br/>STORIES <span>→</span></button>
+ </section><div className="visual-stage-controls"><p>{edition.source==='meta'?'Validated Meta editorial plan':'Curio-authored edition · AI not used'} · {edition.plan.title} · Chair is a separate fictional visual demo</p><button onClick={()=>onCollect(chairDemo)}>Collect image</button><button onClick={onCollection}>Your collection</button><button onClick={onRefine}>Refine with a new prompt</button></div></>
 }
 
 export function VisualJourney({story,related,topic,onRelated,onFollow,onCollect}: {story:CatalogItem;related:readonly CatalogItem[];topic:string;onRelated:(ad:CatalogItem)=>void;onFollow:(theme:string)=>void;onCollect:()=>void}) {
