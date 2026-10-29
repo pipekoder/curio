@@ -6,7 +6,7 @@ import { type CatalogItem } from '../shared/catalog'
 import { authoredVisualContext, relatedVisualStory, visualLabel } from '../shared/visual-observations'
 import CatalogImage from './CatalogImage'
 
-export default function LivingAdvertisement({ ad, eager = false, samResult, objectHints, onExploreStory }: { ad: CatalogItem; eager?: boolean; samResult?: unknown; objectHints?: Readonly<Record<string, ObjectHint>>; onExploreStory?: (next: CatalogItem, detail: string, relationship: string) => void }) {
+export default function LivingAdvertisement({ ad, eager = false, samResult, objectHints, onDetailChange, onExploreStory }: { ad: CatalogItem; eager?: boolean; samResult?: unknown; objectHints?: Readonly<Record<string, ObjectHint>>; onDetailChange?: (detail: CatalogItem["discoverableObjects"][number] | null) => void; onExploreStory?: (next: CatalogItem, detail: string, relationship: string) => void }) {
   const {items:curationCatalog}=useReaderCatalog()
   const demo = readerSegmentation(ad, samResult)
   const grouped = demo ? groupObjects(demo, objectHints) : null
@@ -46,6 +46,7 @@ export default function LivingAdvertisement({ ad, eager = false, samResult, obje
     setSelection(null); setHovered(null); setQuestion(false); setRelated(false)
   }
   const detail = ad.discoverableObjects.find(item => item.id === selected?.detailId)
+  useEffect(() => { onDetailChange?.(detail ?? null) }, [detail, onDetailChange])
   const next = relatedDiscovery(ad)
   const visualContext = authoredVisualContext(ad)
   const visualStory = relatedVisualStory(ad, curationCatalog)

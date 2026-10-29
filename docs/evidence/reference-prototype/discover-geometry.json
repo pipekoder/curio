@@ -1,0 +1,21 @@
+{
+  "frame": {
+    "x": 0,
+    "y": 0,
+    "width": 573,
+    "height": 543
+  },
+  "input": {
+    "x": 132.53125,
+    "y": 305.921875,
+    "width": 339.796875,
+    "height": 53.796875
+  },
+  "expectedInput": {
+    "x": 132,
+    "y": 306,
+    "width": 341,
+    "height": 54
+  },
+  "source": "approved illustrations; API mocked disabled"
+}

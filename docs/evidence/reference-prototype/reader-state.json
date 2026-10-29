@@ -1,0 +1,19 @@
+{
+  "frame": {
+    "x": 0,
+    "y": 0.9375,
+    "width": 505,
+    "height": 543
+  },
+  "rearNormalized": {
+    "x": 174.1085968017578,
+    "y": 52.82914352416992,
+    "width": 229.2356719970703,
+    "height": 420.8383674621582
+  },
+  "initialAsset": "asset-home-lamp-v1",
+  "requestCount": 1,
+  "externalRequests": 0,
+  "source": "authored fallback; real UI state, no live model call",
+  "collectionSurvivesReload": true
+}
