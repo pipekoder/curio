@@ -16,8 +16,9 @@
 .reference-prompt{position:absolute;left:calc(132 * var(--u));top:calc(306 * var(--u));width:calc(341 * var(--u));height:calc(54 * var(--u));z-index:10;display:flex;align-items:center;border:1px solid #e1e7f9;border-radius:calc(29 * var(--u));background:linear-gradient(110deg,#ffffffed,#f4f6fbe6);box-shadow:0 calc(8 * var(--u)) calc(25 * var(--u)) #9aaedb33,inset 0 1px 3px #fff;backdrop-filter:blur(12px)}
 .reference-prompt textarea{display:block;min-width:0;flex:1;resize:none;width:100%;height:100%;border:0;border-radius:inherit;background:transparent;box-shadow:none;font:400 max(11px,calc(11 * var(--u)))/1.5 Arial,sans-serif;padding:calc(18 * var(--u)) calc(52 * var(--u)) calc(12 * var(--u)) calc(22 * var(--u));margin:0;color:#24262e;outline-offset:3px}
 .reference-prompt textarea::placeholder{color:#90939c;font-size:inherit}
-.reference-submit{position:absolute;right:calc(5 * var(--u));top:50%;transform:translateY(-50%);width:max(44px,calc(44 * var(--u)));height:max(44px,calc(44 * var(--u)));background:transparent;border:0;padding:4px;cursor:pointer;color:#26262c}
-.reference-submit span{display:grid;place-items:center;width:100%;height:100%;border:1px solid #d8dce7;border-radius:50%;font:300 calc(24 * var(--u))/1 Arial,sans-serif;background:linear-gradient(#fff,#f8f9fc);box-shadow:0 3px 8px #7e8ca61a}
+.reference-submit{position:absolute;right:calc(5 * var(--u));top:50%;transform:translateY(-50%);width:max(44px,calc(44 * var(--u)));height:max(44px,calc(44 * var(--u)));display:grid;place-items:center;background:transparent;border:0;padding:4px;cursor:pointer;color:#26262c}
+.reference-submit span{display:grid;place-items:center;width:100%;height:100%;border:1px solid #d8dce7;border-radius:50%;background:linear-gradient(#fff,#f8f9fc);box-shadow:0 3px 8px #7e8ca61a}
+.reference-submit svg{display:block;width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 .reference-submit:disabled{cursor:not-allowed;opacity:.55}
 .reference-suggestions{position:absolute;left:calc(37 * var(--u));top:calc(471 * var(--u));width:calc(493 * var(--u));display:flex;gap:calc(8 * var(--u));z-index:10}
 .reference-suggestions button{position:relative;flex:1;min-width:0;min-height:44px;padding:0 calc(5 * var(--u));border:0;background:transparent;font:400 max(8px,calc(8 * var(--u)))/1.2 Arial,sans-serif;white-space:nowrap;color:#60626b;cursor:pointer}
@@ -30,8 +31,9 @@
 
 /* Five independent owner-supplied editorial photographs; no reference screenshot is rendered. */
 .reference-photo-planes{position:absolute;inset:0;pointer-events:none;z-index:2}
-.reference-photo{position:absolute;overflow:hidden;background:linear-gradient(135deg,#f6f5f3,#e5e4e1 55%,#f9f8f6);border:1px solid #e8e8e8;border-radius:3px;box-shadow:2px 4px 13px #b7bfcd34,-1px 0 2px #e8efff;transform-style:preserve-3d}
-.reference-photo::after{content:'';position:absolute;inset:0;background:linear-gradient(105deg,#ffffff7a,transparent 30%,#ffffff22 72%,#ffffff84);mix-blend-mode:screen}
+.reference-photo{position:absolute;overflow:hidden;background:linear-gradient(135deg,#f6f5f3,#e5e4e1 55%,#f9f8f6);border:1px solid #e4edff;border-radius:3px;box-shadow:2px 4px 13px #b7bfcd34,-1px 0 2px #9cbfff;transform-style:preserve-3d}
+.reference-photo::before{content:'';position:absolute;inset:0;z-index:2;pointer-events:none;border:1px solid #ffffffa8;border-left:2px solid #a7c8ff;border-right:2px solid #e5efffc9;border-radius:3px;box-shadow:inset 3px 0 4px #ffffffb8,inset -3px 0 5px #a7c6ee55,2px 0 5px #9ebcff70}
+.reference-photo::after{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(105deg,#ffffff9c 0%,#ffffff2b 18%,transparent 38%,#ffffff1c 73%,#ffffff91 100%);mix-blend-mode:screen}
 .reference-photo-0{left:calc(56 * var(--u));top:calc(156 * var(--u));width:calc(67 * var(--u));height:calc(197 * var(--u));clip-path:polygon(0 0,94% 23%,100% 100%,0 93%)}
 .reference-photo-1{left:calc(445 * var(--u));top:calc(40 * var(--u));width:calc(46 * var(--u));height:calc(151 * var(--u));clip-path:polygon(100% 0,100% 85%,0 100%,0 25%)}
 .reference-photo-2{left:calc(366 * var(--u));top:calc(114 * var(--u));width:calc(50 * var(--u));height:calc(70 * var(--u));clip-path:polygon(0 0,100% 16%,100% 100%,0 84%)}
@@ -41,7 +43,7 @@
 .reference-wordmark svg{display:block;width:calc(105 * var(--u));height:calc(40 * var(--u));color:#111217;fill:currentColor}
 .reference-required-controls p{margin:4px 0;font-size:11px}
 .reference-required-controls{margin-top:6px}
-@media(max-width:430px){.reference-suggestions{gap:3px;left:4%;width:92%}.reference-suggestions button{white-space:normal;font-size:8px;padding:0 5px}.reference-submit span{font-size:22px}.reference-required-controls{font-size:12px}}
+@media(max-width:430px){.reference-suggestions{gap:3px;left:4%;width:92%}.reference-suggestions button{white-space:normal;font-size:8px;padding:0 5px}.reference-required-controls{font-size:12px}}
 @media(prefers-reduced-motion:reduce){.reference-canvas *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 @media(forced-colors:active){.reference-orbits,.reference-sphere{display:none}.reference-canvas :is(textarea,button){border:1px solid CanvasText}}
 @media(max-width:430px){
@@ -49,7 +51,7 @@
  .reference-stage-label{left:20px;top:16px;gap:18px;font-size:14px}.reference-stage-label>span{font-size:14px}.reference-stage-label small{font-size:10px}
  .reference-wordmark{left:50%;top:124px;transform:translateX(-50%)}.reference-wordmark svg{width:105px;height:40px}
  .reference-discover h1{left:50%;top:205px;width:270px;transform:translateX(-50%);font-size:30px;line-height:1.12;letter-spacing:.15px}
- .reference-prompt{left:7%;top:335px;width:86%;height:54px;border-radius:29px}.reference-prompt textarea{font-size:13px;padding:16px 48px 10px 20px}.reference-submit{right:5px}.reference-submit span{font-size:24px}
+ .reference-prompt{left:7%;top:335px;width:86%;height:54px;border-radius:29px}.reference-prompt textarea{font-size:13px;padding:16px 48px 10px 20px}.reference-submit{right:5px}
  .reference-photo-0{top:190px}.reference-photo-1{top:64px}.reference-photo-2{top:164px}.reference-photo-3{top:455px}.reference-photo-4{top:382px}
  .reference-sphere{left:calc(100% - 94px);top:258px;width:80px;height:83px}
  .reference-suggestions{display:grid;grid-template-columns:1fr 1fr;left:18px;top:555px;width:calc(100% - 36px);gap:4px 8px}.reference-suggestions button{font-size:10px;min-height:44px}.reference-suggestions button::before{inset:7px 0}

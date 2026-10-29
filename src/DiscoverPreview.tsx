@@ -24,7 +24,7 @@ export function DiscoverPreview({prompt,consent,busy,error,promptRef,onPrompt,on
   <form className="reference-prompt" onSubmit={event=>{event.preventDefault();onSubmit()}} aria-busy={busy}>
    <label className="sr-only" htmlFor="discovery-prompt">Your discovery prompt</label>
    <textarea id="discovery-prompt" ref={promptRef} rows={1} maxLength={1000} placeholder="A place, a feeling, a design, a brand…" value={prompt} disabled={busy} onChange={e=>onPrompt(e.target.value)} aria-invalid={Boolean(error)} aria-describedby="reference-consent-note" onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();e.currentTarget.form?.requestSubmit()}}}/>
-   <button className="reference-submit" type="submit" aria-label={busy?'Composing your issue…':'Generate magazine'} disabled={busy||!editorialPrompt.safeParse({prompt,consent}).success}><span aria-hidden="true">→</span></button>
+   <button className="reference-submit" type="submit" aria-label={busy?'Composing your issue…':'Generate magazine'} disabled={busy||!editorialPrompt.safeParse({prompt,consent}).success}><span aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 12h15m-6-6 6 6-6 6" /></svg></span></button>
   </form>
   <div className="reference-suggestions" role="group" aria-label="Prompt inspiration">{suggestions.map(value=><button key={value} disabled={busy} onClick={()=>{onPrompt(value);promptRef.current?.focus()}}>{value}</button>)}</div>
  </section>
