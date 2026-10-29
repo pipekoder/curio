@@ -31,14 +31,14 @@
 
 /* Five independent owner-supplied editorial photographs; no reference screenshot is rendered. */
 .reference-photo-planes{position:absolute;inset:0;pointer-events:none;z-index:2}
-.reference-photo{position:absolute;overflow:hidden;background:linear-gradient(135deg,#f6f5f3,#e5e4e1 55%,#f9f8f6);border:1px solid #e4edff;border-radius:3px;box-shadow:2px 4px 13px #b7bfcd34,-1px 0 2px #9cbfff;transform-style:preserve-3d}
-.reference-photo::before{content:'';position:absolute;inset:0;z-index:2;pointer-events:none;border:1px solid #ffffffa8;border-left:2px solid #a7c8ff;border-right:2px solid #e5efffc9;border-radius:3px;box-shadow:inset 3px 0 4px #ffffffb8,inset -3px 0 5px #a7c6ee55,2px 0 5px #9ebcff70}
+.reference-photo{position:absolute;overflow:hidden;background:linear-gradient(135deg,#f6f5f3,#e5e4e1 55%,#f9f8f6);border:1px solid #e4edff;border-radius:30px;box-shadow:2px 4px 13px #b7bfcd34,-1px 0 2px #9cbfff;transform-style:preserve-3d}
+.reference-photo::before{content:'';position:absolute;inset:0;z-index:2;pointer-events:none;border:1px solid #ffffffa8;border-left:2px solid #a7c8ff;border-right:2px solid #e5efffc9;border-radius:inherit;box-shadow:inset 3px 0 4px #ffffffb8,inset -3px 0 5px #a7c6ee55,2px 0 5px #9ebcff70}
 .reference-photo::after{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(105deg,#ffffff9c 0%,#ffffff2b 18%,transparent 38%,#ffffff1c 73%,#ffffff91 100%);mix-blend-mode:screen}
-.reference-photo-0{left:calc(56 * var(--u));top:calc(156 * var(--u));width:calc(67 * var(--u));height:calc(197 * var(--u));clip-path:polygon(0 0,94% 23%,100% 100%,0 93%)}
-.reference-photo-1{left:calc(445 * var(--u));top:calc(40 * var(--u));width:calc(46 * var(--u));height:calc(151 * var(--u));clip-path:polygon(100% 0,100% 85%,0 100%,0 25%)}
-.reference-photo-2{left:calc(366 * var(--u));top:calc(114 * var(--u));width:calc(50 * var(--u));height:calc(70 * var(--u));clip-path:polygon(0 0,100% 16%,100% 100%,0 84%)}
-.reference-photo-3{left:calc(82 * var(--u));top:calc(365 * var(--u));width:calc(58 * var(--u));height:calc(83 * var(--u));clip-path:polygon(0 0,100% 13%,100% 100%,0 89%)}
-.reference-photo-4{left:calc(485 * var(--u));top:calc(275 * var(--u));width:calc(47 * var(--u));height:calc(142 * var(--u));clip-path:polygon(0 8%,100% 0,100% 100%,0 93%)}
+.reference-photo-0{left:calc(56 * var(--u));top:calc(156 * var(--u));width:calc(67 * var(--u));height:calc(197 * var(--u))}
+.reference-photo-1{left:calc(445 * var(--u));top:calc(40 * var(--u));width:calc(46 * var(--u));height:calc(151 * var(--u))}
+.reference-photo-2{left:calc(366 * var(--u));top:calc(114 * var(--u));width:calc(50 * var(--u));height:calc(70 * var(--u))}
+.reference-photo-3{left:calc(82 * var(--u));top:calc(365 * var(--u));width:calc(58 * var(--u));height:calc(83 * var(--u))}
+.reference-photo-4{left:calc(485 * var(--u));top:calc(275 * var(--u));width:calc(47 * var(--u));height:calc(142 * var(--u))}
 .reference-photo img{display:block;width:100%;height:100%;object-fit:cover}
 .reference-wordmark svg{display:block;width:calc(105 * var(--u));height:calc(40 * var(--u));color:#111217;fill:currentColor}
 .reference-required-controls p{margin:4px 0;font-size:11px}
