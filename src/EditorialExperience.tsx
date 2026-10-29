@@ -24,9 +24,9 @@ import LivingAdvertisement from "./LivingAdvertisement";
 import {VisualGenerate, VisualReader, VisualJourney, VisualCollect} from './VisualStages';
 import CatalogImage from "./CatalogImage";
 import Attribution from "./Attribution";
-import { chairDemo, chairDemoDetails } from './chair-demo';
+import {demoMediaFor,readerDemoCatalog} from './editorial-demo-media';
 const STORAGE = "curio.collection.v1";
-const localReaderCatalog = [...staticCatalog, chairDemo];
+const localReaderCatalog = [...staticCatalog, ...readerDemoCatalog];
 export default function EditorialExperience({discoverReview=false}:{discoverReview?:boolean}) {
   const [visualScreen,setVisualScreen]=useState<'discover'|'read'>('discover');
   const [readerCatalog,setReaderCatalog]=useState({items:localReaderCatalog,approvals:approvedExternalAssets});
@@ -110,8 +110,8 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
     setMessage("");
     const id = ++requestId.current;
     let result: EditorialEdition = {
-      plan: fallbackPlan(preferences),
-      items: editorialDemoCatalog,
+      plan: fallbackPlan(preferences,[...readerDemoCatalog,...editorialDemoCatalog]),
+      items: [...readerDemoCatalog,...editorialDemoCatalog],
       source: "deterministic",
       retrieval: "fictional",
       cached: false,
@@ -137,7 +137,7 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
         if(unknown.length){setReaderCatalog({items:currentItems,approvals});setSaved(previous=>previous.filter(s=>currentItems.some(a=>a.image.id===s.assetId)));}
         const allowed = currentItems.filter(
           (a) =>
-            a.id !== chairDemo.id &&
+            !readerDemoCatalog.some(d=>d.id===a.id) &&
             preferences.allocations[a.category] > 0 &&
             data.items.some(
               (item) => item.id === a.id && item.image.id === a.image.id,
@@ -151,6 +151,11 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
               ? validateOriginalPlan(data.plan, allowed, preferences,approvals)
               : validatePlan(data.plan, allowed,approvals),
         };
+        // A disabled public model still returns the Worker-authored fictional
+        // fallback. The visual demo may use its separately approved local photo
+        // catalog after that response has passed validation; D1 editions remain
+        // authoritative and are never replaced by frontend demo metadata.
+        if(discoverReview&&result.source==='deterministic'&&result.retrieval==='fictional')result={...result,plan:fallbackPlan(preferences,[...readerDemoCatalog,...editorialDemoCatalog]),items:[...readerDemoCatalog,...editorialDemoCatalog]};
       }
     } catch {
       /* Fully local deterministic edition remains available offline. */
@@ -205,13 +210,15 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
     branchId.current++;
     setPanel(ad.id);
     setTopic("");
+    const authoredRelated=(demoMediaFor(ad.image.id)?.related??[]).flatMap(id=>curationCatalog.filter(item=>item.image.id===`${id}-v1`));
     setRelated(
-      rankDemo({
+      [...authoredRelated,...rankDemo({
         ...prefs,
         interests: ad.lifestyleTags.join(" "),
         allocations: { home: 34, fashion: 33, travel: 33 },
-      })
+      })]
         .filter((a) => a.id !== ad.id)
+        .filter((a,i,list)=>list.findIndex(next=>next.id===a.id)===i)
         .slice(0, 3),
     );
   }
@@ -240,7 +247,7 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
         const current=ids.length?[...localReaderCatalog,...published]:curationCatalog;
         const approvals=ids.length?{...approvedExternalAssets,...readerApprovals(published)}:readerApprovalsCurrent;
         if(ids.length){setReaderCatalog({items:current,approvals});setSaved(previous=>previous.filter(s=>current.some(a=>a.image.id===s.assetId)));}
-        const plan = validatePlan(d.plan, current.filter(a=>a.id!==chairDemo.id),approvals);
+        const plan = validatePlan(d.plan, current.filter(a=>!readerDemoCatalog.some(demo=>demo.id===a.id)),approvals);
         ranked = plan.features.flatMap((f) =>
           current.filter((a) => a.id === f.catalogId),
         );
@@ -252,6 +259,7 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
       setRelated(ranked.filter((a) => a.id !== ad.id).slice(0, 3));
   }
   const story = curationCatalog.find((a) => a.id === panel);
+  const storyDemo = story ? demoMediaFor(story.image.id) : undefined;
   return (
     <ReaderCatalogContext.Provider value={readerCatalog}><section
       className="editorial-experience"
@@ -453,24 +461,25 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
             {visualThread && <aside className="visual-story-arrival" role="status">
               <p className="eyebrow">YOUR VISUAL THREAD</p>
               <p>From {visualThread.detail} to {visualLabel(visualThread.relationship)}.</p>
-              <p>{story.id===chairDemo.id?'Compare the photographed chair with related Curio stories. The product identity and connection are fictional demo interpretations.':'Compare the drawn forms, then explore the context below. This is an authored connection, not a verified relationship between real products.'}</p>
+              <p>{storyDemo?'Compare this owner-supplied image with related Curio stories. Any product identity and connection are fictional demo interpretations.':'Compare the drawn forms, then explore the context below. This is an authored connection, not a verified relationship between real products.'}</p>
             </aside>}
             <CatalogImage ad={story} eager />
             <Attribution ad={story} />
             <div className="story-chapter">
               <span>01 / THE RECORD</span>
-              <h3>{story.id===chairDemo.id?'Fictional demo record':'Publisher record'}</h3>
+              <h3>{storyDemo?'Fictional editorial demo record':'Publisher record'}</h3>
             </div>
             <p>
               {story.description}{" "}
-              {story.id === chairDemo.id
-                ? "This is a fictional Curio demo concept, not a verified merchant product. The maker, specifications, availability and material are unverified."
+              {storyDemo
+                ? "This is Curio demo editorial context, not a verified merchant product. Any maker, specifications, availability and material are unverified."
                 : story.image.role === "placeholder"
                 ? "This is a Curio-authored illustration, with no verified real brand, designer, material specification or purchasable product."
                 : "Only the reviewed publisher record and attribution are presented. Additional designer, material and manufacturing claims are omitted."}
             </p>
-            {story.id === chairDemo.id && <aside className="chair-demo-story-facts"><p>Fictional demo price: {new Intl.NumberFormat('en-US',{style:'currency',currency:chairDemoDetails.price.currency}).format(chairDemoDetails.price.amount)} USD. Not purchasable.</p><ul>{chairDemoDetails.assumptions.map(a=><li key={a}>{a}</li>)}</ul><p>These attributes are fictional assumptions or visual observations, not verified product facts.</p></aside>}
-            {story.id !== chairDemo.id && <a
+            {storyDemo?.product && <aside className="chair-demo-story-facts"><p>Fictional demo price: {new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(storyDemo.product.priceUsd)} USD. Not purchasable.</p><ul>{storyDemo.product.assumptions.map(a=><li key={a}>{a}</li>)}</ul><p>These attributes are fictional assumptions or visual observations, not verified product facts.</p></aside>}
+            {storyDemo && <p>{storyDemo.title}. {storyDemo.description} Related Curio studies: {storyDemo.related.flatMap(id=>demoMediaFor(`${id}-v1`)).map(item=>item?.title).filter(Boolean).join('; ')}.</p>}
+            {!storyDemo && <a
               href={
                 story.image.role === "placeholder"
                   ? `/editorial-sources.html#${story.id}`
@@ -482,7 +491,7 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
             >
               Source: {story.image.role === 'placeholder' ? 'Curio illustration record' : 'Publisher record'} →
             </a>}
-            {story.id === chairDemo.id && <p className="source-label">Source: Owner-supplied editorial photograph. Product identity and price are fictional demo data.</p>}
+            {storyDemo && <p className="source-label">Source: Owner-supplied editorial image {storyDemo.assetId}. Product identity, price and relationships are fictional demo metadata.</p>}
             <div className="story-chapter">
               <span>02 / THE CONTEXT</span>
               <h3>A wider design conversation</h3>
@@ -523,12 +532,12 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
                 </aside>
               )}
             <p>
-              {story.id===chairDemo.id
-                ? 'Authored interpretation: follow how the curved seat, bright archway and low furniture create a sense of shelter within an open view. This describes the photograph, not a verified product specification.'
+              {storyDemo
+                ? `Authored interpretation: ${storyDemo.description} This is an editorial reading of the image, not a verified product specification.`
                 : 'Authored interpretation: follow the relationship between the drawn silhouette and the space around it. What changes when you see it as a rhythm rather than an object?'}
             </p>
             <p className="source-label">
-              {story.id===chairDemo.id
+              {storyDemo
                 ? 'The product record is fictional. Historical context is independently cited; visual interpretation is subjective. No AI-generated factual enrichment is presented.'
                 : 'Facts above are publisher records or cited historical context. This interpretation is subjective. No AI-generated factual enrichment is presented.'}
             </p>

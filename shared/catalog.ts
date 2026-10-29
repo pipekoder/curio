@@ -11,7 +11,7 @@ const reference = z.string().regex(/^docs\/[a-zA-Z0-9/_#.-]+$/)
 const sourceUrl = z.string().max(2048).refine(isSafeSourcePage, 'Use a safe HTTPS source page without purchase or tracking URLs.')
 const externalUrl = z.string().max(2048).refine(isSafeHttpsUrl, 'Use a public HTTPS image URL; local hosts, credentials and active content are forbidden.')
 const permission = z.strictObject({ status: z.enum(['pending', 'approved', 'rejected', 'blocked']), evidence: reference.nullable() })
-export const imagePath = z.string().regex(/^(\/catalog\/[a-z0-9][a-z0-9-]*\.(svg|webp|avif|jpg|png)|\/editorial\/read\/16_read_chair\.png)$/)
+export const imagePath = z.string().regex(/^(\/catalog\/[a-z0-9][a-z0-9-]*\.(svg|webp|avif|jpg|png)|\/editorial\/read\/(08_ochre_lounge_chair|12_boucle_fabric_detail|16_read_chair|17_read_soft_furnishing|18_read_portrait)\.png)$/)
 const fallbackPath = z.enum(['/catalog/home-lamp.svg', '/catalog/home-chair.svg', '/catalog/fashion-coat.svg', '/catalog/fashion-bag.svg', '/catalog/travel-cabin.svg', '/catalog/travel-walk.svg'])
 export const catalogItem = z.strictObject({
   id: z.string().regex(/^[a-z0-9-]+$/).max(50), category,

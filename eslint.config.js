@@ -44,6 +44,8 @@ export default ts.config(
       "src/EditorialExperience.tsx",
       "src/DiscoverPreview.tsx",
       "src/VisualStages.tsx",
+      "src/editorial-demo-media.ts",
+      "src/chair-demo.ts",
       "scripts/check-visual-journey.mjs",
       "scripts/capture-visual-references.mjs",
       "src/App.tsx",
