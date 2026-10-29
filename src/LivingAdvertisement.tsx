@@ -1,12 +1,13 @@
 import { useReaderCatalog } from './ReaderCatalog'
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { groupObjects, type ObjectHint } from '../shared/object-groups'
 import { readerSegmentation, containRect, relatedDiscovery } from '../shared/decoder'
 import { type CatalogItem } from '../shared/catalog'
 import { authoredVisualContext, relatedVisualStory, visualLabel } from '../shared/visual-observations'
 import CatalogImage from './CatalogImage'
+import { createPortal } from 'react-dom'
 
-export default function LivingAdvertisement({ ad, eager = false, samResult, objectHints, onExploreStory }: { ad: CatalogItem; eager?: boolean; samResult?: unknown; objectHints?: Readonly<Record<string, ObjectHint>>; onExploreStory?: (next: CatalogItem, detail: string, relationship: string) => void }) {
+export default function LivingAdvertisement({ ad, eager = false, samResult, objectHints, onExploreStory, explorationEnabled = true, revealHost }: { ad: CatalogItem; eager?: boolean; samResult?: unknown; objectHints?: Readonly<Record<string, ObjectHint>>; onExploreStory?: (next: CatalogItem, detail: string, relationship: string) => void; explorationEnabled?: boolean; revealHost?: HTMLElement | null }) {
   const {items:curationCatalog}=useReaderCatalog()
   const demo = readerSegmentation(ad, samResult)
   const grouped = demo ? groupObjects(demo, objectHints) : null
@@ -27,6 +28,7 @@ export default function LivingAdvertisement({ ad, eager = false, samResult, obje
     setLoadedAsset(image.src === (ad.image.externalUrl ?? ad.image.path) && image.width === ad.image.width && image.height === ad.image.height ? ad.image.id : null)
   }, [ad.image.id, ad.image.path, ad.image.externalUrl, ad.image.width, ad.image.height])
   const unavailable = useCallback(() => { setLoadedAsset(null); setSelection(null) }, [])
+  useEffect(() => { if (!explorationEnabled) { setSelection(null); setHovered(null) } }, [explorationEnabled])
   useEffect(() => {
     const element = visual.current, image = element?.querySelector('img')
     if (!ready || !element || !image) { setRect(null); return }
@@ -49,10 +51,11 @@ export default function LivingAdvertisement({ ad, eager = false, samResult, obje
   const next = relatedDiscovery(ad)
   const visualContext = authoredVisualContext(ad)
   const visualStory = relatedVisualStory(ad, curationCatalog)
+  const placeReveal = (content: ReactNode) => revealHost ? createPortal(content, revealHost) : content
   return <div className="living-ad" onKeyDown={event => { if (event.key === 'Escape' && selected) { event.preventDefault(); close() } }}>
     <div className="living-visual" ref={visual}>
       <CatalogImage ad={ad} eager={eager} onImageReady={onReady} onImageUnavailable={unavailable} />
-      {ready && rect && demo && <div className="living-overlay" style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}>
+      {explorationEnabled && ready && rect && demo && <div className="living-overlay" style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}>
         {highlighted && <svg className="region-dimming" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
           <defs><mask id={`${uid}-mask`}><rect width="1000" height="1000" fill="white" /><rect x={highlighted.box.x * 1000} y={highlighted.box.y * 1000} width={highlighted.box.width * 1000} height={highlighted.box.height * 1000} fill="black" /></mask></defs>
           <rect width="1000" height="1000" fill="#101b14" opacity=".12" mask={`url(#${uid}-mask)`} />
@@ -65,10 +68,10 @@ export default function LivingAdvertisement({ ad, eager = false, samResult, obje
           onClick={() => { setSelection({ assetId: ad.image.id, regionId: region.id }); setQuestion(false); setRelated(false) }}><span aria-hidden="true" className="hotspot-spark">+</span><span className="sr-only">Detail {index + 1}</span></button>)}
       </div>}
     </div>
-    {ready && demo?.source === 'sam_detection' && (grouped?.objects.length ?? 0) > 1 && <details className="object-index"><summary>Explore image details</summary><nav aria-label="Image details">{grouped?.objects.map((region,index) => <button type="button" key={region.id} onClick={() => { setSelection({assetId:ad.image.id,regionId:region.id});setQuestion(false);setRelated(false) }}>Open {ad.discoverableObjects.find(d=>d.id===region.detailId)?.label} context {index+1}</button>)}</nav><p>Separate entries remain available even when approximate detections overlap.</p></details>}
+    {explorationEnabled && ready && demo?.source === 'sam_detection' && (grouped?.objects.length ?? 0) > 1 && <details className="object-index"><summary>Explore image details</summary><nav aria-label="Image details">{grouped?.objects.map((region,index) => <button type="button" key={region.id} onClick={() => { setSelection({assetId:ad.image.id,regionId:region.id});setQuestion(false);setRelated(false) }}>Open {ad.discoverableObjects.find(d=>d.id===region.detailId)?.label} context {index+1}</button>)}</nav><p>Separate entries remain available even when approximate detections overlap.</p></details>}
     {samResult !== undefined && !demo && <p className="decoder-disclosure" role="status">Segmentation unavailable or no longer authorized. No model call.</p>}
     {demo && <p className="decoder-disclosure">{demo.source === "sam_detection" ? "SAM 3.1 structured regions · model estimates, not verified identity. Operator-supplied result; no new model call." : "Living advertisement demo · authored regions and commentary (mock segmentation), not SAM detections. No model call."} {ready ? demo.regions.length ? 'Follow a small light to look closer.' : 'No matching regions were returned. No object identity is inferred.' : 'Details become available when the original illustration loads.'}</p>}
-    <div id={panelId} hidden={!selected}>
+    {placeReveal(<div id={panelId} hidden={!explorationEnabled || !selected}>
     {selected && detail && ready && <section className="editorial-reveal" role="region" aria-label={`${detail.label} editorial reveal`}>
       <div className="reveal-heading"><p className="eyebrow">{demo?.source === "sam_detection" ? "LOOK CLOSER / MODEL ESTIMATE" : "LOOK CLOSER / AUTHORED DEMO"}</p><button type="button" onClick={close}>Return to original image</button></div>
       <h4>{detail.label}</h4><p>{detail.description}</p>
@@ -95,6 +98,6 @@ export default function LivingAdvertisement({ ad, eager = false, samResult, obje
         {related && <aside className="related-discovery" aria-label="Related catalog discovery"><strong>{next.name}</strong><p>{next.description}</p><p>Connection: another approved {ad.category} catalog study. This is a local selection, not a newly generated page or an AI recommendation.</p><p>{next.provenance.attribution} · {next.sourceType}</p></aside>}</>}
       <p className="source-label" aria-live="polite">Selected: {detail.label}. Escape returns to the unchanged original image.</p>
     </section>}
-    </div>
+    </div>)}
   </div>
 }

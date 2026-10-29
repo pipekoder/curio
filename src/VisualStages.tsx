@@ -1,9 +1,11 @@
-import {useEffect,useState,type RefObject} from 'react'
+import {useEffect,useReducer,useRef,useState,type RefObject} from 'react'
 import type {CatalogItem} from '../shared/catalog'
 import type {EditorialEdition} from '../shared/editorial'
 import CatalogImage from './CatalogImage'
 import LivingAdvertisement from './LivingAdvertisement'
 import {demoMediaFor} from './editorial-demo-media'
+import {readerSegmentation} from '../shared/decoder'
+import {initialReaderInteraction,readerInteraction} from './reader-interaction'
 
 const media=(file:string)=>`/editorial/${file}`
 
@@ -25,31 +27,35 @@ export function VisualGenerate({prompt,consent}: {prompt:string;consent:boolean}
  </section>
 }
 
-export function VisualReader({edition,pool,headingRef,onStory,onCollect,onRefine,onCollection}: {edition:EditorialEdition;pool:readonly CatalogItem[];headingRef:RefObject<HTMLHeadingElement|null>;onStory:(ad:CatalogItem,thread?:{detail:string;relationship:string})=>void;onCollect:(ad:CatalogItem)=>void;onRefine:()=>void;onCollection:()=>void}) {
+export function VisualReader({edition,pool,headingRef,onStory,onCollect,onRefine,onCollection,saveMessage}: {edition:EditorialEdition;pool:readonly CatalogItem[];headingRef:RefObject<HTMLHeadingElement|null>;onStory:(ad:CatalogItem,thread?:{detail:string;relationship:string})=>void;onCollect:(ad:CatalogItem)=>void;onRefine:()=>void;onCollection:()=>void;saveMessage?:string}) {
  const features=edition.plan.features.flatMap(feature=>{const ad=pool.find(a=>a.id===feature.catalogId&&a.image.id===feature.assetId);return ad?[{feature,ad}]:[]})
- const [currentIndex,setCurrentIndex]=useState(0)
- const [detailOpen,setDetailOpen]=useState(false)
+ const [interaction,dispatch]=useReducer(readerInteraction,initialReaderInteraction)
+ const {featureIndex:currentIndex,detailOpen,exploring}=interaction
+ const hotspotRef=useRef<HTMLButtonElement>(null)
+ const [revealHost,setRevealHost]=useState<HTMLElement|null>(null)
  useEffect(()=>{headingRef.current?.focus()},[headingRef,currentIndex])
  if(!features.length)return null
  const {ad,feature}=features[currentIndex]??features[0]
  const mediaRecord=demoMediaFor(ad.image.id)
  const product=mediaRecord?.product
  const hotspot=product?.hotspot
+ const hasDetails=Boolean(hotspot || readerSegmentation(ad,undefined)?.regions.length)
  const object=ad.discoverableObjects[0]
  const rail=['08_ochre_lounge_chair.png','17_read_soft_furnishing.png','18_read_portrait.png','16_read_chair.png'].filter(file=>!ad.image.path?.endsWith(file)).slice(0,3)
  const storyThread=object?{detail:object.label,relationship:'visible form and editorial context'}:undefined
  return <><section className="visual-stage visual-reader" aria-label="Read and explore" data-asset-id={ad.image.id}>
   <header className="visual-stage-label"><span>03</span><div>Read &amp; Explore<small>Tap a detail to discover more</small></div></header>
   <div className="visual-reader-intro"><span>{ad.category==='home'?'Objects':ad.category==='fashion'?'Style':'Places'} · {mediaRecord?'fictional demo':'catalog study'}</span><h2 ref={headingRef} tabIndex={-1}>{feature.headline}</h2><p>{feature.narrative}</p></div>
-  <div className={`visual-reader-back-photo${mediaRecord?'':' catalog-annotated'}`}>{mediaRecord?<CatalogImage ad={ad} eager/>:<LivingAdvertisement key={ad.image.id} ad={ad} eager onExploreStory={(next,detail,relationship)=>onStory(next,{detail,relationship})}/>} {hotspot&&<button className="chair-demo-hotspot" type="button" style={{left:`${hotspot.x*100}%`,top:`${hotspot.y*100}%`}} aria-label={`Explore ${hotspot.label} in photograph (manually annotated)`} aria-expanded={detailOpen} aria-controls="reader-demo-detail" onClick={()=>setDetailOpen(value=>!value)}><span aria-hidden="true">＋</span></button>}</div>
-  <aside className="visual-reader-context"><span>Visual detail</span><strong>{object?.label??'Follow the story'}</strong><img src={media(ad.image.path?.endsWith('12_boucle_fabric_detail.png')?'read/08_ochre_lounge_chair.png':'read/12_boucle_fabric_detail.png')} alt="Owner-provided companion editorial image"/><small>Editorial image; material identity is unverified.</small></aside>
-  <div className="visual-reader-photo-rail" aria-label="Related editorial images">{rail.map(file=><img key={file} src={media(`read/${file}`)} alt="Owner-provided related editorial study"/>)}</div>
-  {detailOpen&&product&&<aside className="chair-demo-detail" id="reader-demo-detail" aria-label="Fictional product details"><button className="chair-demo-close" type="button" onClick={()=>setDetailOpen(false)} aria-label="Close product details">×</button><span>FICTIONAL DEMO PRODUCT · {ad.category.toUpperCase()}</span><h3>{product.name}</h3><p>{product.brandName} · unverified</p><p>{object?.description??ad.description}</p><p className="chair-demo-price">Demo price: ${product.priceUsd.toLocaleString('en-US')} USD · fictional, not for sale</p><ul>{product.assumptions.map(a=><li key={a}>{a}</li>)}</ul><small>Manually authored hotspot · no SAM inference. Material and specifications unverified.</small><button type="button" onClick={()=>onStory(ad,storyThread)}>Explore related story →</button><button type="button" onClick={()=>onCollect(ad)}>Collect this image</button></aside>}
+  <div className={`visual-reader-back-photo${mediaRecord?'':' catalog-annotated'}${exploring?' is-exploring':''}`}>{mediaRecord?<CatalogImage ad={ad} eager/>:<LivingAdvertisement key={ad.image.id} ad={ad} eager explorationEnabled={exploring} revealHost={revealHost} onExploreStory={(next,detail,relationship)=>onStory(next,{detail,relationship})}/>} {exploring&&hotspot&&<button ref={hotspotRef} className="chair-demo-hotspot" type="button" style={{left:`${hotspot.x*100}%`,top:`${hotspot.y*100}%`}} aria-label={`Explore ${hotspot.label} in photograph (manually annotated)`} aria-expanded={detailOpen} aria-controls="reader-demo-detail" onClick={()=>dispatch({type:'toggleDetail'})}><span aria-hidden="true">＋</span></button>}{hasDetails&&<button className="reader-explore-toggle" type="button" aria-pressed={exploring} onClick={()=>dispatch({type:'toggleExplore'})}>{exploring?'Close exploration':'Explore image details'}</button>}</div>
+  <aside className="visual-reader-sidebar"><div ref={setRevealHost} className="visual-reader-reveal-host" aria-live="polite"/>
+  <div className="visual-reader-context"><span>Visual detail</span><strong>{object?.label??'Follow the story'}</strong><img src={media(ad.image.path?.endsWith('12_boucle_fabric_detail.png')?'read/08_ochre_lounge_chair.png':'read/12_boucle_fabric_detail.png')} alt="Owner-provided companion editorial image"/><small>Editorial image; material identity is unverified.</small></div>
+  <div className="visual-reader-photo-rail" aria-label="Related editorial images">{rail.map(file=><img key={file} src={media(`read/${file}`)} alt="Owner-provided related editorial study"/>)}</div></aside>
+  {detailOpen&&product&&<aside className="chair-demo-detail" id="reader-demo-detail" aria-label="Fictional product details"><button className="chair-demo-close" type="button" onClick={()=>{dispatch({type:'closeDetail'});hotspotRef.current?.focus()}} aria-label="Close product details">×</button><span>FICTIONAL DEMO PRODUCT · {ad.category.toUpperCase()}</span><h3>{product.name}</h3><p>{product.brandName} · unverified</p><p>{object?.description??ad.description}</p><p className="chair-demo-price">Demo price: ${product.priceUsd.toLocaleString('en-US')} USD · fictional, not for sale</p><ul>{product.assumptions.map(a=><li key={a}>{a}</li>)}</ul><small>Manually authored hotspot · no SAM inference. Material and specifications unverified.</small><button type="button" onClick={()=>onStory(ad,storyThread)}>Explore related story →</button><button type="button" onClick={()=>onCollect(ad)}>Collect this image</button></aside>}
   <div className="visual-reader-caption"><strong>{ad.name}</strong><small>{mediaRecord?product?.brandName??'Curio editorial study · no product':'Validated catalog study'}</small><p>{ad.description}</p><button onClick={()=>onStory(ad,storyThread)} aria-label={`Open ${ad.name} story`}>→</button></div>
-  <nav className="visual-reader-pages" aria-label="Edition pages">{features.map(({ad:next},i)=><button key={next.image.id} aria-current={i===currentIndex?'page':undefined} aria-label={`Read edition page ${i+1}: ${next.name}`} onClick={()=>{setCurrentIndex(i);setDetailOpen(false)}}><span>{String(i+1).padStart(2,'0')}</span><CatalogImage ad={next}/></button>)}</nav>
+  <nav className="visual-reader-pages" aria-label="Edition pages">{features.map(({ad:next},i)=><button key={next.image.id} aria-current={i===currentIndex?'page':undefined} aria-label={`Read edition page ${i+1}: ${next.name}`} onClick={()=>dispatch({type:'changeFeature',index:i})}><span>{String(i+1).padStart(2,'0')}</span><CatalogImage ad={next}/></button>)}</nav>
   <span className="visual-reader-count">{String(currentIndex+1).padStart(2,'0')} / {String(features.length).padStart(2,'0')}</span>
   <button className="visual-reader-related" onClick={()=>onStory(ad,storyThread)}>RELATED<br/>STORIES <span>→</span></button>
- </section><div className="visual-stage-controls"><p>{edition.source==='meta'?'Validated Meta editorial plan':'Curio-authored edition · AI not used'} · {edition.plan.title}</p><button onClick={()=>onCollect(ad)}>Collect image</button><button onClick={onCollection}>Your collection</button><button onClick={onRefine}>Refine with a new prompt</button></div></>
+ </section><div className="visual-stage-controls"><p>{edition.source==='meta'?'Validated Meta editorial plan':'Curio-authored edition · AI not used'} · {edition.plan.title}</p><button onClick={()=>onCollect(ad)}>Collect image</button><button onClick={onCollection}>Your collection</button><button onClick={onRefine}>Refine with a new prompt</button>{saveMessage&&<p role="status">{saveMessage}</p>}</div></>
 }
 
 export function VisualJourney({story,related,topic,onRelated,onFollow,onCollect}: {story:CatalogItem;related:readonly CatalogItem[];topic:string;onRelated:(ad:CatalogItem)=>void;onFollow:(theme:string)=>void;onCollect:()=>void}) {
