@@ -24,7 +24,7 @@ for (const width of [1440,390]) test(`reader accessibility, privacy and syntheti
     if(url.pathname.startsWith('/api/'))return route.fulfill({status:503,json:{error:'AI disabled'}})
     return route.continue()
   })
-  await page.goto('/')
+  await page.goto('/?legacy=1')
   await expectKeyboardSkip(page)
   await page.getByRole('button',{name:'Try a prompt: Quiet rooms'}).click()
   const started=Date.now()
@@ -68,7 +68,7 @@ for (const width of [1440,390]) test(`keyboard skip waits for delayed applicatio
   try {
     // Intentionally navigate before the app bundle loads: a load-event/React
     // scheduling gap must not allow the first Tab to be sent to an empty page.
-    await page.goto('/',{waitUntil:'commit'})
+    await page.goto('/?legacy=1',{waitUntil:'commit'})
     await bundleRequested
     const keyboardCheck = expectKeyboardSkip(page)
     await expect(page.locator('#root')).toBeEmpty()
