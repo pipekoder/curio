@@ -157,3 +157,6 @@ vite.config.ts.timestamp-*
 # Browser verification artifacts
 test-results/
 playwright-report/
+
+# Private visual reference files; never copy reference screenshots into public assets.
+/public/preview-private/
