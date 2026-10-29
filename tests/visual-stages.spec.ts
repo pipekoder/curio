@@ -3,11 +3,33 @@ import {readFileSync} from 'node:fs'
 const liveHome=JSON.parse(readFileSync('tests/fixtures/editorial-live-home.json','utf8')) as {plan:{features:{catalogId:string;assetId:string;headline:string}[];title:string}}
 const plans=JSON.parse(readFileSync('tests/fixtures/editorial-original.json','utf8')) as {travel:{features:{catalogId:string;assetId:string;headline:string}[];title:string}}
 
+test('public root opens Discover without prototype controls, and saving an image opens Collect',async({page})=>{
+ await page.setViewportSize({width:390,height:844})
+ await page.route('**/api/editorial',route=>route.fulfill({status:503,body:'AI disabled'}))
+ await page.goto('/')
+ await expect(page.locator('.reference-discover')).toBeVisible()
+ await expect(page.getByText('Discover frontend review')).toHaveCount(0)
+ await page.keyboard.press('Tab')
+ await expect(page.getByRole('link',{name:'Skip to magazine prompt'})).toBeFocused()
+ await page.keyboard.press('Enter')
+ await expect(page.getByLabel('Your discovery prompt')).toBeFocused()
+ await page.getByLabel('Your discovery prompt').fill('Rounded lounge chair in a quiet room')
+ await page.getByRole('button',{name:'Generate magazine'}).click()
+ await expect(page.locator('.visual-reader')).toBeVisible()
+ await page.getByRole('button',{name:'Collect image',exact:true}).click()
+ await expect(page.locator('.visual-collect')).toBeVisible()
+ await page.getByRole('button',{name:'Return to reading'}).click()
+ await expect(page.locator('.visual-reader')).toBeVisible()
+ await page.getByRole('button',{name:'Your collection'}).click()
+ await page.getByRole('button',{name:'Remove',exact:true}).first().click()
+ await expect(page.getByText('Your collection is waiting for a first discovery.')).toBeVisible()
+})
+
 for(const width of [390,768,1440])test(`coded visual journey at ${width}px preserves editorial and collection behavior`,async({page})=>{
  await page.setViewportSize({width,height:width===390?844:900})
  await page.emulateMedia({reducedMotion:'reduce'})
  await page.route('**/api/editorial',async route=>{await new Promise(resolve=>setTimeout(resolve,2200));await route.fulfill({status:503,body:'Unavailable'})})
- await page.goto('/?prototype=discover')
+ await page.goto('/')
  await expect(page.locator('.reference-discover')).toBeVisible()
  await expect(page.locator('.reference-photo img')).toHaveCount(5)
  const mediaReady=async(selector:string,count:number,photoSelector='img[src^="/editorial/"]')=>{const stage=page.locator(selector);const before=await stage.boundingBox();const photos=stage.locator(photoSelector);await expect.poll(()=>photos.count()).toBeGreaterThanOrEqual(count);for(const photo of await photos.all())if(await photo.isVisible())await expect.poll(()=>photo.evaluate((img:HTMLImageElement)=>img.complete&&img.naturalWidth>0&&img.naturalHeight>0)).toBe(true);const after=await stage.boundingBox();expect(Math.abs((before?.width??0)-(after?.width??0))).toBeLessThan(1);expect(Math.abs((before?.height??0)-(after?.height??0))).toBeLessThan(1)}
@@ -38,15 +60,13 @@ for(const width of [390,768,1440])test(`coded visual journey at ${width}px prese
  await expect(page.locator('.visual-journey .journey-center')).toContainText(/Chair/)
  await mediaReady('.visual-journey',7)
  await page.locator('.journey-collect').click()
- await page.locator('.dialog-close').click()
- await page.getByRole('button',{name:'Your collection'}).click()
  await expect(page.locator('.visual-collect')).toBeVisible()
  await expect(page.locator('.visual-collect .collect-front img')).toHaveAttribute('src',primarySrc!)
  await mediaReady('.visual-collect',6)
  await page.getByRole('button',{name:'Revisit'}).click()
  await expect(page.locator('.visual-journey')).toBeVisible()
  await mediaReady('.visual-journey',7)
- await page.locator('.dialog-close').click()
+ await page.getByRole('button',{name:'Return to reading'}).click()
  await page.getByRole('button',{name:'Your collection'}).click()
  await page.reload()
  await page.getByRole('button',{name:'Your collection'}).click()
@@ -58,7 +78,7 @@ for(const width of [390,768,1440])test(`coded visual journey at ${width}px prese
 test('two curiosity prompts change the primary Reader photo, headline and contextual product',async({page})=>{
  await page.setViewportSize({width:768,height:900})
  await page.route('**/api/editorial',route=>route.fulfill({status:503,body:'Unavailable'}))
- await page.goto('/?prototype=discover')
+ await page.goto('/')
  await page.getByLabel('Your discovery prompt').fill('Focus on a rounded lounge chair and sculptural seating in quiet rooms')
  await page.getByRole('button',{name:'Generate magazine'}).click()
  await expect(page.locator('.visual-reader')).toBeVisible()
@@ -88,7 +108,7 @@ test('validated Muse-shaped plans control the primary image, headline and editio
   const plan=travel?plans.travel:liveHome.plan
   await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({source:'meta',retrieval:'fictional',cached:false,plan,items:plan.features.map(f=>({id:f.catalogId,image:{id:f.assetId}}))})})
  })
- await page.goto('/?prototype=discover')
+ await page.goto('/')
  await page.getByLabel('Your discovery prompt').fill('paper quiet lamp')
  await page.getByRole('checkbox',{name:/Use Meta AI/}).check()
  await page.getByRole('button',{name:'Generate magazine'}).click()
@@ -112,7 +132,7 @@ test('validated Muse-shaped plans control the primary image, headline and editio
 
 test('a disabled Worker fictional response keeps the local approved-photo fallback',async({page})=>{
  await page.route('**/api/editorial',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({source:'deterministic',retrieval:'fictional',cached:false,plan:liveHome.plan,items:liveHome.plan.features.map(f=>({id:f.catalogId,image:{id:f.assetId}}))})}))
- await page.goto('/?prototype=discover')
+ await page.goto('/')
  await page.getByLabel('Your discovery prompt').fill('Focus on a rounded lounge chair and sculptural seating in quiet rooms')
  await page.getByRole('button',{name:'Generate magazine'}).click()
  await expect(page.locator('.visual-reader-back-photo img')).toHaveAttribute('src',/\/editorial\/read\/(08_ochre_lounge_chair|16_read_chair)\.png/)

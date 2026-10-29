@@ -4,7 +4,7 @@ for (const width of [1440,390]) test(`editorial hotspots are quiet, accessible a
  const page=await context.newPage()
  try {
   await page.route('**/api/editorial',route=>route.fulfill({status:503,json:{status:'disabled'}}))
-  await page.goto('http://127.0.0.1:4173')
+  await page.goto('http://127.0.0.1:4173/?legacy=1')
   await page.getByRole('textbox').fill('Create a quiet Scandinavian magazine about home lighting and reading rooms.')
   await page.getByRole('button',{name:/Generate.*magazine/i}).click()
   const feature=page.locator('.personal-feature').first()
@@ -34,7 +34,7 @@ test('grounded editorial V2 copy provides a question leading into the existing s
  const plan=JSON.parse(readFileSync('tests/fixtures/editorial-v2-grounded.json','utf8'))
  const {curationCatalog}=await import('../shared/catalog')
  await page.route('**/api/editorial',route=>route.fulfill({json:{plan,items:curationCatalog,source:'meta',retrieval:'fictional',cached:false}}))
- await page.goto('/')
+ await page.goto('/?legacy=1')
  await page.getByRole('textbox').fill('Scandinavian home light and space')
  await page.getByRole('checkbox').check()
  await page.getByRole('button',{name:'Generate magazine'}).click()
