@@ -1,22 +1,26 @@
 # Five-stage local visual review
 
-This draft extends the approved Discover visual language to Generate, Read & Explore, Curiosity Journey and Collect. No flattened reference is used in the frontend. Generate is rendered only while the existing editorial request is pending; it shows no guessed percent or model output. Reader uses the validated edition and existing authorized image/hotspot components. Journey uses real related catalog items and story navigation. Collect uses the existing browser storage, asset-version identifiers and permission revalidation; the visual stage adds Revisit and Remove controls.
+Draft PR #30 carries a coded React/CSS/SVG interface for Discover, Generate, Read & Explore, Curiosity Journey and Collect. The five supplied reference images are design references only; none is used as a page asset. A natural-language prompt uses the existing editorial endpoint and deterministic fallback. Generate appears only during an actual pending request, with no guessed percent or model output. Read uses the validated edition and existing annotated catalog image. Story and related-discovery controls use existing grounded catalog relationships. Collect retains exact asset identities, permission revalidation and browser persistence.
 
-## Editorial allocation
+## Asset allocation and media truth
 
-`DISCOVER_ASSET_ALLOCATION.json` assigns each of the 12 owner photographs to exactly one stage. The seven previously reserved files are now allocated as follows: Generate 03/07, Read 08/12, Journey 06/09, Collect 04. Discover keeps 01/02/05/10/11. No owner photo appears across stages.
+`DISCOVER_ASSET_ALLOCATION.json` records all **26 unique supplied PNG byte streams** with stage, role, source filename, dimensions and SHA-256. Discover retains 5 original images. The other 7 original images and 14 newly supplied images are allocated: Generate 5, Read 5, Journey 6 and Collect 5. **No additional image files are missing for the documented stage allocation.** The new files remain byte-identical to the owner's ZIP. No independent image was generated or sourced.
 
-The references depict more photographic panels than the available allocation. For an independent photograph in every illustrated photo plane, additional source files are needed: Generate 3, Read & Explore 3, Curiosity Journey 4, Collect 4; total **14**. Current UI renders the allocated photographs and uses validated catalog content or translucent glass planes where a source image is absent. It does not treat the decorative owner's photographs as verified catalog items or place hotspots on them. All active hotspot annotations remain attached to their actual catalog image. No new real-brand or material claims are made.
+The Reader presents a supplied chair photograph as a visual plane and three other supplied photos as editorial thumbnails. Its active hotspots stay on the original, permission-checked catalog illustration that owns their authored annotations. The photograph is not claimed to have a SAM mask or a verified object region. Journey photo nodes provide visual context; actual links and object themes come from the existing catalog. The Collect stage displays saved catalog content with its source attribution; owner photographs form the surrounding composition. Unverified brand identities, designer names and material claims are omitted.
 
-## Run and inspect locally
+## Local run
 
 ```sh
 npm ci
 VITE_DISCOVER_REVIEW=true npm run build
 npm run preview -- --host 127.0.0.1 --port 4188 --strictPort
+# In a second terminal:
 CHROMIUM_PATH=/usr/bin/chromium node scripts/check-visual-journey.mjs
+CURIO_REFERENCE_DIR=/path/to/private/five-reference-images CHROMIUM_PATH=/usr/bin/chromium node scripts/capture-visual-references.mjs
 ```
 
-The browser check captures all stages at 390, 768 and 1440px and verifies real pending state, deterministic fallback, story opening, collection save/revisit/reload/remove, and zero Meta calls. The reference design remains the visual target; passing functional tests does not establish visual approval.
+The browser check captures each stage at 390, 768 and 1440 px, including genuine pending state, fallback disclosure, keyboard hotspot interaction, story navigation, collection save/revisit/reload/remove and zero model calls. The reference capture script produces native-size side-by-side comparisons under ignored `test-results/visual-journey/native/`. No reference screenshot is committed.
 
-Known visual differences: missing independent photos for 14 image planes; the existing authorized catalog illustrations remain in the live Reader, Journey and Collect; glass lighting and 3D perspective are approximated in CSS; the narrow Generate panel cannot preview a plan before the endpoint responds. The stage layouts are responsive adaptations of desktop references, not separately supplied mobile designs.
+## Visual and functional limits
+
+The photo set is complete for the defined slots, but the owner's supplied photographs have different subjects/crops than the images depicted in the reference renderings. The result cannot be pixel-identical. CSS approximates the reference's glass refraction, volumetric light and perspective; it does not synthesize 3D images. The Reader's catalog illustration remains visible for accurate interaction and provenance. A static frontend preview has no live Worker API, so it shows the existing authored fallback and discloses AI was not used. Live Meta and SAM behavior remain gated by their existing server-side permissions and budgets. Visual approval is separate from CI success.

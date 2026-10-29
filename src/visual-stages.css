@@ -60,3 +60,24 @@
 .visual-reader-details{left:calc(284 * var(--u));top:calc(290 * var(--u));max-width:calc(97 * var(--u))}
 .visual-reader-caption{top:calc(392 * var(--u))}
 .visual-reader-back-photo{left:calc(165 * var(--u));width:calc(240 * var(--u))}
+/* One source photograph per editorial plane; these four stage allocations are
+   independent of Discover's five image files. */
+.gen-plane-leftmost{left:calc(25 * var(--u));top:calc(157 * var(--u));width:calc(63 * var(--u));height:calc(232 * var(--u));transform:perspective(650px) rotateY(24deg) skewY(9deg);z-index:1}
+.gen-plane-left-inner{left:calc(96 * var(--u));top:calc(141 * var(--u));width:calc(70 * var(--u));height:calc(270 * var(--u));transform:perspective(650px) rotateY(15deg) skewY(6deg);z-index:2}
+.gen-plane-left{left:calc(65 * var(--u));z-index:3}
+.gen-plane-back{z-index:2}.gen-plane-right{z-index:1}
+.visual-reader-photo-rail{position:absolute;left:calc(389 * var(--u));top:calc(291 * var(--u));width:calc(83 * var(--u));height:calc(175 * var(--u));z-index:7;display:flex;flex-direction:column;gap:4px;padding:4px;border:1px solid #e0e8f7;border-radius:12px;background:#ffffffb8;backdrop-filter:blur(9px)}
+.visual-reader-photo-rail img{flex:1;min-height:0;border-radius:6px;object-fit:cover}
+.visual-reader-pages{left:calc(283 * var(--u));top:calc(460 * var(--u));width:calc(100 * var(--u));flex-direction:row;z-index:10}.visual-reader-pages button{width:calc(42 * var(--u));height:calc(36 * var(--u));min-height:30px}.visual-reader-pages .catalog-figure{display:none}.visual-reader-pages span{font-size:9px}
+.journey-people{left:calc(160 * var(--u));top:calc(285 * var(--u))}.journey-place{left:calc(548 * var(--u));top:calc(290 * var(--u))}
+.journey-arch{left:calc(137 * var(--u));top:calc(95 * var(--u));transform:rotate(-5deg)}
+.journey-room{left:calc(416 * var(--u));top:calc(68 * var(--u));transform:rotate(4deg)}
+.journey-objects{left:calc(323 * var(--u));top:calc(353 * var(--u));transform:rotate(-4deg)}
+.journey-coast{left:calc(613 * var(--u));top:calc(120 * var(--u));transform:rotate(6deg)}
+.journey-related{width:calc(78 * var(--u));height:calc(60 * var(--u));z-index:7}.journey-related .catalog-figure{display:none}.journey-related span{font-size:calc(9 * var(--u));line-height:1.3}.journey-related-0{left:calc(50 * var(--u));top:calc(300 * var(--u))}.journey-related-1{left:calc(737 * var(--u));top:calc(305 * var(--u))}
+.collect-back{z-index:1}.collect-plane:not(.collect-back):not(.collect-front){z-index:2}.collect-front{z-index:5}
+.collect-far-left{left:calc(108 * var(--u));top:calc(145 * var(--u));width:calc(65 * var(--u));height:calc(169 * var(--u));transform:perspective(700px) rotateY(28deg) skewY(12deg)}
+.collect-left{left:calc(146 * var(--u));top:calc(127 * var(--u));width:calc(79 * var(--u));height:calc(192 * var(--u));transform:perspective(700px) rotateY(18deg) skewY(9deg)}
+.collect-right{left:calc(421 * var(--u));top:calc(121 * var(--u));width:calc(83 * var(--u));height:calc(209 * var(--u));transform:perspective(700px) rotateY(-17deg) skewY(-8deg)}
+.collect-far-right{left:calc(501 * var(--u));top:calc(146 * var(--u));width:calc(67 * var(--u));height:calc(169 * var(--u));transform:perspective(700px) rotateY(-27deg) skewY(-12deg)}
+@media(max-width:640px){.journey-objects{top:calc(330 * var(--u))}.journey-themes{z-index:10}.collect-far-left,.collect-far-right{top:220px}.collect-left,.collect-right{top:197px}}
