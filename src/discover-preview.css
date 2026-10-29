@@ -9,8 +9,8 @@
 .reference-stage-label small{display:block;font-size:calc(10 * var(--u));color:#5f6066;margin-top:calc(2 * var(--u));line-height:1.5}
 .reference-orbits{position:absolute;inset:0;width:100%;height:100%;opacity:.47;pointer-events:none;transition:opacity .3s ease}
 .reference-discover:focus-within .reference-orbits,.reference-discover[data-input=typing] .reference-orbits{opacity:.83}
-.reference-wordmark{position:absolute;top:calc(132 * var(--u));left:calc(228 * var(--u));font-family:'Avenir Next','Century Gothic','Segoe UI',sans-serif;font-size:calc(38 * var(--u));line-height:1;font-weight:300;letter-spacing:calc(2 * var(--u));z-index:5}
-.reference-discover h1{position:absolute;left:calc(180 * var(--u));top:calc(201 * var(--u));width:calc(198 * var(--u));margin:0;font:400 calc(30 * var(--u))/1.12 Georgia,'Times New Roman',serif;letter-spacing:calc(-.9 * var(--u));text-align:center;z-index:5;color:#101115}
+.reference-wordmark{position:absolute;top:calc(132 * var(--u));left:calc(228 * var(--u));font-family:'Avenir Next','Century Gothic','Segoe UI',sans-serif;font-size:calc(38 * var(--u));line-height:1;font-weight:300;letter-spacing:calc(2.8 * var(--u));z-index:5}
+.reference-discover h1{position:absolute;left:calc(180 * var(--u));top:calc(201 * var(--u));width:calc(198 * var(--u));margin:0;font:400 calc(30 * var(--u))/1.12 Georgia,'Times New Roman',serif;letter-spacing:calc(.15 * var(--u));text-align:center;z-index:5;color:#101115}
 .reference-sphere{position:absolute;left:calc(413 * var(--u));top:calc(221 * var(--u));width:calc(85 * var(--u));height:calc(88 * var(--u));border-radius:50%;z-index:3;background:radial-gradient(circle at 70% 22%,#fff 1%,#fff9 7%,transparent 17%),radial-gradient(circle at 30% 64%,#fff4 10%,#c5e3e9aa 26%,transparent 52%),conic-gradient(from 15deg,#f5f2ff,#e9daeacc,#dddff8,#f8e9e4,#d5edee,#d8d3f1,#f5f2ff);box-shadow:inset calc(3 * var(--u)) calc(2 * var(--u)) calc(5 * var(--u)) #fff,inset calc(-5 * var(--u)) calc(-2 * var(--u)) calc(8 * var(--u)) #adb7ed66,0 calc(7 * var(--u)) calc(23 * var(--u)) #b7c4ef22;border:calc(2 * var(--u)) solid #f3f2ff99;opacity:.83;pointer-events:none}
 .reference-sphere i{position:absolute;inset:12%;border:1px solid #ffffff88;border-radius:50%;filter:blur(2px);transform:rotate(-25deg) scaleX(.75)}
 .reference-prompt{position:absolute;left:calc(132 * var(--u));top:calc(306 * var(--u));width:calc(341 * var(--u));height:calc(54 * var(--u));z-index:10;display:flex;align-items:center;border:1px solid #e1e7f9;border-radius:calc(29 * var(--u));background:linear-gradient(110deg,#ffffffed,#f4f6fbe6);box-shadow:0 calc(8 * var(--u)) calc(25 * var(--u)) #9aaedb33,inset 0 1px 3px #fff;backdrop-filter:blur(12px)}
@@ -28,8 +28,7 @@
 .reference-required-controls button,.reference-reader-controls button{min-height:44px;border:1px solid #bdc6da;background:white;padding:10px 15px;margin:5px 10px 5px 0;color:#344563;border-radius:22px;cursor:pointer}
 .reference-prototype :is(button,a,textarea,input,summary):focus-visible{outline:2px solid #365fac;outline-offset:4px}
 
-/* Five independent editorial media slots. Add reviewed source photographs via
-   individual CSS custom properties; no reference screenshot is rendered. */
+/* Five independent owner-supplied editorial photographs; no reference screenshot is rendered. */
 .reference-photo-planes{position:absolute;inset:0;pointer-events:none;z-index:2}
 .reference-photo{position:absolute;overflow:hidden;background:linear-gradient(135deg,#f6f5f3,#e5e4e1 55%,#f9f8f6);border:1px solid #e8e8e8;border-radius:3px;box-shadow:2px 4px 13px #b7bfcd34,-1px 0 2px #e8efff;transform-style:preserve-3d}
 .reference-photo::after{content:'';position:absolute;inset:0;background:linear-gradient(105deg,#ffffff7a,transparent 30%,#ffffff22 72%,#ffffff84);mix-blend-mode:screen}
@@ -49,7 +48,7 @@
  .reference-discover{width:100%;height:670px;aspect-ratio:auto}
  .reference-stage-label{left:20px;top:16px;gap:18px;font-size:14px}.reference-stage-label>span{font-size:14px}.reference-stage-label small{font-size:10px}
  .reference-wordmark{left:50%;top:124px;transform:translateX(-50%)}.reference-wordmark svg{width:105px;height:40px}
- .reference-discover h1{left:50%;top:205px;width:270px;transform:translateX(-50%);font-size:30px;line-height:1.12;letter-spacing:-.9px}
+ .reference-discover h1{left:50%;top:205px;width:270px;transform:translateX(-50%);font-size:30px;line-height:1.12;letter-spacing:.15px}
  .reference-prompt{left:7%;top:335px;width:86%;height:54px;border-radius:29px}.reference-prompt textarea{font-size:13px;padding:16px 48px 10px 20px}.reference-submit{right:5px}.reference-submit span{font-size:24px}
  .reference-photo-0{top:190px}.reference-photo-1{top:64px}.reference-photo-2{top:164px}.reference-photo-3{top:455px}.reference-photo-4{top:382px}
  .reference-sphere{left:calc(100% - 94px);top:258px;width:80px;height:83px}

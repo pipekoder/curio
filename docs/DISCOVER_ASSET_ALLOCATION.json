@@ -1,0 +1,14 @@
+[
+  {"id":"curio-owner-01","filename":"01_boucle_lounge_chair.png","stage":"Discover","role":"left interior chair plane"},
+  {"id":"curio-owner-02","filename":"02_ceramic_vase.png","stage":"Discover","role":"upper small object plane"},
+  {"id":"curio-owner-03","filename":"03_arched_interior.png","stage":"Generate","role":"architectural page"},
+  {"id":"curio-owner-04","filename":"04_limestone_texture.png","stage":"Collect","role":"material collection plane"},
+  {"id":"curio-owner-05","filename":"05_designer_portrait.png","stage":"Discover","role":"right fashion or people plane"},
+  {"id":"curio-owner-06","filename":"06_coffee_ritual.png","stage":"Curiosity Journey","role":"ritual connection"},
+  {"id":"curio-owner-07","filename":"07_sculptural_living_room.png","stage":"Generate","role":"room page"},
+  {"id":"curio-owner-08","filename":"08_ochre_lounge_chair.png","stage":"Read & Explore","role":"primary object"},
+  {"id":"curio-owner-09","filename":"09_coastal_architecture.png","stage":"Curiosity Journey","role":"place connection"},
+  {"id":"curio-owner-10","filename":"10_winter_coast.png","stage":"Discover","role":"upper landscape plane"},
+  {"id":"curio-owner-11","filename":"11_stone_still_life.png","stage":"Discover","role":"lower-left object plane"},
+  {"id":"curio-owner-12","filename":"12_boucle_fabric_detail.png","stage":"Read & Explore","role":"material detail"}
+]
