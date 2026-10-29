@@ -28,13 +28,17 @@
 .reference-required-controls button,.reference-reader-controls button{min-height:44px;border:1px solid #bdc6da;background:white;padding:10px 15px;margin:5px 10px 5px 0;color:#344563;border-radius:22px;cursor:pointer}
 .reference-prototype :is(button,a,textarea,input,summary):focus-visible{outline:2px solid #365fac;outline-offset:4px}
 
-/* Supplied photographic regions, projected as individual planes. No illustration substitution. */
-.reference-photo{position:absolute;background-image:url('/preview-private/discover-reference.png');background-size:calc(573 * var(--u)) calc(543 * var(--u));background-repeat:no-repeat;pointer-events:none}
-.reference-photo-0{left:calc(56 * var(--u));top:calc(156 * var(--u));width:calc(67 * var(--u));height:calc(197 * var(--u));background-position:calc(-56 * var(--u)) calc(-156 * var(--u));clip-path:polygon(0 0,94% 23%,100% 100%,0 93%)}
-.reference-photo-1{left:calc(445 * var(--u));top:calc(40 * var(--u));width:calc(46 * var(--u));height:calc(151 * var(--u));background-position:calc(-445 * var(--u)) calc(-40 * var(--u));clip-path:polygon(100% 0,100% 85%,0 100%,0 25%)}
-.reference-photo-2{left:calc(366 * var(--u));top:calc(114 * var(--u));width:calc(50 * var(--u));height:calc(70 * var(--u));background-position:calc(-366 * var(--u)) calc(-114 * var(--u));clip-path:polygon(0 0,100% 16%,100% 100%,0 84%)}
-.reference-photo-3{left:calc(82 * var(--u));top:calc(365 * var(--u));width:calc(58 * var(--u));height:calc(83 * var(--u));background-position:calc(-82 * var(--u)) calc(-365 * var(--u));clip-path:polygon(0 0,100% 13%,100% 100%,0 89%)}
-.reference-photo-4{left:calc(485 * var(--u));top:calc(275 * var(--u));width:calc(47 * var(--u));height:calc(142 * var(--u));background-position:calc(-485 * var(--u)) calc(-275 * var(--u));clip-path:polygon(0 8%,100% 0,100% 100%,0 93%)}
+/* Five independent editorial media slots. Add reviewed source photographs via
+   individual CSS custom properties; no reference screenshot is rendered. */
+.reference-photo-planes{position:absolute;inset:0;pointer-events:none;z-index:2}
+.reference-photo{position:absolute;overflow:hidden;background:linear-gradient(135deg,#f6f5f3,#e5e4e1 55%,#f9f8f6);border:1px solid #e8e8e8;border-radius:3px;box-shadow:2px 4px 13px #b7bfcd34,-1px 0 2px #e8efff;transform-style:preserve-3d}
+.reference-photo::after{content:'';position:absolute;inset:0;background:linear-gradient(105deg,#ffffff7a,transparent 30%,#ffffff22 72%,#ffffff84);mix-blend-mode:screen}
+.reference-photo-0{left:calc(56 * var(--u));top:calc(156 * var(--u));width:calc(67 * var(--u));height:calc(197 * var(--u));clip-path:polygon(0 0,94% 23%,100% 100%,0 93%)}
+.reference-photo-1{left:calc(445 * var(--u));top:calc(40 * var(--u));width:calc(46 * var(--u));height:calc(151 * var(--u));clip-path:polygon(100% 0,100% 85%,0 100%,0 25%)}
+.reference-photo-2{left:calc(366 * var(--u));top:calc(114 * var(--u));width:calc(50 * var(--u));height:calc(70 * var(--u));clip-path:polygon(0 0,100% 16%,100% 100%,0 84%)}
+.reference-photo-3{left:calc(82 * var(--u));top:calc(365 * var(--u));width:calc(58 * var(--u));height:calc(83 * var(--u));clip-path:polygon(0 0,100% 13%,100% 100%,0 89%)}
+.reference-photo-4{left:calc(485 * var(--u));top:calc(275 * var(--u));width:calc(47 * var(--u));height:calc(142 * var(--u));clip-path:polygon(0 8%,100% 0,100% 100%,0 93%)}
+.reference-photo img{display:block;width:100%;height:100%;object-fit:cover}
 .reference-wordmark svg{display:block;width:calc(105 * var(--u));height:calc(40 * var(--u));color:#111217;fill:currentColor}
 .reference-required-controls p{margin:4px 0;font-size:11px}
 .reference-required-controls{margin-top:6px}
