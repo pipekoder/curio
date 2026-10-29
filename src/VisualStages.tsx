@@ -36,10 +36,10 @@ export function VisualReader({edition,pool,headingRef,onStory,onCollect,onRefine
  return <><section className="visual-stage visual-reader" aria-label="Read and explore" data-asset-id={ad.image.id}>
   <header className="visual-stage-label"><span>03</span><div>Read &amp; Explore<small>Tap a detail to discover more</small></div></header>
   <div className="visual-reader-intro"><span>{ad.category==='home'?'Objects':ad.category==='travel'?'Places':'Style'}</span><h2 ref={headingRef} tabIndex={-1}>{feature.headline}</h2><p>{feature.narrative}</p></div>
-  <div className="visual-reader-back-photo"><img src={media('read/16_read_chair.png')} alt="Owner-provided editorial photograph of a sculptural chair"/></div>
+  <div className="visual-reader-back-photo"><img src={media('read/16_read_chair.png')} alt="Owner-provided editorial image of a sculptural chair"/></div>
   <div className="visual-reader-image"><LivingAdvertisement key={ad.image.id} ad={ad} eager onExploreStory={(next,subject,relationship)=>onStory(next,{detail:subject,relationship})}/></div>
   <aside className="visual-reader-context"><span>Visual detail</span><strong>{object?.label??'Look closer'}</strong><img src={media('read/12_boucle_fabric_detail.png')} alt="Owner-provided close-up of fabric"/><small>Photograph only; material identity is unverified.</small></aside>
-  <div className="visual-reader-photo-rail" aria-label="Related editorial photographs"><img src={media('read/08_ochre_lounge_chair.png')} alt="Sculptural chair study"/><img src={media('read/17_read_soft_furnishing.png')} alt="Soft furnishing study"/><img src={media('read/18_read_portrait.png')} alt="Portrait study"/></div>
+  <div className="visual-reader-photo-rail" aria-label="Related editorial images"><img src={media('read/08_ochre_lounge_chair.png')} alt="Sculptural chair study"/><img src={media('read/17_read_soft_furnishing.png')} alt="Soft furnishing study"/><img src={media('read/18_read_portrait.png')} alt="Portrait study"/></div>
   <div className="visual-reader-details" role="group" aria-label="Explore annotated details">{ad.discoverableObjects.map(o=><button key={o.id} aria-pressed={detail===o.id} onClick={()=>setDetail(o.id)}>{o.label}</button>)}</div>
   <div className="visual-reader-caption"><strong>{ad.name}</strong><small>{ad.provenance.attribution}</small><p>{detail&&object?object.description:ad.description}</p><button onClick={()=>onStory(ad)} aria-label={`Open ${ad.name} story`}>→</button></div>
   <nav className="visual-reader-pages" aria-label="Edition pages">{features.map(({ad:next},i)=><button key={next.image.id} aria-current={ad.image.id===next.image.id?'page':undefined} onClick={()=>{setSelected(next.image.id);setDetail(null)}}><span>{String(i+1).padStart(2,'0')}</span><CatalogImage ad={next}/></button>)}</nav>
@@ -55,8 +55,8 @@ export function VisualJourney({story,related,topic,onRelated,onFollow,onCollect}
   <header className="visual-stage-label"><span>04</span><div>Curiosity Journey<small>Explore connections across objects, places, people and ideas</small></div></header>
   <svg className="journey-orbits" viewBox="0 0 853 475" aria-hidden="true"><ellipse cx="407" cy="257" rx="333" ry="125"/><ellipse cx="406" cy="257" rx="260" ry="175" transform="rotate(-17 406 257)"/><path d="M52 221C158 127 286 139 423 242S663 336 765 158M82 351C282 225 504 214 773 342"/></svg>
   <article className="journey-center"><CatalogImage ad={story} eager/><div><strong>{story.name}</strong><small>{story.provenance.attribution}</small></div></article>
-  <div className="journey-plane journey-people"><img src={media('journey/06_coffee_ritual.png')} alt="Owner-provided coffee ritual photograph"/><span>Rituals</span></div>
-  <div className="journey-plane journey-place"><img src={media('journey/09_coastal_architecture.png')} alt="Owner-provided coastal architecture photograph"/><span>Places</span></div>
+  <div className="journey-plane journey-people"><img src={media('journey/06_coffee_ritual.png')} alt="Owner-provided coffee ritual image"/><span>Rituals</span></div>
+  <div className="journey-plane journey-place"><img src={media('journey/09_coastal_architecture.png')} alt="Owner-provided coastal architecture image"/><span>Places</span></div>
   <div className="journey-plane journey-arch"><img src={media('journey/19_journey_arched_space.png')} alt="Arched space study"/><span>Spaces</span></div>
   <div className="journey-plane journey-room"><img src={media('journey/20_journey_living_room.png')} alt="Living room study"/><span>Rooms</span></div>
   <div className="journey-plane journey-objects"><img src={media('journey/21_journey_objects.png')} alt="Object still life"/><span>Objects</span></div>
@@ -72,7 +72,7 @@ export function VisualCollect({savedCount,current,onDiscover,onOpen,onRemove}: {
   <header className="visual-stage-label"><span>05</span><div>Collect<small>Save and curate your discoveries</small></div></header>
   <div className="collect-heading"><h2>My<br/>Collection</h2><p>{savedCount} {savedCount===1?'item':'items'}</p><button onClick={onDiscover} aria-label="Return to Discover">＋</button></div>
   <svg className="collect-rings" viewBox="0 0 678 475" aria-hidden="true"><ellipse cx="344" cy="350" rx="295" ry="36"/><ellipse cx="344" cy="350" rx="235" ry="29"/><ellipse cx="344" cy="350" rx="178" ry="22"/></svg>
-  <div className="collect-plane collect-back"><img src={media('collect/04_limestone_texture.png')} alt="Owner-provided limestone texture photograph"/></div>
+  <div className="collect-plane collect-back"><img src={media('collect/04_limestone_texture.png')} alt="Owner-provided limestone texture image"/></div>
   <div className="collect-plane collect-far-left"><img src={media('collect/23_collect_tabletop.png')} alt="Tabletop editorial study"/></div>
   <div className="collect-plane collect-left"><img src={media('collect/24_collect_chair.png')} alt="Chair editorial study"/></div>
   <div className="collect-plane collect-right"><img src={media('collect/25_collect_dining.png')} alt="Dining room editorial study"/></div>
