@@ -1,3 +1,4 @@
+import { DiscoverPreview } from './DiscoverPreview';
 import { ReaderCatalogContext } from './ReaderCatalog';
 import { loadReaderItems } from './load-reader-catalog';
 import { readerApprovals } from '../shared/reader-catalog';
@@ -23,7 +24,7 @@ import LivingAdvertisement from "./LivingAdvertisement";
 import CatalogImage from "./CatalogImage";
 import Attribution from "./Attribution";
 const STORAGE = "curio.collection.v1";
-export default function EditorialExperience() {
+export default function EditorialExperience({discoverReview=false}:{discoverReview?:boolean}) {
   const [readerCatalog,setReaderCatalog]=useState({items:staticCatalog,approvals:approvedExternalAssets});
   const curationCatalog=readerCatalog.items;
   const readerApprovalsCurrent=readerCatalog.approvals;
@@ -250,6 +251,7 @@ export default function EditorialExperience() {
       className="editorial-experience"
       aria-labelledby="personal-edition"
     >
+      {discoverReview ? <DiscoverPreview prompt={prompt} consent={consent} busy={busy} error={promptError} promptRef={promptInput} onPrompt={value=>{setPrompt(value);setConsent(false);setPromptError("")}} onConsent={setConsent} onSubmit={()=>{void create()}} onCollection={()=>setPanel("collection")} /> : <>
       <div className="edition-intro">
         <p className="eyebrow">FROM ADVERTISING TO DISCOVERY</p>
         <div className="opening-copy">
@@ -306,8 +308,9 @@ export default function EditorialExperience() {
           {busy ? "Composing your issue…" : "Generate magazine →"}
         </button>
         <p role="status" className="edition-status">{message || "Start with your own words. Only authorized imagery appears in your edition."}</p>
-      </form>
-      {edition && (
+      </form></>}
+      {discoverReview && edition && <p className="discover-result" role="status">{edition.source === "meta" ? "Your validated edition is ready." : "Your authored edition is ready · AI not used."} Discover review only; the next screens await visual approval.</p>}
+      {!discoverReview && edition && (
         <div
           className={`personal-edition direction-${editionMode.toLowerCase().replaceAll(" ", "-")}`}
           aria-label="Personalized editorial edition"

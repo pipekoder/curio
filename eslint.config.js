@@ -42,6 +42,7 @@ export default ts.config(
       "scripts/editorial-validation-smoke.mjs",
       "scripts/production-review.mjs",
       "src/EditorialExperience.tsx",
+      "src/DiscoverPreview.tsx",
       "src/App.tsx",
       "tests/editorial*.ts",
       "tests/demo-readiness.spec.ts",

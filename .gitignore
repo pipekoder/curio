@@ -157,3 +157,6 @@ vite.config.ts.timestamp-*
 # Browser verification artifacts
 test-results/
 playwright-report/
+
+# Owner-supplied photo atlas: non-production visual-review upload only.
+/public/preview-private/

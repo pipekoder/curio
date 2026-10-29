@@ -1,0 +1,26 @@
+import {chromium} from '@playwright/test'
+import {mkdir,writeFile} from 'node:fs/promises'
+const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH})
+await mkdir('test-results/discover-photo-review',{recursive:true})
+try{
+ for(const width of [573,390]){
+  const context=await browser.newContext({viewport:{width,height:width===573?543:844},hasTouch:width===390,reducedMotion:'reduce'})
+  const page=await context.newPage();let metaCalls=0;page.on('request',r=>{if(new URL(r.url()).hostname==='api.meta.ai')metaCalls++})
+  await page.goto('http://127.0.0.1:4188/',{waitUntil:'networkidle'})
+  const canvas=page.locator('.reference-discover')
+  if(await page.locator('.reference-photo').count()!==5)throw Error('Missing real photographic planes')
+  const photo=await page.request.get('http://127.0.0.1:4188/preview-private/discover-reference.png');if(!photo.ok())throw Error('Photo asset unavailable')
+  if(width===573)await canvas.screenshot({path:'test-results/discover-photo-review/desktop-573x543.png'})
+  else await page.screenshot({path:'test-results/discover-photo-review/mobile-390.png',fullPage:true})
+  await page.getByRole('button',{name:'Modern ceramic design',exact:true}).click()
+  if(await page.getByLabel('Your discovery prompt').inputValue()!=='Modern ceramic design')throw Error('Preset did not populate the real prompt')
+  await page.getByLabel('Your discovery prompt').fill('A quiet magazine about home lighting')
+  await page.getByRole('button',{name:'Generate magazine',exact:true}).click()
+  await page.locator('.discover-result').filter({hasText:'AI not used'}).waitFor()
+  if(await page.locator('.personal-edition,.reference-reader').count()!==0)throw Error('Another screen was started')
+  if(metaCalls)throw Error('Unexpected inference')
+  await writeFile(`test-results/discover-photo-review/interaction-${width}.json`,JSON.stringify({width,realFrontend:true,suggestionsWork:true,realSubmission:true,authoredFallback:true,otherScreensRendered:false,metaCalls,photography:'supplied Reference 1 plane regions; visual-review only'},null,2))
+  await context.close()
+ }
+ console.log('PASS: actual photography, real prompt/preset/submission and consent-default fallback; no next screens, no Meta calls')
+}finally{await browser.close()}
