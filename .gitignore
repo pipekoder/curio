@@ -158,5 +158,5 @@ vite.config.ts.timestamp-*
 test-results/
 playwright-report/
 
-# Owner-supplied photo atlas: non-production visual-review upload only.
+# Private visual reference files; never copy reference screenshots into public assets.
 /public/preview-private/
