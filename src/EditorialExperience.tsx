@@ -171,7 +171,7 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
     if(discoverReview){
       setVisualScreen('assemble');
       if(assemblyTimer.current)clearTimeout(assemblyTimer.current);
-      const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const reduce=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches??false;
       assemblyTimer.current=setTimeout(()=>{if(requestId.current===id)setVisualScreen('read')},reduce?0:600);
     }
     setMessage(
