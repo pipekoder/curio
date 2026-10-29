@@ -47,3 +47,16 @@
 .gen-plane-right{background:linear-gradient(110deg,#ffffffc4,#dfe7f378 45%,#ffffff68);backdrop-filter:blur(6px)}
 @media(max-width:640px){.reference-prototype .discovery-dialog{padding:0 10px 30px}.reference-prototype .discovery-dialog>.dialog-close{top:auto;bottom:12px;right:12px}.visual-journey,.visual-collect{width:100%;min-height:520px;aspect-ratio:auto}.journey-orbits,.collect-rings{height:45%}.journey-themes{top:44%;right:4%;width:42%;gap:4px}.journey-themes button{font-size:12px;min-height:38px}.journey-collect{bottom:10%;left:4%;font-size:12px}.collect-heading{top:70px}.collect-back,.collect-front{top:170px}.collect-axis{bottom:42px;font-size:9px;word-spacing:.4em}}
 .collect-front>div{display:grid;grid-template-columns:1fr 1fr;gap:4px}.collect-front>div strong,.collect-front>div small{grid-column:1/-1}.collect-front>div button{border:1px solid #d3ddef;border-radius:12px;background:#fff9;color:#4b586c;font-size:calc(8 * var(--u));min-height:24px}
+/* Let the photo volume remain visible through the translucent issue cover. */
+.gen-plane-back{left:calc(237 * var(--u));width:calc(130 * var(--u))}
+.visual-gen-cover{background:linear-gradient(110deg,#ffffffe0 0%,#ffffffaf 46%,#ffffff90 72%,#ffffffc9 100%);box-shadow:inset 0 0 12px #fff,3px 12px 25px #8aa0d04d}
+.visual-generate::after{content:'';position:absolute;left:20%;right:20%;bottom:18%;height:7%;border:2px solid #becbffb8;border-radius:50%;box-shadow:0 0 18px #c1ccff,0 0 6px #d6f3ff inset;pointer-events:none;z-index:0}
+/* The approved chair photograph carries the image hierarchy; actual annotated
+   catalog pixels and hotspots stay paired in the smaller foreground reading plane. */
+.visual-reader-back-photo{left:calc(135 * var(--u));width:calc(270 * var(--u));z-index:2}
+.visual-reader-image{left:calc(78 * var(--u));top:calc(270 * var(--u));width:calc(198 * var(--u));z-index:5}
+.visual-reader-image .catalog-figure img{height:calc(112 * var(--u))}
+.visual-reader-image .decoder-disclosure{display:none}
+.visual-reader-details{left:calc(284 * var(--u));top:calc(290 * var(--u));max-width:calc(97 * var(--u))}
+.visual-reader-caption{top:calc(392 * var(--u))}
+.visual-reader-back-photo{left:calc(165 * var(--u));width:calc(240 * var(--u))}
