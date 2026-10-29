@@ -47,7 +47,7 @@ it("composes a local edition after a network failure without granting AI consent
   fireEvent.change(screen.getByLabelText("Your discovery prompt"), { target: { value: "paper lamps and quiet reading rooms" } });
   fireEvent.click(screen.getByRole("button", { name: /Generate magazine/ }));
   expect(
-    await screen.findByRole("heading", { name: "The art of quiet rooms" }),
+    await screen.findByRole("region", { name: "Read and explore" }),
   ).toBeTruthy();
   expect(JSON.parse(String(send.mock.calls[0][1]?.body)).consent).toBe(false);
 });
@@ -58,9 +58,8 @@ it("blocks duplicate composition while a request is pending", async () => {
   render(<App />);
   fireEvent.change(screen.getByLabelText("Your discovery prompt"), { target: { value: "paper lamps and quiet reading rooms" } });
   fireEvent.click(screen.getByRole("button", { name: /Generate magazine/ }));
-  const busy = screen.getByRole("button", { name: "Composing your issue…" });
-  expect(busy).toHaveProperty("disabled", true);
-  fireEvent.click(busy);
+  expect(screen.getByRole("region", { name: "Composing your magazine" }).getAttribute("aria-busy")).toBe("true");
+  expect(screen.queryByRole("button", { name: /Generate magazine/ })).toBeNull();
   expect(send).toHaveBeenCalledOnce();
 });
 it("rejects unsupported AI copy in successful responses and renders a safe authored edition", async () => {
@@ -86,7 +85,7 @@ it("rejects unsupported AI copy in successful responses and renders a safe autho
   fireEvent.change(screen.getByLabelText("Your discovery prompt"), { target: { value: "paper lamps and quiet reading rooms" } });
   fireEvent.click(screen.getByRole("button", { name: /Generate magazine/ }));
   expect(
-    await screen.findByRole("heading", { name: "The art of quiet rooms" }),
+    await screen.findByRole("region", { name: "Read and explore" }),
   ).toBeTruthy();
   expect(
     screen.queryByText("Acme manufactures this object from titanium."),

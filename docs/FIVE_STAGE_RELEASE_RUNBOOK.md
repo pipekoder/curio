@@ -9,7 +9,7 @@ npm ci
 npm run typecheck
 npm run lint
 npm test
-VITE_DISCOVER_REVIEW=true npm run build
+npm run build
 npm run worker:check
 npm run test:integration
 CHROMIUM_PATH=/usr/bin/chromium npm run test:browser
@@ -17,10 +17,10 @@ npx wrangler whoami
 npx wrangler deployments list --name curio --json
 ```
 
-The UI is currently opt-in at **build time**: a release build requires `VITE_DISCOVER_REVIEW=true`. Do not set `MAGAZINE_AI_ENABLED=true` or `CATALOG_OPERATOR_ENABLED=true` as part of this UI release. After merge and a separate explicit deployment approval, from the approved main commit and correct Cloudflare account:
+The five-stage UI is the default at `/` in a normal build; no Vite environment variable or query parameter is required. Do not set `MAGAZINE_AI_ENABLED=true` or `CATALOG_OPERATOR_ENABLED=true` as part of this UI release. After merge and a separate explicit deployment approval, from the approved main commit and correct Cloudflare account:
 
 ```sh
-VITE_DISCOVER_REVIEW=true npm run deploy
+npm run deploy
 npx wrangler deployments list --name curio --json
 ```
 
