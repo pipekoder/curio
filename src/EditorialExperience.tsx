@@ -205,10 +205,6 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
     ]);
     setMessage("Saved to your collection.");
   }
-  function collectAndOpen(ad: CatalogItem, kind: CollectionRecord["kind"]) {
-    save(ad, kind);
-    if (saved.length < 60 || saved.some(s => s.assetId === ad.image.id && s.kind === kind)) setPanel("collection");
-  }
   function openStory(ad: CatalogItem, thread: { detail: string; relationship: string } | null = null) {
     setVisualThread(thread);
     branchId.current++;
@@ -269,7 +265,7 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
       className="editorial-experience"
       aria-labelledby="personal-edition"
     >
-      {discoverReview ? busy ? <VisualGenerate prompt={prompt} consent={consent}/> : visualScreen==='read'&&edition ? <VisualReader edition={edition} pool={curationCatalog} headingRef={editionHeading} onStory={(ad,thread)=>openStory(ad,thread??null)} onCollect={ad=>collectAndOpen(ad,'image')} onCollection={()=>setPanel('collection')} onRefine={()=>{setVisualScreen('discover');requestAnimationFrame(()=>promptInput.current?.focus())}}/> : <DiscoverPreview prompt={prompt} consent={consent} busy={busy} error={promptError} promptRef={promptInput} onPrompt={value=>{setPrompt(value);setConsent(false);setPromptError("")}} onConsent={setConsent} onSubmit={()=>{void create()}} onCollection={()=>setPanel("collection")} /> : <>
+      {discoverReview ? busy ? <VisualGenerate prompt={prompt} consent={consent}/> : visualScreen==='read'&&edition ? <VisualReader edition={edition} pool={curationCatalog} headingRef={editionHeading} onStory={(ad,thread)=>openStory(ad,thread??null)} onCollect={ad=>save(ad,'image')} onCollection={()=>setPanel('collection')} saveMessage={message.includes('collection')?message:storageError} onRefine={()=>{setVisualScreen('discover');requestAnimationFrame(()=>promptInput.current?.focus())}}/> : <DiscoverPreview prompt={prompt} consent={consent} busy={busy} error={promptError} promptRef={promptInput} onPrompt={value=>{setPrompt(value);setConsent(false);setPromptError("")}} onConsent={setConsent} onSubmit={()=>{void create()}} onCollection={()=>setPanel("collection")} /> : <>
       <div className="edition-intro">
         <p className="eyebrow">FROM ADVERTISING TO DISCOVERY</p>
         <div className="opening-copy">
@@ -447,7 +443,7 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
         }}
         aria-label={story ? `${story.name} story` : "Your collection"}
       >
-        {discoverReview&&story&&<VisualJourney story={story} related={related} topic={topic} onRelated={next=>openStory(next)} onFollow={theme=>{void follow(story,theme)}} onCollect={()=>collectAndOpen(story,'story')}/>}
+        {discoverReview&&story&&<VisualJourney story={story} related={related} topic={topic} onRelated={next=>openStory(next)} onFollow={theme=>{void follow(story,theme)}} onCollect={()=>save(story,'story')}/>}
         {discoverReview&&panel==='collection'&&<VisualCollect savedCount={saved.length} current={curationCatalog.find(a=>a.image.id===saved.at(-1)?.assetId)??null} onDiscover={()=>{setPanel(null);setVisualScreen('discover');requestAnimationFrame(()=>promptInput.current?.focus())}} onOpen={()=>{const ad=curationCatalog.find(a=>a.image.id===saved.at(-1)?.assetId);if(ad)openStory(ad)}} onRemove={()=>persist(saved.slice(0,-1))}/>}
         <button
           className="dialog-close"
@@ -610,6 +606,8 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
                 ? "Story collected"
                 : "Collect story"}
             </button>
+            {discoverReview&&<button onClick={()=>setPanel('collection')}>Open collection</button>}
+            {discoverReview&&message.includes('collection')&&<p role="status">{message}</p>}
           </>
         )}
         {panel === "collection" && (
