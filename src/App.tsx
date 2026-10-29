@@ -1,7 +1,8 @@
 import EditorialExperience from "./EditorialExperience";
 export default function App() {
+  const referencePrototype = new URLSearchParams(window.location.search).get("prototype") === "reference";
   return (
-    <main className="page primary-reader">
+    <main className={`page primary-reader${referencePrototype ? " reference-prototype" : ""}`}>
       <a className="skip-link" href="#discovery-prompt">
         Skip to magazine prompt
       </a>
@@ -12,7 +13,7 @@ export default function App() {
         <span>A JOURNAL FOR THE CURIOUS</span>
         <a href="#discovery-prompt">Create an edition →</a>
       </header>
-      <EditorialExperience />
+      <EditorialExperience referencePrototype={referencePrototype} />
       <footer>
         <strong>curio.</strong>
         <span>

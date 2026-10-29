@@ -1,3 +1,4 @@
+import { ReferenceDiscover, ReferenceReader } from './ReferencePrototype';
 import { ReaderCatalogContext } from './ReaderCatalog';
 import { loadReaderItems } from './load-reader-catalog';
 import { readerApprovals } from '../shared/reader-catalog';
@@ -23,7 +24,7 @@ import LivingAdvertisement from "./LivingAdvertisement";
 import CatalogImage from "./CatalogImage";
 import Attribution from "./Attribution";
 const STORAGE = "curio.collection.v1";
-export default function EditorialExperience() {
+export default function EditorialExperience({referencePrototype=false}:{referencePrototype?:boolean}) {
   const [readerCatalog,setReaderCatalog]=useState({items:staticCatalog,approvals:approvedExternalAssets});
   const curationCatalog=readerCatalog.items;
   const readerApprovalsCurrent=readerCatalog.approvals;
@@ -250,6 +251,7 @@ export default function EditorialExperience() {
       className="editorial-experience"
       aria-labelledby="personal-edition"
     >
+      {referencePrototype ? <ReferenceDiscover prompt={prompt} consent={consent} busy={busy} error={promptError} promptRef={promptInput} items={editorialDemoCatalog} onPrompt={value=>{setPrompt(value);setConsent(false);setPromptError("")}} onConsent={setConsent} onSubmit={()=>{void create()}} onCollection={()=>setPanel("collection")} /> : <>
       <div className="edition-intro">
         <p className="eyebrow">FROM ADVERTISING TO DISCOVERY</p>
         <div className="opening-copy">
@@ -306,8 +308,8 @@ export default function EditorialExperience() {
           {busy ? "Composing your issue…" : "Generate magazine →"}
         </button>
         <p role="status" className="edition-status">{message || "Start with your own words. Only authorized imagery appears in your edition."}</p>
-      </form>
-      {edition && (
+      </form></>}
+      {edition && (referencePrototype ? <ReferenceReader key={JSON.stringify(edition.plan.features.map(f=>f.assetId))} edition={edition} pool={curationCatalog} headingRef={editionHeading} onStory={openStory} onCollect={ad=>save(ad,"image")} onRefine={()=>{promptInput.current?.scrollIntoView({block:"center"});promptInput.current?.focus()}} /> : (
         <div
           className={`personal-edition direction-${editionMode.toLowerCase().replaceAll(" ", "-")}`}
           aria-label="Personalized editorial edition"
@@ -417,7 +419,7 @@ export default function EditorialExperience() {
             );
           })}
         </div>
-      )}
+      ))}
       <dialog
         ref={dialog}
         className="discovery-dialog"
