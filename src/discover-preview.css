@@ -91,7 +91,7 @@
 /* The prompt library lives inside the approved Discover composition; orbital
    geometry, editorial photographs, and brand treatment remain untouched. */
 .reference-discover h1{top:calc(190 * var(--u));width:calc(230 * var(--u));left:calc(50% - 115 * var(--u));font-size:calc(27 * var(--u))}
-.prompt-library{position:absolute;inset:0;z-index:9;pointer-events:none;font-family:Arial,sans-serif}
+.prompt-library{position:absolute;inset:0;z-index:11;pointer-events:none;font-family:Arial,sans-serif}
 .prompt-library :is(button,input){pointer-events:auto}
 .prompt-library-sentence{position:absolute;top:calc(258 * var(--u));left:50%;transform:translateX(-50%);width:min(72%,calc(365 * var(--u)));min-height:calc(54 * var(--u));text-align:center;color:#333640;font:400 max(13px,calc(13 * var(--u)))/1.65 Georgia,'Times New Roman',serif;letter-spacing:.015em;text-wrap:balance}
 .prompt-library-slot{display:inline;border:0;border-bottom:1px solid #a8bce0;padding:0 2px;background:linear-gradient(transparent 68%,#dfeafea3 68%);font:inherit;letter-spacing:inherit;color:#345274;cursor:pointer;white-space:nowrap}
@@ -127,3 +127,11 @@
 }
 @media(prefers-reduced-motion:reduce){.prompt-library *{animation:none!important;transition:none!important}}
 @media(min-width:431px) and (max-width:700px){.reference-discover{min-height:543px;height:max(543px,100svh)}.prompt-library-tabs{gap:4px;width:94%;left:3%}.prompt-library-tabs button{font-size:9px;padding:5px 8px}}
+/* Keep editable words in the sentence rhythm; the site's 44px button default
+   otherwise makes three mobile lines collide with the action and prompt. */
+.prompt-library-slot{min-height:32px}
+@media(max-width:430px){
+ .prompt-library-sentence{width:82%;min-height:0}
+ .prompt-library-actions{top:380px}
+ .reference-discover .reference-prompt{top:440px}
+}
