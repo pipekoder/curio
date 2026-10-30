@@ -9,7 +9,7 @@ import { curationCatalog as catalog } from '../shared/catalog'
 import { boundedText, generateMagazine, GenerationError } from './meta'
 import { editorialApi } from './editorial'
 import { catalogApi, type CatalogBindings } from './catalog-api'
-import { mediaApi, publicMedia } from './media-api'
+import { mediaApi, mediaOperatorAuth, mediaRoot, publicMedia } from './media-api'
 export { InferenceBudget } from './budget'
 
 export type Bindings = CatalogBindings & {
@@ -32,6 +32,7 @@ export type Bindings = CatalogBindings & {
 const app = new Hono<{ Bindings: Bindings }>()
 app.use('/api/*', async (c, next) => { c.header('Cache-Control', 'no-store'); await next() })
 app.route('/api/operator/catalog', catalogApi)
+app.get('/api/operator/media/',mediaOperatorAuth,mediaRoot)
 app.route('/api/operator/media', mediaApi)
 app.route('/api/editorial', editorialApi)
 app.get('/api/media/:version', c => publicMedia(c.req.raw,c.env,c.req.param('version')))
