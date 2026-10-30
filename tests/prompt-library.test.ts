@@ -19,6 +19,15 @@ describe('curated prompt library',()=>{
   expect(composeLibraryPrompt(template,values)).toBe('Introduce me to ceramic studios in Tokyo with an emphasis on original design.')
   expect(cleanSlotValue('  light\t and\n space  ')).toBe('light and space')
  })
+ it('keeps maximum-length custom words inside the validated prompt contract',()=>{
+  const long='w'.repeat(70)
+  for(const template of promptTemplates){
+   const prompt=composeLibraryPrompt(template,Object.fromEntries(template.slots.map(slot=>[slot.id,long])))
+   expect(prompt.length).toBeLessThanOrEqual(1000)
+   expect(editorialPrompt.safeParse({prompt,consent:false}).success).toBe(true)
+   expect(()=>interpretEditorialPrompt({prompt,consent:false})).not.toThrow()
+  }
+ })
  it('keeps surprise directions tied to known slots and within prompt limits',()=>{
   for(const template of promptTemplates)for(const suggestion of template.surprise){
    expect(template.slots.some(slot=>slot.id===suggestion.slot)).toBe(true)
