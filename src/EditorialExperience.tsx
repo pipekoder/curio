@@ -25,10 +25,13 @@ import {VisualGenerate, VisualReader, VisualJourney, VisualCollect} from './Visu
 import CatalogImage from "./CatalogImage";
 import Attribution from "./Attribution";
 import {demoMediaFor,readerDemoCatalog} from './editorial-demo-media';
+import {isExplorePath,navigateExplore,readExploreEdition,storeExploreEdition} from './explore-route';
 const STORAGE = "curio.collection.v1";
 const localReaderCatalog = [...staticCatalog, ...readerDemoCatalog];
 export default function EditorialExperience({discoverReview=false}:{discoverReview?:boolean}) {
-  const [visualScreen,setVisualScreen]=useState<'discover'|'assemble'|'read'>('discover');
+  const [visualScreen,setVisualScreen]=useState<'discover'|'assemble'|'read'>(()=>isExplorePath(window.location.pathname)?'read':'discover');
+  const [exploreRoute,setExploreRoute]=useState(()=>isExplorePath(window.location.pathname));
+  const [restoringExplore,setRestoringExplore]=useState(()=>isExplorePath(window.location.pathname));
   const assemblyTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const [readerCatalog,setReaderCatalog]=useState({items:localReaderCatalog,approvals:approvedExternalAssets});
   const curationCatalog=readerCatalog.items;
@@ -62,6 +65,27 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
   const requestId = useRef(0),
     branchId = useRef(0);
   useEffect(()=>()=>{if(assemblyTimer.current)clearTimeout(assemblyTimer.current)},[]);
+  useEffect(()=>{
+    const sync=()=>{const explore=isExplorePath(window.location.pathname);setExploreRoute(explore);setVisualScreen(explore?'read':'discover');setRestoringExplore(explore&&!edition)};
+    window.addEventListener('popstate',sync);window.addEventListener('curio:route',sync);
+    return()=>{window.removeEventListener('popstate',sync);window.removeEventListener('curio:route',sync)};
+  },[edition]);
+  useEffect(()=>{
+    if(!discoverReview||!exploreRoute||edition)return;
+    const snapshot=readExploreEdition();if(!snapshot){setRestoringExplore(false);return}
+    let active=true;
+    const restore=async()=>{
+      try{
+        const ids=snapshot.plan.features.map(f=>f.assetId).filter(id=>/^version-[a-f0-9]{64}$/.test(id));
+        const published=ids.length?await loadReaderItems(ids):[];
+        const pool=[...localReaderCatalog,...published],approvals={...approvedExternalAssets,...readerApprovals(published)};
+        const selected=snapshot.plan.features.flatMap(f=>pool.filter(a=>a.id===f.catalogId&&a.image.id===f.assetId));
+        const plan=snapshot.source==='meta'?validateOriginalPlan(snapshot.plan,selected,snapshot.prefs,approvals):validatePlan(snapshot.plan,selected,approvals);
+        if(active){setReaderCatalog({items:pool,approvals});setPrefs(snapshot.prefs);setEditionMode(snapshot.prefs.mode);setEdition({plan,items:selected,source:snapshot.source,retrieval:snapshot.retrieval,cached:snapshot.cached});setRestoringExplore(false)}
+      }catch{if(active)setRestoringExplore(false)}
+    };
+    void restore();return()=>{active=false};
+  },[discoverReview,exploreRoute,edition]);
   useEffect(() => {
     let active=true;
     try {
@@ -167,12 +191,13 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
     setPrefs(preferences);
     setEditionMode(preferences.mode);
     setEdition(result);
+    if(discoverReview)storeExploreEdition(result,preferences);
     setBusy(false);
     if(discoverReview){
       setVisualScreen('assemble');
       if(assemblyTimer.current)clearTimeout(assemblyTimer.current);
       const reduce=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches??false;
-      assemblyTimer.current=setTimeout(()=>{if(requestId.current===id)setVisualScreen('read')},reduce?0:600);
+      assemblyTimer.current=setTimeout(()=>{if(requestId.current===id){setVisualScreen('read');navigateExplore('/explore')}},reduce?0:600);
     }
     setMessage(
       result.source === "meta"
@@ -284,9 +309,9 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
   return (
     <ReaderCatalogContext.Provider value={readerCatalog}><section
       className="editorial-experience"
-      aria-labelledby="personal-edition"
+      aria-labelledby={exploreRoute?'reader-heading':'personal-edition'}
     >
-      {discoverReview ? busy||visualScreen==='assemble' ? <VisualGenerate prompt={prompt} consent={consent} edition={visualScreen==='assemble'?edition:null}/> : visualScreen==='read'&&edition ? <VisualReader edition={edition} pool={curationCatalog} headingRef={editionHeading} onStory={(ad,thread)=>openStory(ad,thread??null)} onCollect={ad=>save(ad,'image')} onCollection={()=>setPanel('collection')} saveMessage={message.includes('collection')?message:storageError} onRefine={()=>{setVisualScreen('discover');requestAnimationFrame(()=>promptInput.current?.focus())}}/> : <DiscoverPreview prompt={prompt} consent={consent} busy={busy} error={promptError} promptRef={promptInput} onPrompt={value=>{setPrompt(value);setConsent(false);setPromptError("")}} onConsent={setConsent} onSubmit={()=>{void create()}} onCollection={()=>setPanel("collection")} /> : <>
+      {discoverReview ? busy||visualScreen==='assemble' ? <VisualGenerate prompt={prompt} consent={consent} edition={visualScreen==='assemble'?edition:null}/> : exploreRoute&&visualScreen==='read'&&edition ? <VisualReader edition={edition} pool={curationCatalog} headingRef={editionHeading} onStory={(ad,thread)=>openStory(ad,thread??null)} onCollect={ad=>save(ad,'image')} onCollection={()=>setPanel('collection')} saveMessage={message.includes('collection')?message:storageError} onRefine={()=>{navigateExplore('/');requestAnimationFrame(()=>promptInput.current?.focus())}}/> : exploreRoute ? <section className="explore-empty" aria-labelledby="reader-heading"><span>03 / READ &amp; EXPLORE</span><h1 id="reader-heading" tabIndex={-1}>{restoringExplore?'Opening your edition…':'Your next discovery begins with a prompt.'}</h1><p>{restoringExplore?'Checking the saved edition and its publication rights.':'This browser has no eligible edition to reopen. Create one to begin reading.'}</p>{!restoringExplore&&<button onClick={()=>{navigateExplore('/');requestAnimationFrame(()=>promptInput.current?.focus())}}>Shape your curiosity →</button>}</section> : <DiscoverPreview prompt={prompt} consent={consent} busy={busy} error={promptError} promptRef={promptInput} onPrompt={value=>{setPrompt(value);setConsent(false);setPromptError("")}} onConsent={setConsent} onSubmit={()=>{void create()}} onCollection={()=>setPanel("collection")} /> : <>
       <div className="edition-intro">
         <p className="eyebrow">FROM ADVERTISING TO DISCOVERY</p>
         <div className="opening-copy">
