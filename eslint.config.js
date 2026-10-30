@@ -37,7 +37,7 @@ export default ts.config(
       "worker/asset-retrieval.ts",
       "src/LivingAdvertisement.tsx",
       "tests/visual*.ts",
-      "worker/editorial.ts",
+      "worker/editorial*.ts",
       "scripts/editorial-live-check.mjs",
       "scripts/editorial-validation-smoke.mjs",
       "scripts/production-review.mjs",

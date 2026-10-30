@@ -75,7 +75,7 @@ export class MediaStore {
         this.db.prepare('INSERT INTO catalog_publications VALUES(?,?,?,?)').bind(versionId, JSON.stringify(catalog), 'media-studio-owner', stamp),
       ]
       await this.db.batch(statements)
-      return { assetId, versionId, filename: file.name, sha256: hash, width: image.width, height: image.height, mimeType: image.mime, imageType: 'editorial', r2Key: key, duplicate: false, aiAvailable: true, readerAvailable: true }
+      return { assetId, versionId, filename: file.name, sha256: hash, width: image.width, height: image.height, mimeType: image.mime, imageType: 'editorial', r2Key: key, duplicate: false, aiAvailable: true, readerAvailable: true, editorialReady:false }
     } catch (error) {
       // A concurrent upload of the same fingerprint may have committed after
       // our initial duplicate check. Never delete the object backing that row.
@@ -132,7 +132,9 @@ export class MediaStore {
   }
 
   async list() {
-    const media=(await this.db.prepare(`SELECT m.*,group_concat(DISTINCT p.product_id) AS product_ids,group_concat(DISTINCT b.brand_id) AS brand_ids,group_concat(DISTINCT c.campaign_id) AS campaign_ids FROM media_objects m LEFT JOIN media_product_images p ON p.version_id=m.version_id LEFT JOIN media_brand_images b ON b.version_id=m.version_id LEFT JOIN media_campaign_images c ON c.version_id=m.version_id GROUP BY m.version_id ORDER BY m.created_at DESC LIMIT 500`).all()).results
+    const media=(await this.db.prepare(`SELECT m.*,group_concat(DISTINCT p.product_id) AS product_ids,group_concat(DISTINCT b.brand_id) AS brand_ids,group_concat(DISTINCT c.campaign_id) AS campaign_ids,
+      EXISTS(SELECT 1 FROM media_product_images ready_link JOIN media_products ready_product ON ready_product.id=ready_link.product_id JOIN media_brands ready_brand ON ready_brand.id=ready_product.brand_id WHERE ready_link.version_id=m.version_id AND trim(ready_product.name)<>'' AND trim(ready_product.description)<>'' AND trim(ready_brand.name)<>'' AND (trim(ready_brand.story)<>'' OR trim(ready_brand.description)<>'')) AS editorial_ready
+      FROM media_objects m LEFT JOIN media_product_images p ON p.version_id=m.version_id LEFT JOIN media_brand_images b ON b.version_id=m.version_id LEFT JOIN media_campaign_images c ON c.version_id=m.version_id GROUP BY m.version_id ORDER BY m.created_at DESC LIMIT 500`).all()).results
     const brands=(await this.db.prepare('SELECT * FROM media_brands ORDER BY name LIMIT 500').all()).results, products=(await this.db.prepare('SELECT * FROM media_products ORDER BY name LIMIT 1000').all()).results, campaigns=(await this.db.prepare('SELECT * FROM media_campaigns ORDER BY name LIMIT 500').all()).results
     return {media,brands,products,campaigns,limits:{maxBytes:MEDIA_MAX_BYTES,accepted:['image/jpeg','image/png','image/webp']},inferenceTriggered:false}
   }

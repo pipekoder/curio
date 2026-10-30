@@ -1,9 +1,10 @@
 import {z} from 'zod'
 import {editorialPlan,editorialPreferences,type EditorialEdition,type EditorialPreferences} from '../shared/editorial'
+import {editorialSources} from '../shared/editorial-sources'
 
 const KEY='curio.explore.edition.v1'
 const MAX_AGE=6*60*60*1000
-const snapshot=z.strictObject({version:z.literal(1),savedAt:z.number(),plan:editorialPlan,prefs:editorialPreferences,source:z.enum(['meta','deterministic']),retrieval:z.enum(['d1','fictional']),cached:z.boolean()})
+const snapshot=z.strictObject({version:z.literal(1),savedAt:z.number(),plan:editorialPlan,prefs:editorialPreferences,source:z.enum(['meta','deterministic']),retrieval:z.enum(['d1','fictional']),cached:z.boolean(),editorialSources:editorialSources.default([])})
 export type ExploreSnapshot=z.infer<typeof snapshot>
 
 export function isExplorePath(path:string){return path==='/explore'||path==='/explore/'}
@@ -11,7 +12,7 @@ export function storeExploreEdition(edition:EditorialEdition,prefs:EditorialPref
  // Only the validated edition and non-text ranking settings need revalidation.
  // Do not retain the reader's original prompt or consent choice in browser storage.
  const safePrefs={...prefs,interests:'',consent:false}
- try {sessionStorage.setItem(KEY,JSON.stringify(snapshot.parse({version:1,savedAt:Date.now(),plan:edition.plan,prefs:safePrefs,source:edition.source,retrieval:edition.retrieval,cached:edition.cached})))} catch {/* Storage may be blocked; the in-memory edition remains usable. */}
+ try {sessionStorage.setItem(KEY,JSON.stringify(snapshot.parse({version:1,savedAt:Date.now(),plan:edition.plan,prefs:safePrefs,source:edition.source,retrieval:edition.retrieval,cached:edition.cached,editorialSources:edition.editorialSources??[]})))} catch {/* Storage may be blocked; the in-memory edition remains usable. */}
 }
 export function readExploreEdition():ExploreSnapshot|null {
  try {

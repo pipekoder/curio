@@ -10,6 +10,7 @@ import {mockUnderstanding,runClassification} from '../worker/asset-classifier'
 import {runDecoder} from '../worker/decoder'
 import {D1AssetRetriever} from '../worker/asset-retrieval'
 import app from '../worker/index'
+import {loadEditorialSources} from '../worker/editorial-sources'
 
 vi.setConfig({testTimeout:20000,hookTimeout:20000})
 let mf:Miniflare,db:D1Database,bucket:R2Bucket,store:MediaStore
@@ -28,8 +29,12 @@ it('persists exact R2 bytes, relationships and a permission-gated Reader publica
  expect(uploaded).toMatchObject({filename:file.name,mimeType:'image/png',aiAvailable:true,readerAvailable:true})
  expect(new Uint8Array(await (await bucket.get(uploaded.r2Key))!.arrayBuffer())).toEqual(new Uint8Array(bytes))
  await expect(store.upload(file,batchId)).rejects.toThrow(/already/)
+ const generic=await new D1AssetRetriever(db).retrieve({allocations:{home:100,fashion:0,travel:0},aesthetics:['Quiet Luxury'],tags:['mockup'],scope:'reader',publishedOnly:true,limit:10})
+ expect(generic.items.map(item=>item.version_id)).not.toContain(uploaded.versionId)
  const imported=await store.import({batchId,sourceText:'fixture',brands:[{name:'Northline Studio',story:'Fictional owner mockup brand.'}],products:[{brand:'Northline Studio',name:'Fold Chair',description:'A fictional folded chair concept.',category:'home',materials:['textile appearance'],price:1250,currency:'USD',imageFilenames:[file.name],lifestyleTags:['Scandinavian']}],campaigns:[]})
  expect(imported.products).toHaveLength(1)
+ const sources=await loadEditorialSources(db,[uploaded.versionId])
+ expect(sources).toEqual(expect.arrayContaining([expect.objectContaining({assetId:uploaded.versionId,kind:'brand_story',value:'Fictional owner mockup brand.',authority:'owner_supplied_mockup'}),expect.objectContaining({kind:'product_description',value:'A fictional folded chair concept.'})]))
  const listing=await store.list();expect(listing.media[0]).toMatchObject({image_type:'product',filename:file.name});expect(listing.inferenceTriggered).toBe(false)
  const published=await new CatalogPublications(db).list('',10,[uploaded.versionId]);expect(published.items).toHaveLength(1);expect(published.items[0]).toMatchObject({name:'Fold Chair',sourceType:'synthetic_concept',permissions:{display:{status:'approved'},aiAnalysis:{status:'approved'}}})
  expect((await db.prepare('SELECT COUNT(*) AS n FROM asset_analysis_jobs').first<{n:number}>())!.n).toBe(0)
