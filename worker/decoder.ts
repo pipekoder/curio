@@ -1,4 +1,5 @@
 import { curationCatalog, isPublishable, type CatalogItem } from '../shared/catalog'
+import { CatalogPublications, publicationApprovals } from './catalog-publications'
 import { bindSegmentation, decoderCommentary, type DecoderRequest } from '../shared/decoder'
 import type { Bindings } from './index'
 import { reserveInference } from './inference-budget'
@@ -28,24 +29,32 @@ const defaults: Dependencies = { catalog: curationCatalog, permits: samAssetPerm
 export async function runDecoder(request: DecoderRequest, env: Bindings, ip: string, dependencies: Partial<Dependencies> = {}) {
   const deps = { ...defaults, ...dependencies }
   if (env.SAM_DECODER_ENABLED !== 'true') throw new DecoderError('disabled', 503, 'Live SAM analysis is disabled.')
-  const ad = deps.catalog.find(item => item.id === request.adId)
+  const published=env.CATALOG_DB?await new CatalogPublications(env.CATALOG_DB).list('',1,[request.assetId]):{items:[]}
+  const ad = deps.catalog.find(item => item.id === request.adId)??published.items.find(item=>item.id===request.adId)
   if (!ad) throw new DecoderError('unknown_ad', 404, 'The selected catalog item is unavailable.')
   if (ad.image.id !== request.assetId) throw new DecoderError('stale_asset', 409, 'The image version changed. Reload before analysis.')
   const detail = ad.discoverableObjects.find(item => item.id === request.detailId)
   if (!detail) throw new DecoderError('unknown_detail', 400, 'The selected detail is not catalog-grounded.')
-  if (!isPublishable(ad) || ad.permissions.aiAnalysis.status !== 'approved' || !ad.permissions.aiAnalysis.evidence) throw new DecoderError('analysis_not_permitted', 403, 'This asset has no evidenced AI-analysis permission.')
-  // No external URL is ever fetched or passed to SAM by this implementation.
-  if (ad.image.externalUrl || !ad.image.path?.endsWith('.png')) throw new DecoderError('unsupported_media', 415, 'A separately approved bundled PNG is required for the first SAM test.')
+  const approvals=publicationApprovals(published.items),r2Permit=env.CATALOG_DB&&env.MEDIA_BUCKET?await (await import('./media-ai-adapter')).resolveR2MediaPermit(env.CATALOG_DB,request.assetId):null
+  if (!isPublishable(ad,approvals) || ad.permissions.aiAnalysis.status !== 'approved' || !ad.permissions.aiAnalysis.evidence) throw new DecoderError('analysis_not_permitted', 403, 'This asset has no evidenced AI-analysis permission.')
+  // Existing compiled fixtures use an exact bundled PNG permit. Content Studio
+  // assets use an exact active D1 version and private R2 object permit.
+  if (!r2Permit&&(ad.image.externalUrl || !ad.image.path?.endsWith('.png'))) throw new DecoderError('unsupported_media', 415, 'An exact approved bundled or private R2 image is required.')
   const permit = deps.permits[ad.image.id]
-  if (!permit || permit.assetId !== ad.image.id || permit.adId !== ad.id || permit.path !== ad.image.path || permit.width !== ad.image.width || permit.height !== ad.image.height || permit.analysisEvidence !== ad.permissions.aiAnalysis.evidence || env.SAM_LIVE_ASSET_ID !== ad.image.id) throw new DecoderError('asset_not_authorized', 403, 'This exact raster is not authorized for live analysis.')
+  if (!r2Permit&&(!permit || permit.assetId !== ad.image.id || permit.adId !== ad.id || permit.path !== ad.image.path || permit.width !== ad.image.width || permit.height !== ad.image.height || permit.analysisEvidence !== ad.permissions.aiAnalysis.evidence || env.SAM_LIVE_ASSET_ID !== ad.image.id)) throw new DecoderError('asset_not_authorized', 403, 'This exact raster is not authorized for live analysis.')
   const withCommentary = env.DECODER_COMMENTARY_ENABLED === 'true'
-  if (!env.META_API_KEY || env.META_SAM_MODEL !== 'sam-3.1' || (withCommentary && env.META_SPARK_MODEL !== 'muse-spark-1.3') || !env.ASSETS) throw new DecoderError('not_configured', 503, 'Decoder model or asset access is not configured.')
+  if (!env.META_API_KEY || env.META_SAM_MODEL !== 'sam-3.1' || (withCommentary && env.META_SPARK_MODEL !== 'muse-spark-1.3') || (!r2Permit&&!env.ASSETS)) throw new DecoderError('not_configured', 503, 'Decoder model or asset access is not configured.')
   if (ad.image.width > 4096 || ad.image.height > 4096 || ad.image.width * ad.image.height > 4000000) throw new DecoderError('unsupported_media', 415, 'The test raster exceeds the pixel limit.')
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 10000)
   try {
-    const media = await env.ASSETS.fetch(new Request(`https://local-assets.invalid${permit.path}`, { signal: controller.signal, redirect: 'manual' }))
-    if (!media.ok || !media.headers.get('Content-Type')?.includes('image/png')) throw new DecoderError('invalid_image', 415, 'Approved raster could not be loaded.')
+    if(r2Permit){
+      const imageDataUrl=await (await import('./media-ai-adapter')).readR2MediaData(env.MEDIA_BUCKET!,r2Permit,controller.signal)
+      let budget;try{budget=await deps.reserve(env,ip,withCommentary?2:1,ad.image.id)}catch{throw new DecoderError('protection_unavailable',503,'The safety budget is unavailable.')}
+      if(!budget.allowed)throw new DecoderError('throttled',429,'The shared inference limit has been reached.',budget.retryAfter)
+      const input:SamInput={ad,detailId:detail.id,concept:detail.label,imageDataUrl};const regions=bindSegmentation(await deps.sam(input,env.META_API_KEY,controller.signal),ad);const commentary=withCommentary&&regions.regions.length?decoderCommentary.parse(await deps.commentary(input,env.META_API_KEY,controller.signal)):null;return{segmentation:regions,commentary}
+    }
+    const media = await env.ASSETS!.fetch(new Request(`https://local-assets.invalid${permit.path}`, { signal: controller.signal, redirect: 'manual' }))
     // Bound bytes without decoding or modifying the image. Never use req URLs.
     const reader = media.body?.getReader(); if (!reader) throw new DecoderError('invalid_image', 415, 'Missing raster bytes.')
     const chunks: Uint8Array[] = []; let size = 0
