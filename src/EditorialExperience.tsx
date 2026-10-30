@@ -28,7 +28,8 @@ import {demoMediaFor,readerDemoCatalog} from './editorial-demo-media';
 const STORAGE = "curio.collection.v1";
 const localReaderCatalog = [...staticCatalog, ...readerDemoCatalog];
 export default function EditorialExperience({discoverReview=false}:{discoverReview?:boolean}) {
-  const [visualScreen,setVisualScreen]=useState<'discover'|'read'>('discover');
+  const [visualScreen,setVisualScreen]=useState<'discover'|'assemble'|'read'>('discover');
+  const assemblyTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const [readerCatalog,setReaderCatalog]=useState({items:localReaderCatalog,approvals:approvedExternalAssets});
   const curationCatalog=readerCatalog.items;
   const readerApprovalsCurrent=readerCatalog.approvals;
@@ -43,6 +44,7 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
   const [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
   const [visualThread, setVisualThread] = useState<{ detail: string; relationship: string } | null>(null);
+  const [journeyHistory,setJourneyHistory]=useState<{assetId:string;thread:{detail:string;relationship:string}|null;topic:string;related:CatalogItem[]}[]>([]);
   const [panel, setPanel] = useState<string | null>(null),
     [topic, setTopic] = useState(""),
     [related, setRelated] = useState<CatalogItem[]>([]);
@@ -59,6 +61,7 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
     editionHeading = useRef<HTMLHeadingElement>(null);
   const requestId = useRef(0),
     branchId = useRef(0);
+  useEffect(()=>()=>{if(assemblyTimer.current)clearTimeout(assemblyTimer.current)},[]);
   useEffect(() => {
     let active=true;
     try {
@@ -164,8 +167,13 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
     setPrefs(preferences);
     setEditionMode(preferences.mode);
     setEdition(result);
-    if(discoverReview)setVisualScreen('read');
     setBusy(false);
+    if(discoverReview){
+      setVisualScreen('assemble');
+      if(assemblyTimer.current)clearTimeout(assemblyTimer.current);
+      const reduce=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches??false;
+      assemblyTimer.current=setTimeout(()=>{if(requestId.current===id)setVisualScreen('read')},reduce?0:600);
+    }
     setMessage(
       result.source === "meta"
         ? "Your Muse Spark edition is ready."
@@ -205,7 +213,8 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
     ]);
     setMessage("Saved to your collection.");
   }
-  function openStory(ad: CatalogItem, thread: { detail: string; relationship: string } | null = null) {
+  function openStory(ad: CatalogItem, thread: { detail: string; relationship: string } | null = null, keepHistory=false) {
+    if(!keepHistory)setJourneyHistory([]);
     setVisualThread(thread);
     branchId.current++;
     setPanel(ad.id);
@@ -221,6 +230,18 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
         .filter((a,i,list)=>list.findIndex(next=>next.id===a.id)===i)
         .slice(0, 3),
     );
+  }
+  function openRelatedStory(ad:CatalogItem){
+    if(story)setJourneyHistory(previous=>[...previous,{assetId:story.image.id,thread:visualThread,topic,related}].slice(-8));
+    openStory(ad,{detail:story?.name??ad.name,relationship:'related Curio editorial study'},true);
+  }
+  function returnToPreviousStory(){
+    const previous=journeyHistory.at(-1);
+    if(!previous)return;
+    const item=curationCatalog.find(ad=>ad.image.id===previous.assetId);
+    if(!item)return;
+    setJourneyHistory(history=>history.slice(0,-1));
+    setPanel(item.id);setVisualThread(previous.thread);setTopic(previous.topic);setRelated(previous.related);
   }
   async function follow(ad: CatalogItem, theme: string) {
     setTopic(theme);
@@ -265,7 +286,7 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
       className="editorial-experience"
       aria-labelledby="personal-edition"
     >
-      {discoverReview ? busy ? <VisualGenerate prompt={prompt} consent={consent}/> : visualScreen==='read'&&edition ? <VisualReader edition={edition} pool={curationCatalog} headingRef={editionHeading} onStory={(ad,thread)=>openStory(ad,thread??null)} onCollect={ad=>save(ad,'image')} onCollection={()=>setPanel('collection')} saveMessage={message.includes('collection')?message:storageError} onRefine={()=>{setVisualScreen('discover');requestAnimationFrame(()=>promptInput.current?.focus())}}/> : <DiscoverPreview prompt={prompt} consent={consent} busy={busy} error={promptError} promptRef={promptInput} onPrompt={value=>{setPrompt(value);setConsent(false);setPromptError("")}} onConsent={setConsent} onSubmit={()=>{void create()}} onCollection={()=>setPanel("collection")} /> : <>
+      {discoverReview ? busy||visualScreen==='assemble' ? <VisualGenerate prompt={prompt} consent={consent} edition={visualScreen==='assemble'?edition:null}/> : visualScreen==='read'&&edition ? <VisualReader edition={edition} pool={curationCatalog} headingRef={editionHeading} onStory={(ad,thread)=>openStory(ad,thread??null)} onCollect={ad=>save(ad,'image')} onCollection={()=>setPanel('collection')} saveMessage={message.includes('collection')?message:storageError} onRefine={()=>{setVisualScreen('discover');requestAnimationFrame(()=>promptInput.current?.focus())}}/> : <DiscoverPreview prompt={prompt} consent={consent} busy={busy} error={promptError} promptRef={promptInput} onPrompt={value=>{setPrompt(value);setConsent(false);setPromptError("")}} onConsent={setConsent} onSubmit={()=>{void create()}} onCollection={()=>setPanel("collection")} /> : <>
       <div className="edition-intro">
         <p className="eyebrow">FROM ADVERTISING TO DISCOVERY</p>
         <div className="opening-copy">
@@ -443,7 +464,7 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
         }}
         aria-label={story ? `${story.name} story` : "Your collection"}
       >
-        {discoverReview&&story&&<VisualJourney story={story} related={related} topic={topic} onRelated={next=>openStory(next)} onFollow={theme=>{void follow(story,theme)}} onCollect={()=>save(story,'story')}/>}
+        {discoverReview&&story&&<VisualJourney story={story} related={related} topic={topic} origin={visualThread?.detail} canReturn={journeyHistory.length>0} onReturn={returnToPreviousStory} onRelated={openRelatedStory} onFollow={theme=>{void follow(story,theme)}} onCollect={()=>save(story,'story')}/>}
         {discoverReview&&panel==='collection'&&<VisualCollect savedCount={saved.length} current={curationCatalog.find(a=>a.image.id===saved.at(-1)?.assetId)??null} onDiscover={()=>{setPanel(null);setVisualScreen('discover');requestAnimationFrame(()=>promptInput.current?.focus())}} onOpen={()=>{const ad=curationCatalog.find(a=>a.image.id===saved.at(-1)?.assetId);if(ad)openStory(ad)}} onRemove={()=>persist(saved.slice(0,-1))}/>}
         <button
           className="dialog-close"
