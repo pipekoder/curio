@@ -97,9 +97,10 @@ export async function runClassification(input: unknown, env: Bindings, ip: strin
   const r = classificationRequest.parse(input), store = new AssetStore(env.CATALOG_DB!), deps: Dependencies = { permits: analysisMediaPermits, media: readAnalysisImage, classify: classifyWithMeta, reserve: reserveInference, ...overrides }
   const row = await store.version(r.versionId)
   if (!row || row.archived_at || row.latest_version !== row.id) throw new CatalogConflict('Unknown, archived or stale image version.')
+  const r2Permit = env.MEDIA_BUCKET ? await (await import('./media-ai-adapter')).resolveR2MediaPermit(env.CATALOG_DB!,row.id) : null
   if (r.mode === 'meta') {
     if (env.ASSET_AI_ENABLED !== 'true' || env.META_SPARK_MODEL !== 'muse-spark-1.3' || !env.META_API_KEY) throw new AssetAnalysisError('asset_ai_disabled_or_unconfigured',503)
-    if (!mediaReadiness(row,deps.permits).ready) throw new AssetAnalysisError('analysis_not_authorized',403)
+    if (!r2Permit && !mediaReadiness(row,deps.permits).ready) throw new AssetAnalysisError('analysis_not_authorized',403)
   }
   const fingerprint = r.mode === 'meta' ? row.sha256 : null
   const cacheKey = await catalogDigest(JSON.stringify([row.id,fingerprint,ANALYSIS_SPEC,'muse-spark-1.3',r.mode,row.analysis_revision]))
@@ -117,9 +118,12 @@ export async function runClassification(input: unknown, env: Bindings, ip: strin
     let result: Understanding
     if (r.mode === 'mock') result = mockUnderstanding(row.id)
     else {
-      const data = await deps.media(deps.permits[row.id],controller.signal,env.ASSETS)
+      const data = r2Permit
+        ? await (await import('./media-ai-adapter')).readR2MediaData(env.MEDIA_BUCKET!,r2Permit,controller.signal)
+        : await deps.media(deps.permits[row.id],controller.signal,env.ASSETS)
       const current = await store.version(row.id)
-      if (!current || !mediaReadiness(current,deps.permits).ready || current.analysis_revision !== row.analysis_revision) throw new AssetAnalysisError('permission_changed',403)
+      const currentR2 = env.MEDIA_BUCKET && current ? await (await import('./media-ai-adapter')).resolveR2MediaPermit(env.CATALOG_DB!,current.id) : null
+      if (!current || !(currentR2 || mediaReadiness(current,deps.permits).ready) || current.analysis_revision !== row.analysis_revision) throw new AssetAnalysisError('permission_changed',403)
       controller.signal.throwIfAborted()
       const budget = await deps.reserve(env,ip,1)
       if (!budget.allowed) throw new AssetAnalysisError('inference_limit_reached',429)
