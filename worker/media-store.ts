@@ -1,7 +1,8 @@
 import { catalogItem, type CatalogItem } from '../shared/catalog'
 import { imageDimensions } from './asset-classifier'
 import { CatalogConflict } from './catalog-store'
-import { mediaLinkInput, studioImport, type StudioImport } from './media-contracts'
+import { mediaLinkInput, mediaMetadataUpdate, studioImport, type StudioImport } from './media-contracts'
+import type {z} from 'zod'
 
 // Keep every accepted original within the existing Muse/SAM data-url envelope.
 // Larger owner originals can be resized before import without adding a hidden
@@ -132,15 +133,43 @@ export class MediaStore {
       ...(input.campaignId?[this.db.prepare('INSERT INTO media_campaign_images(campaign_id,version_id) VALUES(?,?)').bind(input.campaignId,versionId)]:[]),
       this.db.prepare('UPDATE media_objects SET image_type=? WHERE version_id=?').bind(input.imageType,versionId),
     ])
-    const catalog=await this.catalogForVersion(versionId,tags)
-    await this.db.prepare('UPDATE catalog_publications SET catalog_json=?,reviewed_at=? WHERE version_id=?').bind(JSON.stringify(catalog),now(),versionId).run()
-    await this.db.prepare('UPDATE reader_asset_reviews SET alt=?,attribution=?,reviewed_at=? WHERE version_id=?').bind(catalog.image.alt,catalog.provenance.attribution,now(),versionId).run()
-    await this.db.prepare('UPDATE publisher_metadata SET publisher_name=?,campaign_title=?,description=?,hints_json=? WHERE version_id=?').bind(catalog.advertiser?.name??'Curio mockup studio',catalog.campaign.title,catalog.description,JSON.stringify({categories:[catalog.category],aesthetics:catalog.lifestyleTags,tags:catalog.discoverableObjects.map(o=>o.label)}),versionId).run()
+    const catalog=await this.refreshCatalog(versionId,tags)
     const assignments=await this.db.prepare(`SELECT
       (SELECT group_concat(product_id) FROM media_product_images WHERE version_id=?) AS product_ids,
       (SELECT group_concat(brand_id) FROM media_brand_images WHERE version_id=?) AS brand_ids,
       (SELECT group_concat(campaign_id) FROM media_campaign_images WHERE version_id=?) AS campaign_ids`).bind(versionId,versionId,versionId).first()
     return {linked:true,versionId,catalogId:catalog.id,assignments}
+  }
+
+  async updateMetadata(input:z.infer<typeof mediaMetadataUpdate>){
+    const stamp=now(),affected=new Set<string>()
+    if(input.brand&&!await this.db.prepare('SELECT id FROM media_brands WHERE id=?').bind(input.brand.id).first())throw new CatalogConflict('Unknown brand metadata record.')
+    if(input.product&&!await this.db.prepare('SELECT id FROM media_products WHERE id=?').bind(input.product.id).first())throw new CatalogConflict('Unknown product metadata record.')
+    if(input.brand){
+      await this.db.prepare(`UPDATE media_brands SET story=COALESCE(?,story),description=COALESCE(?,description),updated_at=? WHERE id=?`).bind(input.brand.story??null,input.brand.description??null,stamp,input.brand.id).run()
+      const versions=(await this.db.prepare(`SELECT version_id FROM media_brand_images WHERE brand_id=? UNION SELECT pi.version_id FROM media_product_images pi JOIN media_products p ON p.id=pi.product_id WHERE p.brand_id=? UNION SELECT ci.version_id FROM media_campaign_images ci JOIN media_campaigns c ON c.id=ci.campaign_id WHERE c.brand_id=?`).bind(input.brand.id,input.brand.id,input.brand.id).all<{version_id:string}>()).results
+      versions.forEach(row=>affected.add(row.version_id))
+    }
+    if(input.product){
+      await this.db.prepare('UPDATE media_products SET description=?,updated_at=? WHERE id=?').bind(input.product.description,stamp,input.product.id).run()
+      const versions=(await this.db.prepare('SELECT version_id FROM media_product_images WHERE product_id=?').bind(input.product.id).all<{version_id:string}>()).results
+      versions.forEach(row=>affected.add(row.version_id))
+    }
+    for(const versionId of affected)await this.refreshCatalog(versionId)
+    return {updated:true,affectedVersions:[...affected]}
+  }
+
+  private async refreshCatalog(versionId:string,tags?:readonly string[]){
+    let retained=tags
+    if(!retained){
+      const publication=await this.db.prepare('SELECT catalog_json FROM catalog_publications WHERE version_id=?').bind(versionId).first<{catalog_json:string}>()
+      try{const value=publication?JSON.parse(publication.catalog_json) as {lifestyleTags?:unknown}:null;retained=Array.isArray(value?.lifestyleTags)?value.lifestyleTags.filter((item):item is string=>typeof item==='string'):[]}catch{retained=[]}
+    }
+    const catalog=await this.catalogForVersion(versionId,retained)
+    await this.db.prepare('UPDATE catalog_publications SET catalog_json=?,reviewed_at=? WHERE version_id=?').bind(JSON.stringify(catalog),now(),versionId).run()
+    await this.db.prepare('UPDATE reader_asset_reviews SET alt=?,attribution=?,reviewed_at=? WHERE version_id=?').bind(catalog.image.alt,catalog.provenance.attribution,now(),versionId).run()
+    await this.db.prepare('UPDATE publisher_metadata SET publisher_name=?,campaign_title=?,description=?,hints_json=? WHERE version_id=?').bind(catalog.advertiser?.name??'Curio mockup studio',catalog.campaign.title,catalog.description,JSON.stringify({categories:[catalog.category],aesthetics:catalog.lifestyleTags,tags:catalog.discoverableObjects.map(o=>o.label)}),versionId).run()
+    return catalog
   }
 
   async list() {
