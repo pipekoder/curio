@@ -1,6 +1,8 @@
-import { appendFile, readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { createCipheriv, randomBytes, scryptSync } from 'node:crypto'
+import { appendFile, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
+import { gzipSync } from 'node:zlib'
 
 const target = { name: 'curio-catalog', id: 'b39c4f63-74ee-47f6-bb1d-7388ecc88bc7' }
 const migrations = ['0001_catalog.sql', '0002_asset_intelligence.sql', '0003_discovery_content.sql', '0004_media_studio.sql']
@@ -23,8 +25,10 @@ function check(value, message) {
 
 function wrangler(args, capture = true) {
   return new Promise((resolvePromise, reject) => {
+    const childEnv = { ...process.env, WRANGLER_SEND_METRICS: 'false' }
+    delete childEnv.CONTENT_STUDIO_OPERATOR_TOKEN
     const child = spawn(process.execPath, [resolve('node_modules/wrangler/bin/wrangler.js'), ...args], {
-      env: { ...process.env, WRANGLER_SEND_METRICS: 'false' },
+      env: childEnv,
       stdio: ['ignore', capture ? 'pipe' : 'inherit', 'inherit'],
     })
     const output = []
@@ -55,6 +59,51 @@ async function counts(names) {
   return Object.fromEntries((await query(sql)).map(row => [row.name, Number(row.count)]))
 }
 
+async function createRecoveryBundle() {
+  const secret = process.env.CONTENT_STUDIO_OPERATOR_TOKEN ?? ''
+  check(secret.length >= 32, 'CONTENT_STUDIO_OPERATOR_TOKEN must be at least 32 characters')
+  const directory = await mkdtemp(join(process.env.RUNNER_TEMP, 'curio-d1-backup-'))
+  const exportPath = join(directory, 'curio-catalog.sql')
+  try {
+    const bookmarkResponse = JSON.parse(await wrangler(['d1', 'time-travel', 'info', target.name, '--config', 'wrangler.jsonc', '--json']))
+    check(typeof bookmarkResponse.bookmark === 'string' && bookmarkResponse.bookmark.length > 0, 'D1 recovery bookmark was not returned')
+    await wrangler(['d1', 'export', target.name, '--remote', '--config', 'wrangler.jsonc', '--output', exportPath], false)
+    const exportInfo = await stat(exportPath)
+    check(exportInfo.size > 0 && exportInfo.size <= 512 * 1024 * 1024, 'D1 export is empty or exceeds the protected workflow limit')
+
+    const payload = gzipSync(Buffer.from(JSON.stringify({
+      format: 'curio-d1-recovery-v1',
+      database: target.name,
+      databaseId: target.id,
+      commit: process.env.GITHUB_SHA,
+      createdAt: new Date().toISOString(),
+      bookmark: bookmarkResponse.bookmark,
+      sql: await readFile(exportPath, 'utf8'),
+    })))
+    const salt = randomBytes(16)
+    const iv = randomBytes(12)
+    const key = scryptSync(secret, salt, 32)
+    try {
+      const cipher = createCipheriv('aes-256-gcm', key, iv)
+      const ciphertext = Buffer.concat([cipher.update(payload), cipher.final()])
+      await writeFile(join(process.env.RUNNER_TEMP, 'curio-d1-recovery.enc'), JSON.stringify({
+        format: 'curio-d1-recovery-v1',
+        kdf: 'scrypt',
+        cipher: 'aes-256-gcm',
+        salt: salt.toString('base64'),
+        iv: iv.toString('base64'),
+        tag: cipher.getAuthTag().toString('base64'),
+        ciphertext: ciphertext.toString('base64'),
+      }), { mode: 0o600 })
+    } finally {
+      key.fill(0)
+      payload.fill(0)
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+}
+
 async function main() {
   check(process.env.GITHUB_REPOSITORY === 'pipekoder/curio', 'Unexpected repository')
   check(process.env.GITHUB_EVENT_NAME === 'workflow_dispatch', 'Manual dispatch required')
@@ -63,6 +112,7 @@ async function main() {
   check(process.env.RELEASE_CONFIRMATION === 'MIGRATE AND DEPLOY CURIO MEDIA', 'Confirmation text does not match')
   check((process.env.CLOUDFLARE_API_TOKEN ?? '').length > 0, 'CLOUDFLARE_API_TOKEN is missing')
   check(/^[a-f0-9]{32}$/.test(process.env.CLOUDFLARE_ACCOUNT_ID ?? ''), 'CLOUDFLARE_ACCOUNT_ID is invalid')
+  check((process.env.CONTENT_STUDIO_OPERATOR_TOKEN ?? '').length >= 32, 'CONTENT_STUDIO_OPERATOR_TOKEN must be at least 32 characters')
   const config = JSON.parse(await readFile('wrangler.jsonc', 'utf8'))
   const binding = config.d1_databases?.find(item => item.binding === 'CATALOG_DB')
   check(config.name === 'curio', 'Unexpected Worker name')
@@ -85,6 +135,8 @@ async function main() {
 
   console.log(`Applied before run: ${before.join(', ')}`)
   console.log(`Pending in order: ${pending.length ? pending.join(', ') : 'none'}`)
+  await createRecoveryBundle()
+  check(JSON.stringify(await history()) === JSON.stringify(before), 'Migration history changed while the backup was created')
   if (pending.length) {
     await wrangler(['d1', 'migrations', 'apply', target.name, '--remote', '--config', 'wrangler.jsonc'], false)
   }
@@ -105,6 +157,7 @@ async function main() {
     `- Applied before run: ${before.map(name => `\`${name}\``).join(', ')}`,
     `- Applied by this run: ${pending.length ? pending.map(name => `\`${name}\``).join(', ') : 'none'}`,
     `- Final history: ${after.map(name => `\`${name}\``).join(', ')}`,
+    '- Pre-migration SQL export and Time Travel bookmark: encrypted recovery artifact created',
     '- Existing table row counts: preserved',
     '- Foreign keys: valid',
     '- Integrity: ok', '',

@@ -39,9 +39,18 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CONTENT_STUDIO_OPERATOR_TOKEN: ${{ secrets.CONTENT_STUDIO_OPERATOR_TOKEN }}
           REVIEWED_SHA: ${{ inputs.reviewed_sha }}
           RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
           WRANGLER_SEND_METRICS: 'false'
+      - name: Upload encrypted pre-migration recovery bundle
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: curio-d1-recovery-${{ github.run_id }}
+          path: ${{ runner.temp }}/curio-d1-recovery.enc
+          if-no-files-found: error
+          retention-days: 14
       - name: Store Content Studio operator secret
         run: |
           test "${#CONTENT_STUDIO_OPERATOR_TOKEN}" -ge 32
