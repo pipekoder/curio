@@ -1,6 +1,10 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import App from "../src/App";
+beforeEach(() => {
+  window.history.replaceState({}, "", "/");
+  sessionStorage.clear();
+});
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
