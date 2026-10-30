@@ -48,6 +48,8 @@ export default ts.config(
       "tests/prompt-library.test.ts",
       "tests/prompt-library.spec.ts",
       "src/VisualStages.tsx",
+      "src/explore-route.ts",
+      "tests/explore-route.spec.ts",
       "src/reader-interaction.ts",
       "tests/reader-interaction.test.ts",
       "tests/interaction-recording.spec.ts",
