@@ -1,16 +1,11 @@
 import {type RefObject} from 'react'
 import {editorialPrompt} from '../shared/editorial-intent'
+import {PromptLibrary} from './PromptLibrary'
 
 export function DiscoverPreview({prompt,consent,busy,error,promptRef,onPrompt,onConsent,onSubmit,onCollection}: {
  prompt:string;consent:boolean;busy:boolean;error:string;promptRef:RefObject<HTMLTextAreaElement|null>;
  onPrompt:(value:string)=>void;onConsent:(value:boolean)=>void;onSubmit:()=>void;onCollection:()=>void;
 }){
- const suggestions=[
-  'Create a quiet magazine about paper lamps and calm reading rooms, with Scandinavian simplicity. Focus on light and space.',
-  'Explore independent ceramic studios in Copenhagen and Tokyo through handmade textures, daily rituals, and their makers.',
-  'Follow contemporary jewelry and sculptural forms, with experimental materials and unexpected design connections.',
-  'Take me through winter coastal escapes, quiet interiors, and the rituals that make a place feel like home.',
- ]
  return <><section className="reference-discover reference-canvas" data-input={prompt.trim()?'typing':'empty'} aria-labelledby="personal-edition">
   <header className="reference-stage-label"><span>01</span><div>Discovery entry<small>A simple and beautiful beginning</small></div></header>
   <svg className="reference-orbits" viewBox="0 0 573 543" aria-hidden="true">
@@ -24,14 +19,14 @@ export function DiscoverPreview({prompt,consent,busy,error,promptRef,onPrompt,on
   </svg>
   <div className="reference-photo-planes" aria-hidden="true">{['01_boucle_lounge_chair.png','10_winter_coast.png','02_ceramic_vase.png','11_stone_still_life.png','05_designer_portrait.png'].map((file,i)=><div key={file} className={`reference-photo reference-photo-${i}`} data-photo-slot={i+1}><img src={`/editorial/discover/${file}`} alt="" /></div>)}</div>
   <div className="reference-wordmark"><span className="sr-only">curio.</span><svg viewBox="0 0 112 40" aria-hidden="true"><g fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M19 14C6 7 1 31 14 32L20 29M29 13V24C29 35 45 35 45 24V13M55 32V13M55 21C57 14 62 11 67 13M75 13V32"/><ellipse cx="94" cy="23" rx="9" ry="10"/></g><circle cx="75" cy="6" r="1.2"/><circle cx="109" cy="32" r="1.2"/></svg></div>
-  <h1 id="personal-edition">What are you<br/>curious about?</h1>
+  <h1 id="personal-edition">Shape Your<br/>Curiosity</h1>
   <div className="reference-sphere" aria-hidden="true"><i/></div>
+  <PromptLibrary busy={busy} onPrompt={onPrompt}/>
   <form className="reference-prompt" onSubmit={event=>{event.preventDefault();onSubmit()}} aria-busy={busy}>
    <label className="sr-only" htmlFor="discovery-prompt">Your discovery prompt</label>
    <textarea id="discovery-prompt" ref={promptRef} rows={1} maxLength={1000} placeholder="A place, a feeling, a design, a brand…" value={prompt} disabled={busy} onChange={e=>onPrompt(e.target.value)} aria-invalid={Boolean(error)} aria-describedby="reference-consent-note" onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();e.currentTarget.form?.requestSubmit()}}}/>
    <button className="reference-submit" type="submit" aria-label={busy?'Composing your issue…':'Generate magazine'} disabled={busy||!editorialPrompt.safeParse({prompt,consent}).success}><span aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 12h15m-6-6 6 6-6 6" /></svg></span></button>
   </form>
-  <div className="reference-suggestions" role="group" aria-label="Prompt inspiration">{suggestions.map(value=><button key={value} disabled={busy} onClick={()=>{onPrompt(value);promptRef.current?.focus()}}>{value}</button>)}</div>
  </section>
  <div className="reference-required-controls"><label id="reference-consent-note"><input type="checkbox" checked={consent} disabled={busy} onChange={e=>onConsent(e.target.checked)}/> Use Meta AI for this prompt, if available. Optional; leave unchecked for an edition without AI.</label>
  {error&&<p role="alert">{error}</p>}{busy&&<p role="status">Composing your issue… An authored fallback remains available.</p>}
