@@ -44,6 +44,8 @@ export default ts.config(
       "src/EditorialExperience.tsx",
       "src/DiscoverPreview.tsx",
       "src/VisualStages.tsx",
+      "src/explore-route.ts",
+      "tests/explore-route.spec.ts",
       "src/reader-interaction.ts",
       "tests/reader-interaction.test.ts",
       "tests/interaction-recording.spec.ts",
