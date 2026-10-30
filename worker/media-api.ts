@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { boundedText } from './meta'
 import { CatalogConflict } from './catalog-store'
 import { MediaStore, MEDIA_MAX_BYTES } from './media-store'
-import { parseStudioText } from './media-contracts'
+import { mediaMetadataUpdate, parseStudioText } from './media-contracts'
 import type { Bindings } from './index'
 
 const versionId = z.string().regex(/^version-[a-f0-9]{64}$/)
@@ -49,6 +49,7 @@ mediaApi.post('/uploads',async c=>{
   return c.json(await store(c.env).upload(file,typeof batch==='string'&&batch?z.uuid().parse(batch):undefined),201)
 })
 mediaApi.patch('/assets/:id',async c=>c.json(await store(c.env).link(versionId.parse(c.req.param('id')),await json(c.req.raw))))
+mediaApi.patch('/metadata',async c=>c.json(await store(c.env).updateMetadata(mediaMetadataUpdate.parse(await json(c.req.raw)))))
 mediaApi.delete('/assets/:id',async c=>c.json(await store(c.env).remove(versionId.parse(c.req.param('id')))))
 mediaApi.get('/assets/:id/file',async c=>{
   const {row,object}=await store(c.env).bytes(versionId.parse(c.req.param('id')))

@@ -65,6 +65,25 @@ it('fails closed before storage for invalid operator access and image content',a
  expect((await bucket.list()).objects).toHaveLength(0)
 })
 
+it('persists inspected metadata, preserves links and recalculates editorial readiness',async()=>{
+ const bytes=readFileSync('public/editorial/discover/02_ceramic_vase.png'),file=new File([bytes],'metadata-chair.png',{type:'image/png'}),uploaded=await store.upload(file)
+ const imported=await store.import({sourceText:'incomplete fixture',brands:[{name:'Incomplete Studio',story:'',description:''}],products:[{brand:'Incomplete Studio',name:'Metadata Chair',description:'',category:'home',materials:[],price:null,currency:null,imageFilenames:[file.name],lifestyleTags:['Scandinavian']}],campaigns:[]})
+ let listing=await store.list(),media=listing.media.find(row=>row.version_id===uploaded.versionId)!
+ expect(media).toMatchObject({product_ids:imported.products[0].id,editorial_ready:0})
+ const brandId=String(listing.products.find(row=>row.id===imported.products[0].id)!.brand_id)
+ const token='test-only-private-token-more-than-32-characters',response=await mediaApi.request(`${origin}/metadata`,{method:'PATCH',headers:{Authorization:`Bearer ${token}`,Origin:origin,'CF-Connecting-IP':'192.0.2.1','Content-Type':'application/json'},body:JSON.stringify({brand:{id:brandId,story:'An owner-supplied fictional studio story.'},product:{id:imported.products[0].id,description:'An owner-supplied fictional chair description.'}})},{CATALOG_OPERATOR_ENABLED:'true',CATALOG_OPERATOR_TOKEN:token,PUBLIC_APP_ORIGIN:origin,CATALOG_DB:db,MEDIA_BUCKET:bucket})
+ expect(response.status).toBe(200);expect(await response.json()).toMatchObject({updated:true,affectedVersions:[uploaded.versionId]})
+ listing=await store.list();media=listing.media.find(row=>row.version_id===uploaded.versionId)!
+ expect(media).toMatchObject({product_ids:imported.products[0].id,editorial_ready:1})
+ expect(listing.brands.find(row=>row.id===brandId)).toMatchObject({story:'An owner-supplied fictional studio story.',description:''})
+ expect(listing.products.find(row=>row.id===imported.products[0].id)).toMatchObject({description:'An owner-supplied fictional chair description.'})
+ const publication=await new CatalogPublications(db).list('',10,[uploaded.versionId])
+ expect(publication.items[0]).toMatchObject({description:'An owner-supplied fictional chair description.',lifestyleTags:['Scandinavian']})
+ await expect(store.updateMetadata({brand:{id:brandId,description:'Must remain unsaved.'},product:{id:'product-missing',description:'Should not save.'}})).rejects.toThrow('Unknown product metadata record.')
+ expect((await store.list()).brands.find(row=>row.id===brandId)).toMatchObject({description:''})
+ expect((await store.list()).media.find(row=>row.version_id===uploaded.versionId)).toMatchObject({product_ids:imported.products[0].id,editorial_ready:1})
+})
+
 it('accepts an authenticated same-origin browser GET without Origin and rejects cross-origin or write lookalikes',async()=>{
  const token='test-only-private-token-more-than-32-characters',env={CATALOG_OPERATOR_ENABLED:'true',CATALOG_OPERATOR_TOKEN:token,PUBLIC_APP_ORIGIN:origin,CATALOG_DB:db,MEDIA_BUCKET:bucket}
  const authorized={Authorization:`Bearer ${token}`,'CF-Connecting-IP':'192.0.2.1','Sec-Fetch-Site':'same-origin',Referer:`${origin}/internal/media`}
