@@ -64,6 +64,17 @@ export function normalizeSamResult(result: ImageSegmentationResult, ad: CatalogI
 }
 export async function segmentWithMeta(input: SamInput, key: string, signal: AbortSignal): Promise<Segmentation> {
   if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(input.imageDataUrl) || input.imageDataUrl.length > 2800000) throw new Error('Invalid approved raster')
+  // Reject obviously fabricated image payloads before making a paid request.
+  const encoded = input.imageDataUrl.slice(input.imageDataUrl.indexOf(',') + 1)
+  const bytes = Uint8Array.from(atob(encoded), c => c.charCodeAt(0))
+  const isPng = input.imageDataUrl.startsWith('data:image/png;') &&
+    bytes.length >= 24 && [137,80,78,71,13,10,26,10].every((n,i) => bytes[i] === n)
+  const isJpeg = input.imageDataUrl.startsWith('data:image/jpeg;') &&
+    bytes.length >= 4 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
+  const isWebp = input.imageDataUrl.startsWith('data:image/webp;') &&
+    bytes.length >= 12 && [82,73,70,70].every((n,i) => bytes[i] === n) &&
+    [87,69,66,80].every((n,i) => bytes[i+8] === n)
+  if (!isPng && !isJpeg && !isWebp) throw new Error('Invalid approved raster')
   const response = await fetch('https://api.meta.ai/v1/responses', { method: 'POST', redirect: 'manual', signal,
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Accept: 'text/event-stream' },
     body: JSON.stringify({ model: 'sam-3.1', stream: true, input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: input.concept }, { type: 'input_image', image_url: input.imageDataUrl }] }] }),
