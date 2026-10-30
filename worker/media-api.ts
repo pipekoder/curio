@@ -1,4 +1,4 @@
-import { Hono } from 'hono'
+import { Hono, type Handler, type MiddlewareHandler } from 'hono'
 import { timingSafeEqual } from 'hono/utils/buffer'
 import { z } from 'zod'
 import { boundedText } from './meta'
@@ -19,13 +19,14 @@ function allowedOperatorOrigin(request:Request,publicOrigin:string){
   try{return new URL(referer).origin===new URL(publicOrigin).origin}catch{return false}
 }
 
-mediaApi.use('*', async (c,next) => {
+export const mediaOperatorAuth:MiddlewareHandler<{Bindings:Bindings}>=async (c,next) => {
   c.header('Cache-Control','no-store')
   const env=c.env??{},token=env.CATALOG_OPERATOR_TOKEN,auth=c.req.header('Authorization')??''
   if(env.CATALOG_OPERATOR_ENABLED!=='true'||!env.CATALOG_DB||!env.MEDIA_BUCKET||!token||token.length<32||!env.PUBLIC_APP_ORIGIN)return c.json({status:'media_studio_unavailable'},503)
   if(auth.length>512||!await timingSafeEqual(auth,`Bearer ${token}`)||!allowedOperatorOrigin(c.req.raw,env.PUBLIC_APP_ORIGIN)||!c.req.header('CF-Connecting-IP')||c.req.header('CF-Connecting-IP')!.length>64)return c.json({error:'Operator access required.'},403)
   await next()
-})
+}
+mediaApi.use('*',mediaOperatorAuth)
 mediaApi.onError((error,c)=>{
   if(error instanceof CatalogConflict)return c.json({error:error.message},409)
   if(error instanceof z.ZodError||error instanceof SyntaxError)return c.json({error:'Invalid Media Studio input.'},400)
@@ -35,7 +36,8 @@ mediaApi.onError((error,c)=>{
 const store=(env:Bindings)=>new MediaStore(env.CATALOG_DB!,env.MEDIA_BUCKET!,env.PUBLIC_APP_ORIGIN!)
 const json=async(request:Request,max=150000)=>{let value:string;try{value=await boundedText(request.body,max)}catch{throw new RangeError(`Request exceeds ${Math.floor(max/1000)} KiB.`)}return JSON.parse(value) as unknown}
 
-mediaApi.get('/',async c=>c.json(await store(c.env).list()))
+export const mediaRoot:Handler<{Bindings:Bindings}>=async c=>c.json(await store(c.env).list())
+mediaApi.get('/',mediaRoot)
 mediaApi.post('/batches',async c=>{const input=z.strictObject({sourceText:z.string().max(100000).default('')}).parse(await json(c.req.raw));return c.json({batchId:await store(c.env).createBatch(input.sourceText)},201)})
 mediaApi.post('/parse',async c=>{const input=z.strictObject({sourceText:z.string().max(100000)}).parse(await json(c.req.raw));return c.json(parseStudioText(input.sourceText))})
 mediaApi.post('/imports',async c=>c.json(await store(c.env).import(await json(c.req.raw)),201))
