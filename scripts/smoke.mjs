@@ -62,9 +62,11 @@ try {
     assert.match(image.headers.get('content-type'), /image\/svg\+xml/)
     assert.match(await image.text(), /<svg/)
   }
-  const deepLink = await fetch(`${base}/edition/example`, { headers: { Accept: 'text/html' } })
-  assert.equal(deepLink.status, 200)
-  assert.equal(await deepLink.text(), html)
+  for (const path of ['/edition/example', '/explore']) {
+    const deepLink = await fetch(`${base}${path}`, { headers: { Accept: 'text/html' } })
+    assert.equal(deepLink.status, 200)
+    assert.equal(await deepLink.text(), html)
+  }
   for (const path of ['/api/missing', '/api']) {
     const response = await fetch(`${base}${path}`, { headers: { Accept: 'text/html' } })
     assert.equal(response.status, 404, `${path} must not fall through to the SPA`)

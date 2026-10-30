@@ -87,3 +87,51 @@
  .reference-discover .reference-photo-3{left:16%}.reference-discover .reference-photo-4{left:auto;right:8%}
 }
 @media(max-width:430px){.reference-discover{height:780px;min-height:780px}.reference-suggestions{top:535px}.reference-suggestions button{font-size:11px;min-height:92px;-webkit-line-clamp:5}}
+
+/* The prompt library lives inside the approved Discover composition; orbital
+   geometry, editorial photographs, and brand treatment remain untouched. */
+.reference-discover h1{top:calc(190 * var(--u));width:calc(230 * var(--u));left:calc(50% - 115 * var(--u));font-size:calc(27 * var(--u))}
+.prompt-library{position:absolute;inset:0;z-index:11;pointer-events:none;font-family:Arial,sans-serif}
+.prompt-library :is(button,input){pointer-events:auto}
+.prompt-library-sentence{position:absolute;top:calc(258 * var(--u));left:50%;transform:translateX(-50%);width:min(72%,calc(365 * var(--u)));min-height:calc(54 * var(--u));text-align:center;color:#333640;font:400 max(13px,calc(13 * var(--u)))/1.65 Georgia,'Times New Roman',serif;letter-spacing:.015em;text-wrap:balance}
+.prompt-library-slot{display:inline;border:0;border-bottom:1px solid #a8bce0;padding:0 2px;background:linear-gradient(transparent 68%,#dfeafea3 68%);font:inherit;letter-spacing:inherit;color:#345274;cursor:pointer;white-space:nowrap}
+.prompt-library-slot span{display:inline-block;margin-left:3px;font:11px Arial,sans-serif;color:#8097b9}
+.prompt-library-slot:hover,.prompt-library-slot[aria-expanded=true]{color:#163d71;border-bottom-color:#547cb5;background:linear-gradient(transparent 64%,#d5e6ff 64%)}
+.prompt-library-actions{position:absolute;top:calc(323 * var(--u));left:50%;transform:translateX(-50%);display:flex;align-items:center;justify-content:center;gap:calc(15 * var(--u));white-space:nowrap}
+.prompt-library-actions button{border:0;background:transparent;color:#5d6a7d;font:400 max(10px,calc(10 * var(--u)))/1.2 Arial,sans-serif;letter-spacing:.045em;cursor:pointer;padding:8px 4px}
+.prompt-library-actions button:hover{text-decoration:underline;text-underline-offset:4px;color:#234b82}
+.reference-discover .reference-prompt{top:calc(362 * var(--u))}
+.prompt-library-tabs{position:absolute;bottom:4%;left:5%;width:90%;display:flex;justify-content:center;gap:calc(8 * var(--u));flex-wrap:wrap}
+.prompt-library-tabs button{min-height:38px;padding:6px 13px;border:1px solid #d9dfe9;border-radius:99px;background:#ffffffc2;box-shadow:0 1px 5px #b5c3da1a;color:#676b74;font:400 max(10px,calc(10 * var(--u)))/1.25 Arial,sans-serif;letter-spacing:.025em;cursor:pointer}
+.prompt-library-tabs button[aria-pressed=true]{border-color:#aac2e8;color:#31537e;background:#f7faffed}
+.prompt-library-tabs button:hover{border-color:#8caee0}
+.prompt-library-options{pointer-events:auto;position:absolute;top:calc(342 * var(--u));left:50%;transform:translateX(-50%);z-index:12;width:min(86%,390px);padding:14px;border:1px solid #d9e3f2;border-radius:20px;background:#ffffffed;box-shadow:0 18px 46px #7489ad45;backdrop-filter:blur(18px);color:#3c4656;font-size:12px}
+.prompt-library-options-head{display:flex;justify-content:space-between;align-items:center;text-transform:capitalize;color:#657792;letter-spacing:.06em}
+.prompt-library-options-head button{border:0;background:transparent;font-size:22px;line-height:1;cursor:pointer;color:#50627d}
+.prompt-library-choices{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0}
+.prompt-library-choices button{border:1px solid #d5e0ee;border-radius:99px;padding:7px 10px;background:white;color:#34506e;cursor:pointer}
+.prompt-library-choices button[aria-pressed=true]{background:#e9f2ff;border-color:#9ebde7}
+.prompt-library-options form{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.prompt-library-options label{width:100%;font-size:11px;color:#61718a}
+.prompt-library-options input{flex:1;min-width:130px;border:1px solid #ccd8e9;border-radius:12px;padding:8px 10px;background:#fff;font:inherit;color:#25344a}
+.prompt-library-options form button{border:1px solid #9ebde7;border-radius:12px;background:#f0f6ff;color:#31537e;padding:8px 12px;cursor:pointer}
+.prompt-library-options form button:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:430px){
+ .reference-discover{height:820px;min-height:820px}
+ .reference-discover h1{top:195px;left:50%;width:245px;font-size:28px}
+ .prompt-library-sentence{top:274px;width:72%;font-size:13px;line-height:1.6;min-height:92px}
+ .prompt-library-actions{top:370px;gap:20px}.prompt-library-actions button{font-size:11px}
+ .reference-discover .reference-prompt{top:425px}
+ .prompt-library-tabs{bottom:5%;left:5%;width:90%;gap:7px}.prompt-library-tabs button{font-size:11px;min-height:40px;padding:6px 11px}
+ .prompt-library-options{top:400px;width:90%;box-sizing:border-box}
+}
+@media(prefers-reduced-motion:reduce){.prompt-library *{animation:none!important;transition:none!important}}
+@media(min-width:431px) and (max-width:700px){.reference-discover{min-height:543px;height:max(543px,100svh)}.prompt-library-tabs{gap:4px;width:94%;left:3%}.prompt-library-tabs button{font-size:9px;padding:5px 8px}}
+/* Keep editable words in the sentence rhythm; the site's 44px button default
+   otherwise makes three mobile lines collide with the action and prompt. */
+.prompt-library-slot{min-height:32px}
+@media(max-width:430px){
+ .prompt-library-sentence{width:82%;min-height:0}
+ .prompt-library-actions{top:380px}
+ .reference-discover .reference-prompt{top:440px}
+}
