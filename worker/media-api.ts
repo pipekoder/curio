@@ -10,11 +10,20 @@ import type { Bindings } from './index'
 const versionId = z.string().regex(/^version-[a-f0-9]{64}$/)
 export const mediaApi = new Hono<{ Bindings: Bindings }>()
 
+function allowedOperatorOrigin(request:Request,publicOrigin:string){
+  const origin=request.headers.get('Origin')
+  if(origin!==null)return origin===publicOrigin
+  if(request.method!=='GET'||request.headers.get('Sec-Fetch-Site')?.toLowerCase()!=='same-origin')return false
+  const referer=request.headers.get('Referer')
+  if(!referer)return false
+  try{return new URL(referer).origin===new URL(publicOrigin).origin}catch{return false}
+}
+
 mediaApi.use('*', async (c,next) => {
   c.header('Cache-Control','no-store')
   const env=c.env??{},token=env.CATALOG_OPERATOR_TOKEN,auth=c.req.header('Authorization')??''
   if(env.CATALOG_OPERATOR_ENABLED!=='true'||!env.CATALOG_DB||!env.MEDIA_BUCKET||!token||token.length<32||!env.PUBLIC_APP_ORIGIN)return c.json({status:'media_studio_unavailable'},503)
-  if(auth.length>512||!await timingSafeEqual(auth,`Bearer ${token}`)||c.req.header('Origin')!==env.PUBLIC_APP_ORIGIN||!c.req.header('CF-Connecting-IP')||c.req.header('CF-Connecting-IP')!.length>64)return c.json({error:'Operator access required.'},403)
+  if(auth.length>512||!await timingSafeEqual(auth,`Bearer ${token}`)||!allowedOperatorOrigin(c.req.raw,env.PUBLIC_APP_ORIGIN)||!c.req.header('CF-Connecting-IP')||c.req.header('CF-Connecting-IP')!.length>64)return c.json({error:'Operator access required.'},403)
   await next()
 })
 mediaApi.onError((error,c)=>{

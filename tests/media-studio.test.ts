@@ -51,3 +51,24 @@ it('fails closed before storage for invalid operator access and image content',a
  const fake=new File([new TextEncoder().encode('not an image')],'fake.png',{type:'image/png'});await expect(store.upload(fake)).rejects.toThrow(/between 32 bytes|do not match/)
  expect((await bucket.list()).objects).toHaveLength(0)
 })
+
+it('accepts an authenticated same-origin browser GET without Origin and rejects cross-origin or write lookalikes',async()=>{
+ const token='test-only-private-token-more-than-32-characters',env={CATALOG_OPERATOR_ENABLED:'true',CATALOG_OPERATOR_TOKEN:token,PUBLIC_APP_ORIGIN:origin,CATALOG_DB:db,MEDIA_BUCKET:bucket}
+ const authorized={Authorization:`Bearer ${token}`,'CF-Connecting-IP':'192.0.2.1','Sec-Fetch-Site':'same-origin',Referer:`${origin}/internal/media`}
+ const opened=await mediaApi.request(`${origin}/`,{headers:authorized},env)
+ expect(opened.status).toBe(200)
+ expect(opened.headers.get('Cache-Control')).toBe('no-store')
+
+ const explicitCrossOrigin=await mediaApi.request(`${origin}/`,{headers:{...authorized,Origin:'https://evil.example'}},env)
+ expect(explicitCrossOrigin.status).toBe(403)
+ const crossSiteMetadata=await mediaApi.request(`${origin}/`,{headers:{...authorized,'Sec-Fetch-Site':'cross-site'}},env)
+ expect(crossSiteMetadata.status).toBe(403)
+ const crossOriginReferer=await mediaApi.request(`${origin}/`,{headers:{...authorized,Referer:'https://evil.example/studio'}},env)
+ expect(crossOriginReferer.status).toBe(403)
+ const missingBrowserEvidence=await mediaApi.request(`${origin}/`,{headers:{Authorization:`Bearer ${token}`,'CF-Connecting-IP':'192.0.2.1'}},env)
+ expect(missingBrowserEvidence.status).toBe(403)
+ const badToken=await mediaApi.request(`${origin}/`,{headers:{...authorized,Authorization:'Bearer incorrect'}},env)
+ expect(badToken.status).toBe(403)
+ const writeWithoutOrigin=await mediaApi.request(`${origin}/batches`,{method:'POST',headers:{...authorized,'Content-Type':'application/json'},body:'{"sourceText":""}'},env)
+ expect(writeWithoutOrigin.status).toBe(403)
+})
