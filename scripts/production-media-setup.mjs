@@ -29,15 +29,47 @@ function wrangler(args, capture = true) {
     delete childEnv.CONTENT_STUDIO_OPERATOR_TOKEN
     const child = spawn(process.execPath, [resolve('node_modules/wrangler/bin/wrangler.js'), ...args], {
       env: childEnv,
-      stdio: ['ignore', capture ? 'pipe' : 'inherit', 'inherit'],
+      stdio: ['ignore', capture ? 'pipe' : 'inherit', capture ? 'pipe' : 'inherit'],
     })
-    const output = []
-    child.stdout?.on('data', chunk => output.push(chunk))
+    const stdout = []
+    const stderr = []
+    child.stdout?.on('data', chunk => stdout.push(chunk))
+    child.stderr?.on('data', chunk => stderr.push(chunk))
     child.on('error', reject)
-    child.on('close', code => code === 0
-      ? resolvePromise(Buffer.concat(output).toString())
-      : reject(new Error(`Wrangler exited with code ${code}`)))
+    child.on('close', code => {
+      const output = Buffer.concat(stdout).toString()
+      if (code === 0) return resolvePromise(output)
+      const details = sanitizeWranglerError(`${output}\n${Buffer.concat(stderr).toString()}`)
+      reject(new Error(`Wrangler exited with code ${code}${details ? `:\n${details}` : ''}`))
+    })
   })
+}
+
+function sanitizeWranglerError(value) {
+  let sanitized = value.trim().slice(0, 12_000)
+  for (const secret of [process.env.CLOUDFLARE_API_TOKEN, process.env.CONTENT_STUDIO_OPERATOR_TOKEN]) {
+    if (secret) sanitized = sanitized.split(secret).join('[redacted]')
+  }
+  return sanitized
+}
+
+async function verifyRemoteTarget() {
+  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/d1/database/${target.id}`, {
+    headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` },
+    redirect: 'error',
+    signal: AbortSignal.timeout(20_000),
+  })
+  let body
+  try {
+    body = await response.json()
+  } catch {
+    throw new Error(`Cloudflare D1 identity check returned HTTP ${response.status} with a non-JSON response`)
+  }
+  const errors = Array.isArray(body.errors)
+    ? body.errors.map(error => `${error.code ?? 'unknown'}: ${error.message ?? 'unknown error'}`).join('; ')
+    : ''
+  check(response.ok && body.success === true, `Cloudflare D1 identity check failed (HTTP ${response.status}${errors ? `; ${errors}` : ''})`)
+  check(body.result?.uuid === target.id && body.result?.name === target.name, 'Cloudflare returned a different D1 database')
 }
 
 function rows(json) {
@@ -123,9 +155,7 @@ async function main() {
   check(config.vars?.ASSET_AI_ENABLED === 'false', 'Asset AI must remain disabled')
   check(config.vars?.SAM_DECODER_ENABLED === 'false', 'SAM must remain disabled')
 
-  const info = JSON.parse(await wrangler(['d1', 'info', target.name, '--config', 'wrangler.jsonc', '--json']))
-  const identity = JSON.stringify(info)
-  check(identity.includes(target.name) && identity.includes(target.id), 'Cloudflare returned a different D1 database')
+  await verifyRemoteTarget()
 
   const before = await history()
   check(before.length >= 2 && before.length <= 4, `Unexpected migration history: ${before.join(', ')}`)
