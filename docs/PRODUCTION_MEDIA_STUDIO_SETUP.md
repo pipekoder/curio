@@ -38,6 +38,8 @@ After this workflow and configuration are reviewed and merged:
 
 The workflow verifies the exact database UUID, existing R2 binding, origin and disabled AI flags. Before any migration, it records a D1 Time Travel bookmark, exports the full database, encrypts both with AES-256-GCM using a scrypt-derived key, removes the plaintext export and uploads only the encrypted bundle as a private GitHub Actions artifact retained for 14 days. Failure to create that bundle stops the migration.
 
+The exact remote database identity is checked through Cloudflare's D1 API before Wrangler is allowed to read migration history. Wrangler failures include bounded, secret-redacted CLI output in the job log. If the workflow stops before backup creation, the artifact step records that fact without adding a second failure; if a backup exists, it is uploaded even when a later migration verification fails.
+
 It accepts only an ordered migration history beginning with `0001` and `0002`; it then lets Wrangler apply only the pending suffix. The expected production state applies `0003_discovery_content.sql` followed by `0004_media_studio.sql`. If either is already applied, Wrangler does not reapply it. Unexpected, missing or reordered history stops the run.
 
 After migration, the workflow verifies all four migration records, the added tables, existing-table row counts, foreign keys and D1 integrity. It then stores `CATALOG_OPERATOR_TOKEN`, builds the reviewed commit, deploys the existing Worker and checks the Content Studio route.
