@@ -27,8 +27,11 @@ export type StudioImport = z.infer<typeof studioImport>
 
 export const mediaLinkInput = z.strictObject({
   imageType: z.enum(['product', 'brand', 'campaign', 'editorial']),
-  productId: id.nullable().default(null), brandId: id.nullable().default(null), campaignId: id.nullable().default(null),
-}).refine(value => value.imageType === 'editorial' || Boolean(value.productId || value.brandId || value.campaignId), 'Choose a matching record.')
+  productId: id.nullable().optional(), brandId: id.nullable().optional(), campaignId: id.nullable().optional(),
+}).superRefine((value,ctx)=>{
+  const selected=value.imageType==='product'?value.productId:value.imageType==='brand'?value.brandId:value.imageType==='campaign'?value.campaignId:true
+  if(!selected)ctx.addIssue({code:'custom',message:'Choose a matching record.'})
+})
 
 const lineValue = (line: string, name: string) => line.match(new RegExp(`^${name}\\s*:\\s*(.+)$`, 'i'))?.[1]?.trim()
 export function parseStudioText(source: string): StudioImport {
