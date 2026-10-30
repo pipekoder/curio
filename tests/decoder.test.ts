@@ -134,7 +134,7 @@ it('binds and bounds official parser output without guessing identity or confide
 it('uses the fixed Meta SAM endpoint and official parser; zero matches is valid', async () => {
   const fetch = vi.fn().mockResolvedValue(new Response('data: {"type":"response.completed"}\n\n', { headers: { 'Content-Type': 'text/event-stream' } }))
   vi.stubGlobal('fetch', fetch)
-  const input = { ad: catalog[0], detailId: request.detailId, concept: 'Paper shade', imageDataUrl: 'data:image/png;base64,aGVsbG8=' }
+  const input = { ad: catalog[0], detailId: request.detailId, concept: 'Paper shade', imageDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=' }
   const result = await segmentWithMeta(input, 'FAKE_TEST_KEY', new AbortController().signal)
   expect(result.regions).toEqual([])
   expect(fetch.mock.calls[0][0]).toBe('https://api.meta.ai/v1/responses')
@@ -142,7 +142,7 @@ it('uses the fixed Meta SAM endpoint and official parser; zero matches is valid'
 })
 it.each([302, 401, 429, 500])('rejects Meta SAM status %s without following redirects or retrying', async status => {
   const fetch = vi.fn().mockResolvedValue(new Response('secret', { status })); vi.stubGlobal('fetch', fetch)
-  await expect(segmentWithMeta({ ad: catalog[0], detailId: request.detailId, concept: 'shade', imageDataUrl: 'data:image/png;base64,aGVsbG8=' }, 'fake', new AbortController().signal)).rejects.toThrow()
+  await expect(segmentWithMeta({ ad: catalog[0], detailId: request.detailId, concept: 'shade', imageDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=' }, 'fake', new AbortController().signal)).rejects.toThrow()
   expect(fetch).toHaveBeenCalledTimes(1); expect(fetch.mock.calls[0][1].redirect).toBe('manual')
 })
 it('grounds commentary in approved text fields without image bytes, URLs or inferred product identity', async () => {
@@ -167,5 +167,5 @@ it.each([
   ['<html>not an event stream</html>', 'text/html'],
 ])('rejects malformed, truncated or unbounded SAM streams', async (body, contentType) => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { headers: { 'Content-Type': contentType } })))
-  await expect(segmentWithMeta({ ad: catalog[0], detailId: request.detailId, concept: 'shade', imageDataUrl: 'data:image/png;base64,aGVsbG8=' }, 'fake', new AbortController().signal)).rejects.toThrow()
+  await expect(segmentWithMeta({ ad: catalog[0], detailId: request.detailId, concept: 'shade', imageDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=' }, 'fake', new AbortController().signal)).rejects.toThrow()
 })
