@@ -115,20 +115,32 @@ export class MediaStore {
     const matches=(await this.db.prepare('SELECT version_id FROM media_objects WHERE lower(filename)=lower(?) AND active=1').bind(filename).all<{version_id:string}>()).results
     if(matches.length===1)await this.linkVersion(matches[0].version_id,input,tags)
   }
-  private async linkVersion(versionId:string,input:{imageType:'product'|'brand'|'campaign'|'editorial';productId:string|null;brandId:string|null;campaignId:string|null},tags:readonly string[]){
+  private async linkVersion(versionId:string,input:{imageType:'product'|'brand'|'campaign'|'editorial';productId?:string|null;brandId?:string|null;campaignId?:string|null},tags:readonly string[]){
     const media=await this.get(versionId);if(!media||!media.active)throw new CatalogConflict('Unknown or inactive media version.')
+    const requested=[
+      {kind:'product',table:'media_products',id:input.productId},
+      {kind:'brand',table:'media_brands',id:input.brandId},
+      {kind:'campaign',table:'media_campaigns',id:input.campaignId},
+    ].filter((item):item is {kind:string;table:string;id:string}=>Boolean(item.id))
+    for(const item of requested)if(!await this.db.prepare(`SELECT 1 FROM ${item.table} WHERE id=?`).bind(item.id).first())throw new CatalogConflict(`Unknown ${item.kind} assignment.`)
+    const changed=input.imageType==='editorial'?['product','brand','campaign']:[...new Set([input.imageType,...requested.map(item=>item.kind)])]
+    const clear=changed.map(kind=>this.db.prepare(`DELETE FROM media_${kind}_images WHERE version_id=?`).bind(versionId))
     await this.db.batch([
-      this.db.prepare('DELETE FROM media_product_images WHERE version_id=?').bind(versionId),this.db.prepare('DELETE FROM media_brand_images WHERE version_id=?').bind(versionId),this.db.prepare('DELETE FROM media_campaign_images WHERE version_id=?').bind(versionId),
-      ...(input.productId?[this.db.prepare(`INSERT INTO media_product_images(product_id,version_id,role) SELECT ?,?,'primary' WHERE EXISTS(SELECT 1 FROM media_products WHERE id=?)`).bind(input.productId,versionId,input.productId)]:[]),
-      ...(input.brandId?[this.db.prepare('INSERT INTO media_brand_images SELECT ?,? WHERE EXISTS(SELECT 1 FROM media_brands WHERE id=?)').bind(input.brandId,versionId,input.brandId)]:[]),
-      ...(input.campaignId?[this.db.prepare('INSERT INTO media_campaign_images SELECT ?,? WHERE EXISTS(SELECT 1 FROM media_campaigns WHERE id=?)').bind(input.campaignId,versionId,input.campaignId)]:[]),
+      ...clear,
+      ...(input.productId?[this.db.prepare(`INSERT INTO media_product_images(product_id,version_id,role) VALUES(?,?,'primary')`).bind(input.productId,versionId)]:[]),
+      ...(input.brandId?[this.db.prepare('INSERT INTO media_brand_images(brand_id,version_id) VALUES(?,?)').bind(input.brandId,versionId)]:[]),
+      ...(input.campaignId?[this.db.prepare('INSERT INTO media_campaign_images(campaign_id,version_id) VALUES(?,?)').bind(input.campaignId,versionId)]:[]),
       this.db.prepare('UPDATE media_objects SET image_type=? WHERE version_id=?').bind(input.imageType,versionId),
     ])
     const catalog=await this.catalogForVersion(versionId,tags)
     await this.db.prepare('UPDATE catalog_publications SET catalog_json=?,reviewed_at=? WHERE version_id=?').bind(JSON.stringify(catalog),now(),versionId).run()
     await this.db.prepare('UPDATE reader_asset_reviews SET alt=?,attribution=?,reviewed_at=? WHERE version_id=?').bind(catalog.image.alt,catalog.provenance.attribution,now(),versionId).run()
     await this.db.prepare('UPDATE publisher_metadata SET publisher_name=?,campaign_title=?,description=?,hints_json=? WHERE version_id=?').bind(catalog.advertiser?.name??'Curio mockup studio',catalog.campaign.title,catalog.description,JSON.stringify({categories:[catalog.category],aesthetics:catalog.lifestyleTags,tags:catalog.discoverableObjects.map(o=>o.label)}),versionId).run()
-    return {linked:true,versionId,catalogId:catalog.id}
+    const assignments=await this.db.prepare(`SELECT
+      (SELECT group_concat(product_id) FROM media_product_images WHERE version_id=?) AS product_ids,
+      (SELECT group_concat(brand_id) FROM media_brand_images WHERE version_id=?) AS brand_ids,
+      (SELECT group_concat(campaign_id) FROM media_campaign_images WHERE version_id=?) AS campaign_ids`).bind(versionId,versionId,versionId).first()
+    return {linked:true,versionId,catalogId:catalog.id,assignments}
   }
 
   async list() {
