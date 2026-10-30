@@ -63,7 +63,7 @@ export function normalizeSamResult(result: ImageSegmentationResult, ad: CatalogI
       confidence: box.confidence ?? null, uncertainty: 'model_estimate_not_identity' })) }, ad)
 }
 export async function segmentWithMeta(input: SamInput, key: string, signal: AbortSignal): Promise<Segmentation> {
-  if (!/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(input.imageDataUrl) || input.imageDataUrl.length > 2800000) throw new Error('Invalid approved raster')
+  if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(input.imageDataUrl) || input.imageDataUrl.length > 2800000) throw new Error('Invalid approved raster')
   const response = await fetch('https://api.meta.ai/v1/responses', { method: 'POST', redirect: 'manual', signal,
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Accept: 'text/event-stream' },
     body: JSON.stringify({ model: 'sam-3.1', stream: true, input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: input.concept }, { type: 'input_image', image_url: input.imageDataUrl }] }] }),

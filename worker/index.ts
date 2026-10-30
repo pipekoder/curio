@@ -9,6 +9,7 @@ import { curationCatalog as catalog } from '../shared/catalog'
 import { boundedText, generateMagazine, GenerationError } from './meta'
 import { editorialApi } from './editorial'
 import { catalogApi, type CatalogBindings } from './catalog-api'
+import { mediaApi, publicMedia } from './media-api'
 export { InferenceBudget } from './budget'
 
 export type Bindings = CatalogBindings & {
@@ -26,11 +27,14 @@ export type Bindings = CatalogBindings & {
   RATE_LIMIT_SALT?: string
   INFERENCE_BUDGET?: DurableObjectNamespace
   ASSETS?: Fetcher
+  MEDIA_BUCKET?: R2Bucket
 }
 const app = new Hono<{ Bindings: Bindings }>()
 app.use('/api/*', async (c, next) => { c.header('Cache-Control', 'no-store'); await next() })
 app.route('/api/operator/catalog', catalogApi)
+app.route('/api/operator/media', mediaApi)
 app.route('/api/editorial', editorialApi)
+app.get('/api/media/:version', c => publicMedia(c.req.raw,c.env,c.req.param('version')))
 app.get('/api/catalog/published',async c=>{
   if(c.env?.CATALOG_PUBLIC_ENABLED !== 'true' || !c.env.CATALOG_DB)return c.json({status:'catalog_unavailable'},503)
   c.header('Cache-Control','no-store')

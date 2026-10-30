@@ -2,7 +2,11 @@
 import EditorialExperience from "./EditorialExperience";
 import {useEffect,useState} from 'react';
 import {isExplorePath} from './explore-route';
+import MediaStudio from './MediaStudio';
 export default function App() {
+  return window.location.pathname==='/internal/media'?<MediaStudio/>:<PublicApp/>;
+}
+function PublicApp() {
   // Keep the pre-release reader reachable only for local regression fixtures.
   // Public hosts always receive the approved five-stage experience.
   const localLegacyFixture = (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") && new URLSearchParams(window.location.search).get("legacy") === "1";
