@@ -1,6 +1,8 @@
 import { approvedExternalAssets,type ExternalAssetApprovals } from './url-policy';
 import { z } from "zod";
 import { observationKey, editorialV2Text, evaluateEditorialV2 } from "./editorial-v2";
+import { evaluateChiefEditor, chiefEditorText } from './editorial-chief';
+import type { EditorialSource } from './editorial-sources';
 import { visualPhrase, visualNarrative } from "./editorial-language";
 import {
   categories,
@@ -45,7 +47,7 @@ const prose = z
   );
 export const editorialPlan = z
   .strictObject({
-    qualityVersion: z.literal(2).optional(),
+    qualityVersion: z.union([z.literal(2),z.literal(3)]).optional(),
     title: prose,
     deck: prose,
     connections: z
@@ -65,6 +67,7 @@ export const editorialPlan = z
           assetId: z.string().max(100),
           observationKeys: z.array(observationKey).min(1).max(5).optional(),
           discoveryQuestion: prose.optional(),
+          sourceIds: z.array(z.string().regex(/^[a-z0-9:_-]+$/).max(180)).min(1).max(12).optional(),
           headline: prose,
           narrative: prose,
           layout: z.enum(["hero", "split", "layered", "horizontal", "essay"]),
@@ -76,12 +79,13 @@ export const editorialPlan = z
       .max(6),
   })
   .superRefine((p, ctx) => {
-    if (p.qualityVersion !== 2 && p.features.some(f=>f.observationKeys || f.discoveryQuestion)) ctx.addIssue({code:"custom",message:"Versioned editorial grounding required."});
+    if (p.qualityVersion !== 2 && p.qualityVersion !== 3 && p.features.some(f=>f.observationKeys || f.discoveryQuestion || f.sourceIds)) ctx.addIssue({code:"custom",message:"Versioned editorial grounding required."});
+    if (p.qualityVersion === 3 && p.features.some(f=>!f.sourceIds?.length)) ctx.addIssue({code:'custom',message:'Chief Editor sources required.'});
     if (new Set(p.features.map((f) => f.assetId)).size !== p.features.length)
       ctx.addIssue({ code: "custom", message: "Duplicate assets." });
   });
 export type EditorialPlan = z.infer<typeof editorialPlan>;
-export function validatePlan(input: unknown, pool: readonly CatalogItem[], approvals:ExternalAssetApprovals=approvedExternalAssets) {
+export function validatePlan(input: unknown, pool: readonly CatalogItem[], approvals:ExternalAssetApprovals=approvedExternalAssets, sources:readonly EditorialSource[]=[] ) {
   const p = editorialPlan.parse(input);
   for (const f of p.features) {
     const ad = pool.find(
@@ -91,20 +95,21 @@ export function validatePlan(input: unknown, pool: readonly CatalogItem[], appro
     if (!ad) throw Error("Unapproved editorial asset");
     const copy = editorialCopy(ad);
     if (
-      !(copy.headlines.includes(f.headline) || (p.qualityVersion === 2 ? editorialV2Text(f.headline) : visualPhrase(f.headline))) ||
+      !(copy.headlines.includes(f.headline) || (p.qualityVersion === 2 ? editorialV2Text(f.headline) : p.qualityVersion===3?chiefEditorText(f.headline):visualPhrase(f.headline))) ||
       !(
-        copy.narratives.includes(f.narrative) || (p.qualityVersion === 2 ? editorialV2Text(f.narrative) : visualNarrative(f.narrative))
+        copy.narratives.includes(f.narrative) || (p.qualityVersion === 2 ? editorialV2Text(f.narrative) : p.qualityVersion===3?chiefEditorText(f.narrative):visualNarrative(f.narrative))
       ) ||
       !ad.lifestyleTags.some((t) => t === f.theme)
     )
       throw Error("Unreviewed editorial copy");
+    if(p.qualityVersion===3&&(!f.sourceIds?.length||f.sourceIds.some(id=>!sources.some(source=>source.id===id&&source.assetId===f.assetId))))throw Error('Unreviewed editorial source')
   }
   for (const connection of p.connections ?? []) {
     if (
       connection.fromAssetId === connection.toAssetId ||
       !p.features.some((f) => f.assetId === connection.fromAssetId) ||
       !p.features.some((f) => f.assetId === connection.toAssetId) ||
-      !(p.qualityVersion === 2 ? editorialV2Text(connection.thread) : visualNarrative(connection.thread))
+      !(p.qualityVersion === 2 ? editorialV2Text(connection.thread) : p.qualityVersion===3?chiefEditorText(connection.thread):visualNarrative(connection.thread))
     )
       throw Error("Ungrounded editorial connection");
   }
@@ -206,6 +211,7 @@ export type EditorialEdition = {
   retrieval: "d1" | "fictional";
   cached: boolean;
   items: CatalogItem[];
+  editorialSources?: EditorialSource[];
 };
 export const defaultPreferences: EditorialPreferences = {
   interests: "",
@@ -265,10 +271,13 @@ export function validateOriginalPlan(
   pool: readonly CatalogItem[],
   prefs: EditorialPreferences,
   approvals:ExternalAssetApprovals=approvedExternalAssets,
+  sources:readonly EditorialSource[]=[],
+  contexts:readonly import('./visual-observations').VisualContext[]=[],
 ) {
   const eligible = pool.filter((a) => prefs.allocations[a.category] > 0);
-  const plan = validatePlan(input, eligible, approvals);
-  if (plan.qualityVersion !== 2 && (
+  const plan = validatePlan(input, eligible, approvals,sources);
+  if(plan.qualityVersion===3){const issue=evaluateChiefEditor(plan,contexts,sources);if(issue)throw Error(`Chief Editor output rejected: ${issue}`)}
+  if (plan.qualityVersion !== 2 && plan.qualityVersion !== 3 && (
     !visualPhrase(plan.title) ||
     plan.title.length > 80 ||
     plan.title.split(/\s+/).length > 12 ||

@@ -23,6 +23,7 @@ export type Bindings = CatalogBindings & {
   META_SPARK_MODEL?: string
   MAGAZINE_AI_ENABLED?: string
   MAGAZINE_MAX_CALLS?: string
+  EDITORIAL_PILOT_VERSION_IDS?: string
   PUBLIC_APP_ORIGIN?: string
   RATE_LIMIT_SALT?: string
   INFERENCE_BUDGET?: DurableObjectNamespace
