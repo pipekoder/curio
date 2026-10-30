@@ -17,7 +17,9 @@ const headers = { Authorization: `Bearer ${token}`, Origin: origin, 'Content-Typ
 const request = (path, method = 'GET', body, extra = {}) => mf.dispatchFetch(`${origin}/api/operator/catalog${path}`, { method, headers: { ...headers, ...extra }, body: body === undefined ? undefined : JSON.stringify(body) })
 try {
   let db = await mf.getD1Database('CATALOG_DB')
-  await db.exec((await readFile('migrations/0001_catalog.sql', 'utf8')).replace(/^--.*$/gm, '').replace(/\s+/g, ' '))
+  for (const file of ['0001_catalog.sql','0002_asset_intelligence.sql','0003_discovery_content.sql','0004_media_studio.sql']) {
+    await db.exec((await readFile(`migrations/${file}`, 'utf8')).replace(/^--.*$/gm, '').replace(/\s+/g, ' '))
+  }
   // Miniflare sets CF-Connecting-IP itself, like the edge. Missing/oversized
   // trusted-address guards are separately exercised in catalog-api.test.ts.
   for (const extra of [{ Authorization: '' }, { Authorization: 'Bearer incorrect' }, { Origin: 'https://evil.example' }]) assert.equal((await request('/status', 'GET', undefined, extra)).status, 403, JSON.stringify(extra))
