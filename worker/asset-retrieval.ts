@@ -14,7 +14,7 @@ export class D1AssetRetriever implements AssetRetriever {
     const publicationFilter=r.publishedOnly?`AND EXISTS(SELECT 1 FROM catalog_publications pub JOIN content_catalog_links l ON l.asset_version=pub.version_id JOIN content_versions cv ON cv.id=l.content_version JOIN content_nodes n ON n.id=cv.node_id WHERE pub.version_id=v.id AND n.latest_version=cv.id AND n.availability='active')`:''
     const result = await this.db.prepare(`WITH pool AS (
       SELECT a.id AS asset_id,a.image_url,v.id AS version_id,v.sequence,v.sha256 AS image_sha256,
-        COALESCE(s.canonical_brand_id,p.source_id,a.id) AS brand_key,
+        COALESCE((SELECT product.brand_id FROM media_product_images link JOIN media_products product ON product.id=link.product_id WHERE link.version_id=v.id LIMIT 1),s.canonical_brand_id,p.source_id,a.id) AS brand_key,
         permission.evidence AS analysis_evidence,s.brand_name AS verified_brand,p.publisher_name,p.campaign_title,p.source_page,
         COALESCE(p.hints_json,'{}') AS hints_json,i.output_json AS intelligence_json,
         CASE WHEN i.id IS NOT NULL THEN i.origin ELSE 'editorial_hints' END AS classification_source,
