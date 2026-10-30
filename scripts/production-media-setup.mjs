@@ -3,6 +3,7 @@ import { appendFile, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/prom
 import { join, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
 import { gzipSync } from 'node:zlib'
+import { tableCountSql, tableCounts } from './production-media-counts.mjs'
 
 const target = { name: 'curio-catalog', id: 'b39c4f63-74ee-47f6-bb1d-7388ecc88bc7' }
 const migrations = ['0001_catalog.sql', '0002_asset_intelligence.sql', '0003_discovery_content.sql', '0004_media_studio.sql']
@@ -87,8 +88,7 @@ async function history() {
 }
 
 async function counts(names) {
-  const sql = names.map((name, index) => `${index ? 'UNION ALL ' : ''}SELECT '${name}' AS name, COUNT(*) AS count FROM ${name}`).join(' ')
-  return Object.fromEntries((await query(sql)).map(row => [row.name, Number(row.count)]))
+  return tableCounts(await query(tableCountSql(names)), names)
 }
 
 async function createRecoveryBundle() {
