@@ -130,8 +130,8 @@
  position:static;width:auto;max-height:none;overflow:visible;transform:none;padding:18px;
  border-radius:16px;box-shadow:0 14px 30px #849fc426;font:13px/1.5 Arial,sans-serif;
 }
-/* The detail panel shares the sidebar grid cell and overlays it; relative positioning keeps its z-index above the sidebar. */
-.chair-demo-detail{position:relative;grid-area:sidebar;z-index:4;align-self:start;margin-top:0;border-left:2px solid #9bbce9}
+/* The detail panel shares the sidebar grid cell and overlays it. Auto offsets neutralize stale absolute-rule coordinates; level 12 stays above the sidebar (2) and caption (9). */
+.chair-demo-detail{position:relative;left:auto;top:auto;grid-area:sidebar;z-index:12;align-self:start;margin-top:0;border-left:2px solid #9bbce9}
 .chair-demo-detail span{font-size:10px}.chair-demo-detail h3{font-size:26px}
 .chair-demo-detail button:not(.chair-demo-close){min-height:44px;font-size:13px}
 .catalog-annotated.is-exploring .editorial-reveal h4{font-size:24px}

@@ -9,10 +9,12 @@ const stages=readFileSync(join(root,'src/visual-stages.css'),'utf8')
 
 describe('phase 1 structural stability',()=>{
  it('gives the Reader detail panel an explicit overlay position in the shared sidebar area',()=>{
-  const rule=stages.match(/\.chair-demo-detail\{[^}]*z-index:4[^}]*\}/)
+  const rule=stages.match(/\.chair-demo-detail\{[^}]*grid-area:sidebar[^}]*\}/)
   expect(rule).not.toBeNull()
-  expect(rule![0]).toContain('grid-area:sidebar')
   expect(rule![0]).toContain('position:relative')
+  expect(rule![0]).toContain('left:auto')
+  expect(rule![0]).toContain('top:auto')
+  expect(rule![0]).toContain('z-index:12')
  })
  it('keeps chapter entrance fill from retaining a transform that competes with hover',()=>{
   expect(stages).toContain('reader-image-enter .55s ease-out backwards')
