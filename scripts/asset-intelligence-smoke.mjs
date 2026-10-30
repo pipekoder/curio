@@ -9,9 +9,9 @@ const headers={Authorization:`Bearer ${token}`,Origin:origin,'Content-Type':'app
 const call=(path,body,extra={})=>mf.dispatchFetch(`${origin}/api/operator/catalog/intelligence${path}`,{method:body===undefined?'GET':'POST',headers:{...headers,...extra},body:body===undefined?undefined:JSON.stringify(body)})
 try {
  const db=await mf.getD1Database('CATALOG_DB')
- for(const file of ['0001_catalog.sql','0002_asset_intelligence.sql']) await db.exec((await readFile(`migrations/${file}`,'utf8')).replace(/^--.*$/gm,'').replace(/\s+/g,' '))
- assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'").first()).n,17)
- assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM sqlite_schema WHERE type='index' AND sql IS NOT NULL").first()).n,10)
+ for(const file of ['0001_catalog.sql','0002_asset_intelligence.sql','0003_discovery_content.sql','0004_media_studio.sql']) await db.exec((await readFile(`migrations/${file}`,'utf8')).replace(/^--.*$/gm,'').replace(/\s+/g,' '))
+ assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'").first()).n,33)
+ assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM sqlite_schema WHERE type='index' AND sql IS NOT NULL").first()).n,20)
  assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM sqlite_schema WHERE type='trigger'").first()).n,1)
  assert.equal((await db.prepare('PRAGMA quick_check').first()).quick_check,'ok')
  assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[])

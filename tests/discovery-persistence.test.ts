@@ -18,7 +18,7 @@ const start='https://publisher.example.com/gallery'
 function transport(alt='Original synthetic visual',sha='a'.repeat(64)):DiscoveryTransport{
  return {read:vi.fn(async(url:string)=>url.endsWith('.png')?{status:200,type:'image/png',body:'',bytes:100,sha256:sha,width:1200,height:900,length:100}:{status:200,type:'text/html',body:`<h1>Synthetic fixture gallery</h1><main><p>Original test lighting study.</p><img src="/image.png" alt="${alt}" width="1200" height="900"></main>`,bytes:100}),metrics:()=>({requests:2,bytes:200})}
 }
-async function setup(){context=await assetDatabase();await context.db.exec(readFileSync('migrations/0003_discovery_content.sql','utf8').replace(/^--.*$/gm,'').replace(/\s+/g,' '));return new DiscoveryStore(context.db)}
+async function setup(){context=await assetDatabase();return new DiscoveryStore(context.db)}
 it('reuses an approved synthetic discovery through D1 retrieval and Muse editorial selection with no second crawl',async()=>{
  const store=await setup(),network=transport(),m=await discover(start,{hosts:['publisher.example.com'],dynamic:false,fingerprintImages:true,delayMs:0},network)
  const saved=await store.save(m);expect(saved.replay).toBe(false)

@@ -32,9 +32,9 @@ it('rejects changed, absent and same-size fabricated bytes before any inference'
   await expect(normSam({ ad: await normGeometryRecord(), detailId: 'norm-local-detail', concept: 'seating', imageDataUrl: 'data:image/jpeg;base64,YQ==' }, 'FAKE', new AbortController().signal)).rejects.toThrow()
   expect(send).not.toHaveBeenCalled()
 })
-it('keeps the production SAM PNG gate intact for JPEG input', async () => {
+it('keeps the production SAM approved-raster gate intact for unsupported input', async () => {
   const send = vi.fn(); vi.stubGlobal('fetch', send)
-  await expect(segmentWithMeta({ ad: await normGeometryRecord(), detailId: 'norm-local-detail', concept: 'seating', imageDataUrl: 'data:image/jpeg;base64,YQ==' }, 'FAKE', new AbortController().signal)).rejects.toThrow('approved raster')
+  await expect(segmentWithMeta({ ad: await normGeometryRecord(), detailId: 'norm-local-detail', concept: 'seating', imageDataUrl: 'data:image/gif;base64,YQ==' }, 'FAKE', new AbortController().signal)).rejects.toThrow('approved raster')
   expect(send).not.toHaveBeenCalled()
 })
 it('rejects stale/missing observations without treating appearance as a fact', async () => {
