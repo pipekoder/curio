@@ -1,6 +1,6 @@
 # Curio Content Studio
 
-The owner-only Content Studio is served by the existing Curio application at `/internal/media`. It uses the existing catalog operator boundary: `CATALOG_OPERATOR_ENABLED=true`, a same-origin `PUBLIC_APP_ORIGIN`, a trusted Cloudflare client address and a `CATALOG_OPERATOR_TOKEN` of at least 32 characters. The token is entered in the Studio and retained only in the browser session. Production remains disabled by default; this PR does not change variables, migrate D1 or deploy.
+The owner-only Content Studio is served by the existing Curio application at `/internal/media`. It uses the existing catalog operator boundary: `CATALOG_OPERATOR_ENABLED=true`, a same-origin `PUBLIC_APP_ORIGIN`, a trusted Cloudflare client address and a `CATALOG_OPERATOR_TOKEN` of at least 32 characters. The token is entered in the Studio and retained only in the browser session. Production setup is performed only by the manual workflow documented in [Production Media Studio setup](PRODUCTION_MEDIA_STUDIO_SETUP.md); ordinary CI does not create or reveal the operator credential.
 
 ## Upload and import
 
@@ -60,4 +60,4 @@ npx wrangler d1 migrations apply curio-catalog --local
 npm run worker:dev
 ```
 
-R2 local persistence is supplied by Wrangler through the existing `MEDIA_BUCKET` binding. For a future approved production release, follow the existing D1 production runbook and apply `0004_media_studio.sql` before deploying the Worker. Keep `CATALOG_OPERATOR_ENABLED=false` until the owner separately enables the Studio and has stored `CATALOG_OPERATOR_TOKEN` as a Worker secret. No remote migration, variable change or deployment is part of this PR.
+R2 local persistence is supplied by Wrangler through the existing `MEDIA_BUCKET` binding. Production migration, secret configuration and deployment use `.github/workflows/production-media-setup.yml` after explicit owner authorization. The workflow applies `0003` before `0004`, stores `CATALOG_OPERATOR_TOKEN` as a Worker secret, preserves the existing R2 binding and keeps every paid inference flag disabled.

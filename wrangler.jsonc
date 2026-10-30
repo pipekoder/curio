@@ -16,9 +16,13 @@
   },
   "vars": {
     "MAGAZINE_AI_ENABLED": "false",
+    "ASSET_AI_ENABLED": "false",
+    "SAM_DECODER_ENABLED": "false",
     "META_SPARK_MODEL": "muse-spark-1.3",
     "MAGAZINE_MAX_CALLS": "20",
-    "CATALOG_OPERATOR_ENABLED": "false"
+    "CATALOG_OPERATOR_ENABLED": "true",
+    "CATALOG_PUBLIC_ENABLED": "true",
+    "PUBLIC_APP_ORIGIN": "https://curio.shuang-han807.workers.dev"
   },
   "d1_databases": [
     {

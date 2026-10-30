@@ -1,0 +1,63 @@
+name: Production Media Studio setup
+
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_sha:
+        description: Exact reviewed main commit SHA
+        required: true
+        type: string
+      confirmation:
+        description: Type MIGRATE AND DEPLOY CURIO MEDIA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: curio-production-media-setup
+  cancel-in-progress: false
+
+jobs:
+  migrate-and-deploy:
+    if: github.repository == 'pipekoder/curio' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify target and apply only pending migrations
+        run: node scripts/production-media-setup.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+          RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+          WRANGLER_SEND_METRICS: 'false'
+      - name: Store Content Studio operator secret
+        run: |
+          test "${#CONTENT_STUDIO_OPERATOR_TOKEN}" -ge 32
+          printf '%s' "$CONTENT_STUDIO_OPERATOR_TOKEN" | npx wrangler secret put CATALOG_OPERATOR_TOKEN --config wrangler.jsonc
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CONTENT_STUDIO_OPERATOR_TOKEN: ${{ secrets.CONTENT_STUDIO_OPERATOR_TOKEN }}
+          WRANGLER_SEND_METRICS: 'false'
+      - name: Build and deploy the reviewed Worker
+        run: |
+          npm run build
+          npx wrangler deploy --config wrangler.jsonc
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+      - name: Verify the Content Studio route
+        run: curl --fail --silent --show-error --max-time 20 https://curio.shuang-han807.workers.dev/internal/media > /dev/null
