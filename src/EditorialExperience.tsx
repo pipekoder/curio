@@ -3,6 +3,7 @@ import { ReaderCatalogContext } from './ReaderCatalog';
 import { loadReaderItems } from './load-reader-catalog';
 import { readerApprovals } from '../shared/reader-catalog';
 import { approvedExternalAssets } from '../shared/url-policy';
+import { editorialSources, sourcesForAsset } from '../shared/editorial-sources';
 import { editorialPrompt, interpretEditorialPrompt, promptSuggestions, PromptIntentError } from "../shared/editorial-intent";
 import { authoredVisualContext, visualLabel } from "../shared/visual-observations";
 import { useEffect, useRef, useState } from "react";
@@ -80,8 +81,8 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
         const published=ids.length?await loadReaderItems(ids):[];
         const pool=[...localReaderCatalog,...published],approvals={...approvedExternalAssets,...readerApprovals(published)};
         const selected=snapshot.plan.features.flatMap(f=>pool.filter(a=>a.id===f.catalogId&&a.image.id===f.assetId));
-        const plan=snapshot.source==='meta'?validateOriginalPlan(snapshot.plan,selected,snapshot.prefs,approvals):validatePlan(snapshot.plan,selected,approvals);
-        if(active){setReaderCatalog({items:pool,approvals});setPrefs(snapshot.prefs);setEditionMode(snapshot.prefs.mode);setEdition({plan,items:selected,source:snapshot.source,retrieval:snapshot.retrieval,cached:snapshot.cached});setRestoringExplore(false)}
+        const plan=snapshot.source==='meta'?(snapshot.plan.qualityVersion===3?validatePlan(snapshot.plan,selected,approvals,snapshot.editorialSources):validateOriginalPlan(snapshot.plan,selected,snapshot.prefs,approvals)):validatePlan(snapshot.plan,selected,approvals);
+        if(active){setReaderCatalog({items:pool,approvals});setPrefs(snapshot.prefs);setEditionMode(snapshot.prefs.mode);setEdition({plan,items:selected,source:snapshot.source,retrieval:snapshot.retrieval,cached:snapshot.cached,editorialSources:snapshot.editorialSources});setRestoringExplore(false)}
       }catch{if(active)setRestoringExplore(false)}
     };
     void restore();return()=>{active=false};
@@ -152,6 +153,7 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
       });
       if (response.ok) {
         const data = (await response.json()) as EditorialEdition;
+        const sources=editorialSources.parse(data.editorialSources??[]);
         if (
           !["meta", "deterministic"].includes(data.source) ||
           !["d1", "fictional"].includes(data.retrieval)
@@ -175,8 +177,9 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
           items: allowed,
           plan:
             data.source === "meta"
-              ? validateOriginalPlan(data.plan, allowed, preferences,approvals)
+              ? data.plan.qualityVersion===3?validatePlan(data.plan,allowed,approvals,sources):validateOriginalPlan(data.plan, allowed, preferences,approvals)
               : validatePlan(data.plan, allowed,approvals),
+          editorialSources:sources,
         };
         // A disabled public model still returns the Worker-authored fictional
         // fallback. The visual demo may use its separately approved local photo
@@ -250,7 +253,7 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
         ...prefs,
         interests: ad.lifestyleTags.join(" "),
         allocations: { home: 34, fashion: 33, travel: 33 },
-      })]
+      },curationCatalog)]
         .filter((a) => a.id !== ad.id)
         .filter((a,i,list)=>list.findIndex(next=>next.id===a.id)===i)
         .slice(0, 3),
@@ -278,7 +281,7 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
       mode: "Balanced" as const,
       consent: false,
     };
-    let ranked = rankDemo(next);
+    let ranked = rankDemo(next,curationCatalog);
     try {
       const r = await fetch("/api/editorial", {
         method: "POST",
@@ -293,7 +296,8 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
         const current=ids.length?[...localReaderCatalog,...published]:curationCatalog;
         const approvals=ids.length?{...approvedExternalAssets,...readerApprovals(published)}:readerApprovalsCurrent;
         if(ids.length){setReaderCatalog({items:current,approvals});setSaved(previous=>previous.filter(s=>current.some(a=>a.image.id===s.assetId)));}
-        const plan = validatePlan(d.plan, current.filter(a=>!readerDemoCatalog.some(demo=>demo.id===a.id)),approvals);
+        const sources=editorialSources.parse(d.editorialSources??[])
+        const plan = validatePlan(d.plan, current.filter(a=>!readerDemoCatalog.some(demo=>demo.id===a.id)),approvals,sources);
         ranked = plan.features.flatMap((f) =>
           current.filter((a) => a.id === f.catalogId),
         );
@@ -524,6 +528,7 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
                 ? "This is a Curio-authored illustration, with no verified real brand, designer, material specification or purchasable product."
                 : "Only the reviewed publisher record and attribution are presented. Additional designer, material and manufacturing claims are omitted."}
             </p>
+            {sourcesForAsset(edition?.editorialSources??[],story.image.id).length>0&&<aside className="editorial-source-record" aria-label="Owner-supplied source record"><p className="eyebrow">CONTENT STUDIO / OWNER-SUPPLIED MOCKUP RECORD</p><p>These stored fields are shown verbatim and are not independently verified by Curio or Meta.</p><dl>{sourcesForAsset(edition?.editorialSources??[],story.image.id).filter(source=>edition?.plan.features.find(feature=>feature.assetId===story.image.id)?.sourceIds?.includes(source.id)).map(source=><div key={source.id}><dt>{source.label}</dt><dd>{source.value}</dd></div>)}</dl></aside>}
             {storyDemo?.product && <aside className="chair-demo-story-facts"><p>Fictional demo price: {new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(storyDemo.product.priceUsd)} USD. Not purchasable.</p><ul>{storyDemo.product.assumptions.map(a=><li key={a}>{a}</li>)}</ul><p>These attributes are fictional assumptions or visual observations, not verified product facts.</p></aside>}
             {storyDemo && <p>{storyDemo.title}. {storyDemo.description} Related Curio studies: {storyDemo.related.flatMap(id=>demoMediaFor(`${id}-v1`)).map(item=>item?.title).filter(Boolean).join('; ')}.</p>}
             {!storyDemo && <a
@@ -543,7 +548,7 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
               <span>02 / THE CONTEXT</span>
               <h3>A wider design conversation</h3>
             </div>
-            <p>
+            {story.provenance.origin==='authored_geometry'&&<><p>
               Independent historical context: the V&amp;A describes Arts and
               Crafts as a late nineteenth-century British movement concerned
               with how objects were made. This contextual connection does not
@@ -556,7 +561,7 @@ export default function EditorialExperience({discoverReview=false}:{discoverRevi
               rel="noopener noreferrer"
             >
               Source: V&amp;A — Arts and Crafts: an introduction →
-            </a>
+            </a></>}
             <h3>An editorial reading</h3>
             {edition?.source === "meta" &&
               edition.plan.features.find(

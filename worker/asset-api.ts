@@ -13,6 +13,7 @@ import { D1AssetRetriever } from './asset-retrieval'
 import { AssetAnalysisError, mediaReadiness, runClassification } from './asset-classifier'
 import { versionId } from './asset-contracts'
 import type { Bindings } from './index'
+import {loadEditorialSources,parsePilotVersions} from './editorial-sources'
 
 // Mounted only behind the existing catalog operator authentication middleware.
 export const assetApi = new Hono<{ Bindings: Bindings }>()
@@ -29,6 +30,14 @@ assetApi.onError((error,c) => {
   return c.json({ error: 'Asset intelligence operation unavailable. Check local schema/configuration.' },503)
 })
 assetApi.get('/stages', async c => c.json(await new AssetStore(c.env.CATALOG_DB!).stages()))
+assetApi.get('/pilot/readiness',async c=>{
+  const ids=parsePilotVersions(c.env.EDITORIAL_PILOT_VERSION_IDS)
+  if(!ids)return c.json({configured:false,ready:false,reason:'exactly_six_version_ids_required',assets:[]})
+  const retrieval=await new D1AssetRetriever(c.env.CATALOG_DB!).retrieve({allocations:{home:34,fashion:33,travel:33},aesthetics:[],tags:[],scope:'reader',publishedOnly:true,limit:50})
+  const sources=await loadEditorialSources(c.env.CATALOG_DB!,ids)
+  const assets=ids.map(versionId=>{const hit=retrieval.items.find(item=>item.version_id===versionId);return{versionId,published:Boolean(hit),editorialMetadata:sources.some(source=>source.assetId===versionId),imageAnalysis:hit?.classification_source==='meta'&&typeof hit.intelligence_json==='string',editorialReady:hit?.editorial_ready===1}})
+  return c.json({configured:true,ready:assets.every(asset=>asset.published&&asset.editorialMetadata&&asset.imageAnalysis&&asset.editorialReady),assets})
+})
 assetApi.post('/imports', async c => c.json(await new AssetStore(c.env.CATALOG_DB!).import(await body(c.req.raw)),201))
 assetApi.post('/discovered', async c => {
   const r = z.strictObject({ cursor: z.string().max(2048).default(''), limit: z.number().int().min(1).max(50).default(20) }).parse(await body(c.req.raw))
