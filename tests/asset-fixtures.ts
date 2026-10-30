@@ -4,7 +4,7 @@ import type { DiscoveryItem } from '../worker/asset-contracts'
 export async function assetDatabase() {
   const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: 'export default {fetch(){return new Response("test")}}', compatibilityDate: '2026-10-26', d1Databases: ['CATALOG_DB'], telemetry: { enabled: false }, outboundService: () => { throw new Error('No external network in asset tests') } }))
   const db = await mf.getD1Database('CATALOG_DB') as unknown as D1Database
-  for (const name of ['0001_catalog.sql','0002_asset_intelligence.sql']) await db.exec(readFileSync(`migrations/${name}`,'utf8').replace(/^--.*$/gm,'').replace(/\s+/g,' '))
+  for (const name of ['0001_catalog.sql','0002_asset_intelligence.sql','0003_discovery_content.sql','0004_media_studio.sql']) await db.exec(readFileSync(`migrations/${name}`,'utf8').replace(/^--.*$/gm,'').replace(/\s+/g,' '))
   return { db, mf }
 }
 export const fixtureSource = (id='fixture-brand-a') => ({ id, name: 'Explicit fictional test source', entryUrl: `https://normcph.com/fixture/${id}/`, kind: 'gallery' as const, issueUrl: 'https://github.com/pipekoder/curio/issues/5' })
