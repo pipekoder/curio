@@ -33,6 +33,12 @@ export const mediaLinkInput = z.strictObject({
   if(!selected)ctx.addIssue({code:'custom',message:'Choose a matching record.'})
 })
 
+const metadataText=z.string().trim().min(1).max(4000)
+export const mediaMetadataUpdate=z.strictObject({
+  brand:z.strictObject({id,story:metadataText.optional(),description:metadataText.optional()}).refine(value=>value.story!==undefined||value.description!==undefined,'Add brand story or description.').optional(),
+  product:z.strictObject({id,description:metadataText}).optional(),
+}).refine(value=>Boolean(value.brand||value.product),'Choose brand or product metadata to update.')
+
 const lineValue = (line: string, name: string) => line.match(new RegExp(`^${name}\\s*:\\s*(.+)$`, 'i'))?.[1]?.trim()
 export function parseStudioText(source: string): StudioImport {
   if (new TextEncoder().encode(source).length > 100000) throw new Error('Import text exceeds 100 KiB.')
