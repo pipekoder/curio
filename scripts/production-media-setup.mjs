@@ -34,9 +34,22 @@ function wrangler(args, capture = true) {
     const output = []
     child.stdout?.on('data', chunk => output.push(chunk))
     child.on('error', reject)
-    child.on('close', code => code === 0
-      ? resolvePromise(Buffer.concat(output).toString())
-      : reject(new Error(`Wrangler exited with code ${code}`)))
+    child.on('close', code => {
+      const stdout = Buffer.concat(output).toString()
+      if (code === 0) return resolvePromise(stdout)
+      // Wrangler sometimes writes API/permission failures to stdout even in --json mode.
+      // Do not expose raw provider output: it may contain credentials, URLs or data rows.
+      const patterns = [
+        [/authentication|not authenticated|invalid api token|token.*invalid|unauthorized|error 10000/i, 'Cloudflare authentication failed; check API token validity and account scope.'],
+        [/permission|forbidden|not authorized|access denied|error 10001/i, 'Cloudflare denied permission; check D1/Workers token permissions and account scope.'],
+        [/database.*not found|could not find.*database|no database/i, 'Target D1 database was not found or is inaccessible.'],
+        [/unknown (argument|option|command)|unexpected argument/i, 'Wrangler CLI command or option is not supported.'],
+        [/network|fetch failed|timed out|connection refused/i, 'Network request to Cloudflare failed.'],
+      ]
+      const category = patterns.find(([pattern]) => pattern.test(stdout))?.[1] ?? 'See the failing Wrangler command and check account access, CLI compatibility and D1 state.'
+      const operation = args.slice(0, 3).filter(v => !v.startsWith('-')).join(' ')
+      reject(new Error(`Wrangler operation failed: ${operation} (exit ${code ?? 'unknown'}). ${category}`))
+    })
   })
 }
 
