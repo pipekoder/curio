@@ -12,7 +12,7 @@ function upload(item:UploadItem,token:string,batchId:string|undefined,onProgress
 export default function MediaStudio(){
  const [token,setToken]=useState(()=>sessionStorage.getItem('curio.media.operator')??''),[authorizedToken,setAuthorizedToken]=useState(()=>sessionStorage.getItem('curio.media.operator')??''),[state,setState]=useState<StudioState|null>(null),[error,setError]=useState(''),[source,setSource]=useState(''),[draft,setDraft]=useState(''),[uploads,setUploads]=useState<UploadItem[]>([]),[batchId,setBatchId]=useState<string>(),[busy,setBusy]=useState(false)
  const ready=token.length>=32
- const refresh=useCallback(async()=>{if(!authorizedToken)return;try{setState(await api<StudioState>('/',authorizedToken));setError('')}catch(e){setError(e instanceof Error?e.message:'Unable to open Media Studio.')}},[authorizedToken])
+ const refresh=useCallback(async()=>{if(!authorizedToken)return;try{setState(await api<StudioState>('',authorizedToken));setError('')}catch(e){setError(e instanceof Error?e.message:'Unable to open Media Studio.')}},[authorizedToken])
  useEffect(()=>{void refresh()},[refresh])
  const saveToken=()=>{sessionStorage.setItem('curio.media.operator',token);setAuthorizedToken(token)}
  const addFiles=(files:FileList|File[])=>setUploads(current=>[...current,...Array.from(files).map(file=>({file,progress:0,status:'queued' as const}))])

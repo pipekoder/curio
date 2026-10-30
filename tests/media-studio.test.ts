@@ -9,6 +9,7 @@ import {mediaApi,publicMedia} from '../worker/media-api'
 import {mockUnderstanding,runClassification} from '../worker/asset-classifier'
 import {runDecoder} from '../worker/decoder'
 import {D1AssetRetriever} from '../worker/asset-retrieval'
+import app from '../worker/index'
 
 vi.setConfig({testTimeout:20000,hookTimeout:20000})
 let mf:Miniflare,db:D1Database,bucket:R2Bucket,store:MediaStore
@@ -71,4 +72,17 @@ it('accepts an authenticated same-origin browser GET without Origin and rejects 
  expect(badToken.status).toBe(403)
  const writeWithoutOrigin=await mediaApi.request(`${origin}/batches`,{method:'POST',headers:{...authorized,'Content-Type':'application/json'},body:'{"sourceText":""}'},env)
  expect(writeWithoutOrigin.status).toBe(403)
+})
+
+it('mounts authenticated Media Studio root GETs with and without a trailing slash',async()=>{
+ const token='test-only-private-token-more-than-32-characters',env={CATALOG_OPERATOR_ENABLED:'true',CATALOG_OPERATOR_TOKEN:token,PUBLIC_APP_ORIGIN:origin,CATALOG_DB:db,MEDIA_BUCKET:bucket}
+ const headers={Authorization:`Bearer ${token}`,'CF-Connecting-IP':'192.0.2.1','Sec-Fetch-Site':'same-origin',Referer:`${origin}/internal/media`}
+ for(const path of ['/api/operator/media','/api/operator/media/']){
+  const response=await app.request(`${origin}${path}`,{headers},env)
+  expect(response.status,path).toBe(200)
+  expect(await response.json()).toMatchObject({media:[],brands:[],products:[],campaigns:[]})
+  const denied=await app.request(`${origin}${path}`,{headers:{...headers,Authorization:'Bearer incorrect'}},env)
+  expect(denied.status,path).toBe(403)
+  expect(await denied.json()).toEqual({error:'Operator access required.'})
+ }
 })
