@@ -4,7 +4,7 @@ test('sentence slots, custom words, surprise and manual entry share the existing
  await page.setViewportSize({width:1440,height:900})
  await page.route('**/api/editorial',route=>route.fulfill({status:503,body:'AI disabled'}))
  await page.goto('/')
- await expect(page.getByRole('heading',{name:'Shape Your Curiosity'})).toBeVisible()
+ await expect(page.getByRole('heading',{name:'What are you curious about?'})).toBeVisible()
  await expect(page.locator('.reference-photo img')).toHaveCount(5)
  await page.getByRole('button',{name:'Places & culture'}).click()
  await expect(page.getByLabel('Your discovery prompt')).toHaveValue(/quiet coastal homes in Northern Europe/)

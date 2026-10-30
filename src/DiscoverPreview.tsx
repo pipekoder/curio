@@ -19,7 +19,7 @@ export function DiscoverPreview({prompt,consent,busy,error,promptRef,onPrompt,on
   </svg>
   <div className="reference-photo-planes" aria-hidden="true">{['01_boucle_lounge_chair.png','10_winter_coast.png','02_ceramic_vase.png','11_stone_still_life.png','05_designer_portrait.png'].map((file,i)=><div key={file} className={`reference-photo reference-photo-${i}`} data-photo-slot={i+1}><img src={`/editorial/discover/${file}`} alt="" /></div>)}</div>
   <div className="reference-wordmark"><span className="sr-only">curio.</span><svg viewBox="0 0 112 40" aria-hidden="true"><g fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M19 14C6 7 1 31 14 32L20 29M29 13V24C29 35 45 35 45 24V13M55 32V13M55 21C57 14 62 11 67 13M75 13V32"/><ellipse cx="94" cy="23" rx="9" ry="10"/></g><circle cx="75" cy="6" r="1.2"/><circle cx="109" cy="32" r="1.2"/></svg></div>
-  <h1 id="personal-edition">Shape Your<br/>Curiosity</h1>
+  <h1 id="personal-edition">What are you<br/>curious about?</h1>
   <div className="reference-sphere" aria-hidden="true"><i/></div>
   <PromptLibrary busy={busy} onPrompt={onPrompt}/>
   <form className="reference-prompt" onSubmit={event=>{event.preventDefault();onSubmit()}} aria-busy={busy}>
