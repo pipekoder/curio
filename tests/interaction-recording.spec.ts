@@ -55,11 +55,15 @@ for(const width of [390,1440])test(`recorded photographic chair exploration at $
  const hotspot=page.getByRole('button',{name:/manually annotated/})
  await hotspot.click()
  await expect(page.getByRole('complementary',{name:'Fictional product details'})).toBeVisible()
- const imageBounds=await page.locator('.visual-reader-back-photo').boundingBox()
- const detailBounds=await page.getByRole('complementary',{name:'Fictional product details'}).boundingBox()
- expect(imageBounds).not.toBeNull();expect(detailBounds).not.toBeNull()
- if(width===1440)expect(detailBounds!.x).toBeGreaterThan(imageBounds!.x+imageBounds!.width)
- else expect(detailBounds!.y).toBeGreaterThan(imageBounds!.y+imageBounds!.height)
+ // One evaluate call reads both boxes atomically: the reader auto-scrolls the
+ // opened detail into view, and two sequential reads can straddle that scroll.
+ const boxes=await page.evaluate(()=>{
+  const box=(selector:string)=>{const el=document.querySelector(selector);if(!el)return null;const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}}
+  return {image:box('.visual-reader-back-photo'),detail:box('#reader-demo-detail')}
+ })
+ expect(boxes.image).not.toBeNull();expect(boxes.detail).not.toBeNull()
+ if(width===1440)expect(boxes.detail!.x).toBeGreaterThan(boxes.image!.x+boxes.image!.width)
+ else expect(boxes.detail!.y).toBeGreaterThan(boxes.image!.y+boxes.image!.height)
  await page.screenshot({path:`test-results/chair-detail-immersive-${width}.png`,fullPage:true})
  await page.getByRole('button',{name:'Explore related story'}).click()
  await expect(page.locator('.visual-journey')).toBeVisible()
