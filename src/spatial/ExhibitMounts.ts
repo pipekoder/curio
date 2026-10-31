@@ -97,6 +97,13 @@ export class ExhibitMounts{
     for(const float of this.floats)float.group.position.y=float.baseY+Math.sin(elapsed*0.6+float.phase)*0.08
   }
 
+  // Resolve pop as particles dissolve: 0 at materialization, 1 at rest.
+  setResolve(t:number):void{
+    const clamped=Math.min(1,Math.max(0,t))
+    const eased=1-Math.pow(1-clamped,3)
+    this.group.scale.setScalar(0.94+0.06*eased)
+  }
+
   pick(clientX:number,clientY:number,camera:THREE.Camera,rect:{left:number;top:number;width:number;height:number}):Pick|null{
     const pointer=new THREE.Vector2(
       ((clientX-rect.left)/rect.width)*2-1,

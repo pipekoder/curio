@@ -8,12 +8,14 @@ import {loadCatalogNodes} from './nodes'
 import type {CatalogNode} from './contracts'
 import {fetchEdition} from './edition'
 import {stageEdition,type StagedExhibit} from './staging'
-import {exhibitLayout} from './camera-math'
+import {AssemblyDirector} from './assembly'
+import {AssemblyField} from './AssemblyField'
+import {exhibitLayout,type Waypoint} from './camera-math'
 import {SPATIAL_SESSION_KEY,clearSpatialSession} from './clear'
 import type {NodeSource} from './nodes'
 import './spatial.css'
 
-type DebugSnapshot={distance:number;cameraZ:number;current:number;exhibits:number;nodes:number;source:NodeSource|'pending'}
+type DebugSnapshot={distance:number;cameraZ:number;cameraY:number;current:number;exhibits:number;nodes:number;source:NodeSource|'pending';assembly:string}
 type Inspect={assetId:string;hotspotId?:string}
 
 // Phase 1: prompt -> validated edition -> staged promenade with lateral
@@ -32,12 +34,21 @@ export default function SpatialApp(){
   const [showDock,setShowDock]=useState(true)
   const [current,setCurrent]=useState(-1)
   const [inspect,setInspect]=useState<Inspect|null>(null)
+  const [elapsed,setElapsed]=useState(0)
   const canvasRef=useRef<HTMLCanvasElement>(null)
   const reduced=useRef(false)
   const bridgeRef=useRef<HudBridge|null>(null)
   if(!bridgeRef.current)bridgeRef.current=new HudBridge()
   const rigRef=useRef<CameraRig|null>(null)
   const mountsRef=useRef<ExhibitMounts|null>(null)
+  const fieldRef=useRef<SilverField|null>(null)
+  const directorRef=useRef(new AssemblyDirector())
+  const assemblyRef=useRef<AssemblyField|null>(null)
+  const stagedRef=useRef<{exhibits:StagedExhibit[];label:'meta'|'authored-fallback';skipped:number}|null>(null)
+  const resolveFiredRef=useRef(false)
+  const lastPhaseRef=useRef('idle')
+  const tickerRef=useRef(0)
+  const submitIdRef=useRef(0)
   const layoutRef=useRef(exhibitLayout(0))
   const exhibitsRef=useRef(exhibits)
   exhibitsRef.current=exhibits
@@ -54,6 +65,7 @@ export default function SpatialApp(){
     if(!canvas)return
     reduced.current=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches??false
     const field=new SilverField(canvas)
+    fieldRef.current=field
     const path=CameraRig.originPath()
     const rig=new CameraRig({waypoints:path.waypoints,docks:[],reducedMotion:reduced.current},window.innerWidth/window.innerHeight)
     rigRef.current=rig
@@ -96,6 +108,40 @@ export default function SpatialApp(){
       rig.update(dt)
       mounts.update(now/1000,reduced.current)
       field.update(dt,reduced.current)
+      const director=directorRef.current,assembly=assemblyRef.current
+      if(assembly){
+        const {phase,t,holdMs}=director.update()
+        assembly.update(phase,t,now/1000)
+        const base=phase==='stream'?t*21:phase==='lattice'?21+t*21:phase==='resolve'?42+t*18:60
+        rig.setCinematic(Math.min(base+Math.min(holdMs/1000*2.5,12),60))
+        if(phase==='resolve'){
+          if(!resolveFiredRef.current){
+            resolveFiredRef.current=true
+            const staged=stagedRef.current
+            if(staged){
+              setExhibits(staged.exhibits)
+              setEditionLabel(staged.label)
+              setStatus(staged.skipped?`${staged.skipped} feature${staged.skipped===1?'':'s'} referenced unavailable imagery and ${staged.skipped===1?'was':'were'} left out.`:'')
+              setShowDock(false)
+            }
+          }
+          mounts.setResolve(t)
+        }
+        if(phase!==lastPhaseRef.current){
+          lastPhaseRef.current=phase
+          if(phase==='done'){
+            setComposing(false)
+            window.clearInterval(tickerRef.current)
+            assembly.dispose(field.scene)
+            if(assemblyRef.current===assembly)assemblyRef.current=null
+            director.reset()
+            rig.setCinematic(null)
+            const maxScroll=document.documentElement.scrollHeight-window.innerHeight
+            const dock=layoutRef.current.docks[0]??rig.state.distance
+            if(maxScroll>0)window.scrollTo(0,dock/layoutRef.current.pathLength*maxScroll)
+          }
+        }
+      }
       field.render(rig.camera)
       const nearest=rig.state.nearest
       if(nearest!==currentRef.current)setCurrent(nearest)
@@ -103,12 +149,16 @@ export default function SpatialApp(){
     }
     frame=requestAnimationFrame(loop)
     ;(window as unknown as {__spatial?:()=>DebugSnapshot}).__spatial=()=>({
-      distance:rig.state.distance,cameraZ:rig.state.cameraZ,current:currentRef.current,
+      distance:rig.state.distance,cameraZ:rig.state.cameraZ,cameraY:rig.state.cameraY,current:currentRef.current,
       exhibits:exhibitsRef.current.length,nodes:nodesRef.current.length,source:sourceRef.current,
+      assembly:directorRef.current.phase,
     })
     return ()=>{
       alive=false
       cancelAnimationFrame(frame)
+      window.clearInterval(tickerRef.current)
+      assemblyRef.current?.dispose(field.scene)
+      assemblyRef.current=null
       window.removeEventListener('scroll',readScroll)
       window.removeEventListener('resize',resize)
       canvas.removeEventListener('pointerdown',onDown)
@@ -174,29 +224,74 @@ export default function SpatialApp(){
     if(!trimmed||composing)return
     setComposing(true)
     setCleared(null)
+    setElapsed(0)
     setStatus('Composing your exhibition…')
+    const submitId=++submitIdRef.current
+    window.scrollTo(0,0)
     try{
       sessionStorage.setItem(SPATIAL_SESSION_KEY,JSON.stringify({version:1,prompt:trimmed.slice(0,1000),startedAt:Date.now()}))
     }catch{/* Private browsing keeps the visit in memory only. */}
     bridgeRef.current!.emit({type:'prompt',prompt:trimmed})
-    const {edition,honest}=await fetchEdition(trimmed)
+    const field=fieldRef.current
+    // Level flight while assembling: the idle overlook ramp would pitch the
+    // camera up and push the convergence below frame. Matches the staged
+    // path's first segment, so resolve-fire swaps without a pop.
+    const levelFlight:Waypoint[]=[{d:0,p:[0,2.2,26]},{d:60,p:[0,2.2,-40]},{d:110,p:[0,2.2,-95]}]
+    if(field&&!reduced.current){
+      rigRef.current?.setPath(levelFlight,[])
+      assemblyRef.current?.dispose(field.scene)
+      assemblyRef.current=new AssemblyField(field.scene)
+      resolveFiredRef.current=false
+      stagedRef.current=null
+      lastPhaseRef.current='stream'
+      directorRef.current.start()
+      window.clearInterval(tickerRef.current)
+      const begun=Date.now()
+      tickerRef.current=window.setInterval(()=>setElapsed(Math.floor((Date.now()-begun)/1000)),500)
+    }
+    const {edition,honest}=await fetchEdition(trimmed,fetch,{onResponse:()=>directorRef.current.onResponse()})
+    if(submitId!==submitIdRef.current)return
     const {exhibits:staged,skipped}=stageEdition(edition)
-    setComposing(false)
     if(!staged.length){
+      setComposing(false)
+      window.clearInterval(tickerRef.current)
+      rigRef.current?.setPath(exhibitLayout(0).waypoints,[])
+      directorRef.current.reset()
+      const assembly=assemblyRef.current
+      if(assembly&&field){assembly.dispose(field.scene);assemblyRef.current=null}
       setStatus('No stageable exhibits right now. Refine your curiosity and try again.')
       return
     }
-    setExhibits(staged)
-    setEditionLabel(honest)
-    setShowDock(false)
-    setStatus(skipped?`${skipped} feature${skipped===1?'':'s'} referenced unavailable imagery and ${skipped===1?'was':'were'} left out.`:'')
+    if(reduced.current||!assemblyRef.current){
+      setExhibits(staged)
+      setEditionLabel(honest)
+      setShowDock(false)
+      setComposing(false)
+      setStatus(skipped?`${skipped} feature${skipped===1?'':'s'} referenced unavailable imagery and ${skipped===1?'was':'were'} left out.`:'')
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        const layout=exhibitLayout(staged.length)
+        const maxScroll=document.documentElement.scrollHeight-window.innerHeight
+        if(maxScroll>0)window.scrollTo(0,60/layout.pathLength*maxScroll)
+      }))
+      return
+    }
+    stagedRef.current={exhibits:staged,label:honest,skipped}
+    directorRef.current.onSettled()
   }
 
   const clear=()=>{
+    submitIdRef.current++
+    rigRef.current?.setCinematic(null)
+    setComposing(false)
     const {removed}=clearSpatialSession({localStorage,sessionStorage})
+    const field=fieldRef.current,assembly=assemblyRef.current
+    if(field&&assembly){assembly.dispose(field.scene);assemblyRef.current=null}
+    directorRef.current.reset()
+    window.clearInterval(tickerRef.current)
     setCleared(removed)
     setPrompt('')
     setStatus('')
+    setElapsed(0)
     setExhibits([])
     setEditionLabel(null)
     setInspect(null)
@@ -231,8 +326,10 @@ export default function SpatialApp(){
         <button type="button" onClick={clear}>Clear</button>
       </div>
     </header>
-    {editionLabel==='authored-fallback'&&<p className="spatial-chip" role="note">Curio-authored edition · AI not used</p>}
-    {showDock&&<section className={`spatial-dock${entered?' is-docked':''}`} aria-labelledby="spatial-prompt-heading">
+    {editionLabel==='authored-fallback'&&<p className="spatial-chip" role="note" data-testid="spatial-edition-chip">Curio-authored edition · AI not used</p>}
+    {composing&&<p role="status" className="spatial-chip">Composing your exhibition…{elapsed>0?` (${elapsed}s)`:''}</p>}
+    {!composing&&status&&<p role="status" className={`spatial-chip${editionLabel?' is-sub':''}`}>{status}</p>}
+    {showDock&&<section className={`spatial-dock${entered?' is-docked':''}${composing?' is-composing':''}`} aria-labelledby="spatial-prompt-heading">
       <p className="spatial-eyebrow">01 · Discover</p>
       <h1 id="spatial-prompt-heading">What are you curious about?</h1>
       <form onSubmit={submit}>
@@ -242,7 +339,6 @@ export default function SpatialApp(){
           onChange={event=>setPrompt(event.target.value)}/>
         <button type="submit" disabled={!prompt.trim()||composing}>{composing?'Composing…':'Begin exploration →'}</button>
       </form>
-      {status&&<p role="status" className="spatial-status">{status}</p>}
       {cleared&&<p role="status" className="spatial-status">
         Visit cleared from this browser{cleared.length?`: ${cleared.join(', ')}`:'. Nothing was stored.'} Server data handling: pending confirmation.
       </p>}

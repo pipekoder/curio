@@ -13,7 +13,7 @@ export type EditionFetch={edition:EditorialEdition;honest:'meta'|'authored-fallb
 
 const pool=()=>[...readerDemoCatalog,...editorialDemoCatalog]
 
-export async function fetchEdition(prompt:string,fetchImpl:typeof fetch=fetch):Promise<EditionFetch>{
+export async function fetchEdition(prompt:string,fetchImpl:typeof fetch=fetch,events:{onResponse?:()=>void}={}):Promise<EditionFetch>{
   const prefs:EditorialPreferences={...defaultPreferences,interests:prompt}
   const fallback=():EditionFetch=>({
     edition:{plan:fallbackPlan(prefs,pool()),items:pool(),source:'deterministic',retrieval:'fictional',cached:false},
@@ -24,6 +24,7 @@ export async function fetchEdition(prompt:string,fetchImpl:typeof fetch=fetch):P
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({prompt,consent:false}),signal:AbortSignal.timeout(20000),
     })
+    events.onResponse?.()
     if(!response.ok)return fallback()
     const data=await response.json() as EditorialEdition&{editorialSources?:unknown}
     if(!['meta','deterministic'].includes(data.source)||!['d1','fictional'].includes(data.retrieval))return fallback()
