@@ -39,8 +39,16 @@ for (const width of [1440,390]) test(`reader accessibility, privacy and syntheti
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
   expect(outbound).toBe(0)
   const files=readdirSync('dist/assets')
-  const jsBytes=files.filter(n=>n.endsWith('.js')).reduce((n,f)=>n+statSync(`dist/assets/${f}`).size,0)
-  expect(jsBytes).toBeLessThan(500000)
+  const size=(names:string[])=>names.reduce((n,f)=>n+statSync(`dist/assets/${f}`).size,0)
+  // This route loads only the entry chunk; the spatial chunk is lazy-loaded on /spatial.
+  const entry=files.filter(n=>/^index-.*\.js$/.test(n))
+  expect(entry.length).toBeGreaterThan(0)
+  const entryBytes=size(entry)
+  expect(entryBytes).toBeLessThan(500000)
+  const spatial=files.filter(n=>n.startsWith('SpatialApp-')&&n.endsWith('.js'))
+  expect(spatial.length).toBeGreaterThan(0)
+  const spatialBytes=size(spatial)
+  expect(spatialBytes).toBeLessThan(650000)
   for (const label of await page.locator('.eyebrow').all()) {
     if (!await label.isVisible()) continue
     const ratio = await label.evaluate(element => {
@@ -54,7 +62,7 @@ for (const width of [1440,390]) test(`reader accessibility, privacy and syntheti
     expect(ratio).toBeGreaterThanOrEqual(4.5)
   }
   const navigationMs=await page.evaluate(()=>performance.getEntriesByType('navigation')[0]?.duration??null)
-  writeFileSync(`test-results/performance-${width}.json`,JSON.stringify({environment:'local synthetic, not production Core Web Vitals',width,composeMs,navigationMs,jsBytes,externalRequests:outbound,modelCalls:0},null,2))
+  writeFileSync(`test-results/performance-${width}.json`,JSON.stringify({environment:'local synthetic, not production Core Web Vitals',width,composeMs,navigationMs,entryBytes,spatialBytes,externalRequests:outbound,modelCalls:0},null,2))
   await page.locator('.issue-cover').screenshot({path:`test-results/acceptance-cover-${width}.png`})
 })
 
