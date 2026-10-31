@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest'
-import {clamp,dampedStep,dockMagnet,lerp,magnetEscape,scrollToDistance,splinePosition} from '../src/spatial/camera-math'
+import {clamp,dampedStep,dockMagnet,exhibitLayout,lerp,magnetEscape,scrollToDistance,splinePosition} from '../src/spatial/camera-math'
 
 describe('spatial camera math',()=>{
  it('damps toward the target without overshoot and snaps on degenerate input',()=>{
@@ -38,6 +38,20 @@ describe('spatial camera math',()=>{
   expect(scrollToDistance(-50,1000,90)).toBe(0)
   expect(scrollToDistance(100,0,90)).toBe(0)
   expect(scrollToDistance(100,1000,0)).toBe(0)
+ })
+ it('lays out one dock per exhibit with an overlook past the last mount',()=>{
+  const three=exhibitLayout(3)
+  expect(three.docks).toEqual([60,100,140])
+  expect(three.pathLength).toBe(60+80+50)
+  expect(three.waypoints.length).toBe(5)
+  expect(three.waypoints[1].p[2]).toBe(-40)
+  expect(three.waypoints[3].p[2]).toBe(-120)
+  expect(three.mounts.map(m=>m.z)).toEqual([-52,-92,-132])
+  expect(three.mounts.map(m=>m.x)).toEqual([-2.4,2.4,-2.4])
+  const none=exhibitLayout(0)
+  expect(none.docks).toEqual([])
+  expect(none.mounts).toEqual([])
+  expect(none.pathLength).toBe(110)
  })
  it('keeps helpers total',()=>{
   expect(lerp(0,10,0.25)).toBe(2.5)

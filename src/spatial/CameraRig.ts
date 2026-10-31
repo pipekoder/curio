@@ -18,31 +18,49 @@ export class CameraRig{
   private distance=0
   private target=0
   private lastTarget=0
-  private lastTime=0
   private arrived=-1
   private lookAhead=18
+  private focus:{dock:number;mountX:number;mountZ:number}|null=null
+  private focusBlend=0
 
   constructor(private opts:RigOptions,aspect:number){
     this.camera=new THREE.PerspectiveCamera(55,aspect,0.1,900)
     this.apply(0)
   }
 
-  get state():{distance:number;cameraZ:number}{
-    return {distance:this.distance,cameraZ:this.camera.position.z}
+  get state():{distance:number;cameraZ:number;nearest:number}{
+    return {distance:this.distance,cameraZ:this.camera.position.z,nearest:this.nearestDock()}
   }
 
-  setScroll(scrollY:number,maxScroll:number,pathLength:number,now:number):void{
+  setPath(waypoints:readonly Waypoint[],docks:readonly number[]):void{
+    this.opts={...this.opts,waypoints,docks}
+    this.arrived=-1
+  }
+
+  setFocus(focus:{dock:number;mountX:number;mountZ:number}|null):void{
+    this.focus=focus
+  }
+
+  nearestDock():number{
+    let best=-1,bestDist=Infinity
+    this.opts.docks.forEach((dock,index)=>{
+      const dist=Math.abs(dock-this.distance)
+      if(dist<bestDist){bestDist=dist;best=index}
+    })
+    return bestDist<=20?best:-1
+  }
+
+  setScroll(scrollY:number,maxScroll:number,pathLength:number):void{
     this.target=scrollToDistance(scrollY,maxScroll,pathLength)
-    this.lastTime=now
   }
 
-  update(dt:number,now:number):void{
+  update(dt:number):void{
     const velocity=dt>0?(this.target-this.lastTarget)/dt:0
     this.lastTarget=this.target
-    this.lastTime=now
     this.distance=this.opts.reducedMotion?this.target:dampedStep(this.distance,this.target,4.5,dt)
     let settled=this.distance
     if(!this.opts.reducedMotion&&!magnetEscape(velocity,ESCAPE_VELOCITY))settled=dockMagnet(settled,this.opts.docks,DOCK_RADIUS)
+    this.focusBlend=this.opts.reducedMotion?(this.focus?1:0):dampedStep(this.focusBlend,this.focus?1:0,5,dt)
     this.apply(settled)
     const arrived=this.opts.docks.findIndex(dock=>Math.abs(settled-dock)<2)
     if(arrived!==this.arrived){this.arrived=arrived;if(arrived>=0)this.opts.onArrive?.(arrived)}
@@ -50,8 +68,15 @@ export class CameraRig{
 
   private apply(d:number):void{
     const [x,y,z]=splinePosition(d,this.opts.waypoints)
-    this.camera.position.set(x,y,z)
     const look=splinePosition(d+this.lookAhead,this.opts.waypoints)
+    if(this.focus&&this.focusBlend>0.001){
+      const t=this.focusBlend
+      const ix=this.focus.mountX,iy=2.4,iz=this.focus.mountZ+6
+      this.camera.position.set(x+(ix-x)*t,y+(iy-y)*t,z+(iz-z)*t)
+      this.camera.lookAt(look[0]+(ix-look[0])*t,look[1]+(2.6-look[1])*t,look[2]+(this.focus.mountZ-look[2])*t)
+      return
+    }
+    this.camera.position.set(x,y,z)
     this.camera.lookAt(look[0],look[1],look[2])
   }
 

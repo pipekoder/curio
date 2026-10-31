@@ -27,7 +27,7 @@ export class SilverField{
     this.renderer.toneMappingExposure=1.05
     this.scene=new THREE.Scene()
     this.scene.background=new THREE.Color(SILVER)
-    this.scene.fog=new THREE.FogExp2(SILVER,0.016)
+    this.scene.fog=new THREE.FogExp2(SILVER,0.011)
     this.scene.add(new THREE.HemisphereLight(0xffffff,0xd8dde3,0.9))
     const key=new THREE.DirectionalLight(0xffffff,1.1)
     key.position.set(-18,30,12)
@@ -45,7 +45,16 @@ export class SilverField{
     }
     const geometry=new THREE.BufferGeometry()
     geometry.setAttribute('position',new THREE.BufferAttribute(positions,3))
-    const material=new THREE.PointsMaterial({color:0xcfd6dc,size:0.35,transparent:true,opacity:0.55,sizeAttenuation:true,depthWrite:false})
+    const sprite=document.createElement('canvas')
+    sprite.width=64;sprite.height=64
+    const ctx=sprite.getContext('2d')!
+    const gradient=ctx.createRadialGradient(32,32,0,32,32,32)
+    gradient.addColorStop(0,'rgba(255,255,255,1)')
+    gradient.addColorStop(0.4,'rgba(255,255,255,.55)')
+    gradient.addColorStop(1,'rgba(255,255,255,0)')
+    ctx.fillStyle=gradient
+    ctx.fillRect(0,0,64,64)
+    const material=new THREE.PointsMaterial({color:0xc9d1d8,size:0.55,map:new THREE.CanvasTexture(sprite),transparent:true,opacity:0.5,sizeAttenuation:true,depthWrite:false})
     return new THREE.Points(geometry,material)
   }
 
@@ -69,8 +78,13 @@ export class SilverField{
       const mesh=object as THREE.Mesh
       if(mesh.geometry)mesh.geometry.dispose()
       const material=mesh.material as THREE.Material|THREE.Material[]|undefined
-      if(Array.isArray(material))material.forEach(m=>m.dispose())
-      else if(material)material.dispose()
+      const disposeOne=(m:THREE.Material)=>{
+        const mapped=(m as THREE.PointsMaterial).map as THREE.Texture|undefined
+        if(mapped)mapped.dispose()
+        m.dispose()
+      }
+      if(Array.isArray(material))material.forEach(disposeOne)
+      else if(material)disposeOne(material)
     })
     this.renderer.dispose()
   }
