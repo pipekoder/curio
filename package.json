@@ -27,9 +27,11 @@
   },
   "dependencies": {
     "@meta-sam/parser": "^0.1.0",
+    "@types/three": "^0.187.0",
     "hono": "^4.10.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "three": "^0.187.0",
     "zod": "^4.1.0"
   },
   "devDependencies": {
