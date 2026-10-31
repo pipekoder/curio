@@ -1,0 +1,29 @@
+{
+  "provenance": "Owner-supplied text from a real live Muse Spark editorial test; not a complete model response",
+  "title": "Intervals of Stillness",
+  "deck": "Three quiet interiors where shadow, curve, and interval teach the eye to linger a little longer.",
+  "features": [
+    {
+      "headline": "A Room That Breathes In Curves",
+      "narrative": "Seating sits low while lighting draws a thin edge across the interior. The eye follows the bend, then pauses where shadow gathers. The appearance here appears fabric-like in one interval and appears stone-like in another, but it is the spacing between forms that holds attention.",
+      "discoveryQuestion": "Where does the curve open into space, and where does shadow close it again?"
+    },
+    {
+      "headline": "What We Carry Through Light",
+      "narrative": "An accessory rests near folded clothing against a pale architectural edge. Light falls from one side, narrowing then widening the frame. What appears fabric-like softens the geometry, while shadow gives the composition its quiet punctuation.",
+      "discoveryQuestion": "How does a small accessory change the scale of the architecture around it?"
+    },
+    {
+      "headline": "Shelter Found In The Interval",
+      "narrative": "Lighting, seating, and architecture align like markers along an interior passage. The view moves from foreground weight to open distance. Surfaces that appear wood-like in one area and appear paper-like in another catch light differently, letting the path-and-shelter rhythm lead the eye forward.",
+      "discoveryQuestion": "Follow the sheltered path in the image — what waits past the brightest point?"
+    }
+  ],
+  "observedResult": {
+    "source": "meta",
+    "retrieval": "d1",
+    "latencyMs": 13094,
+    "totalTokens": 15707,
+    "reservedUnits": 4
+  }
+}

@@ -6,7 +6,13 @@
 
 High-level journalism principles were distilled from the general editorial practices described by [Vogue's About page](https://www.vogue.com/info/about-vogue) and the [American Press Institute's journalism guidance](https://americanpressinstitute.org/journalism-essentials/). Curio has no affiliation with either publication. No article text or distinctive prose is copied into the knowledge library.
 
-The requested 2017–2026 Nobel Literature review should be checked against the [Nobel Prize's official Literature laureate index](https://www.nobelprize.org/prizes/lists/all-nobel-prizes-in-literature/) and the corresponding official laureate biographies. The development environment's request to the Nobel API returned a 403 network policy response, so individual laureate biographies and the 2026 award could not be verified here. The narrative techniques in the library are **Curio's original editorial interpretations**, not claims about, quotations from, or imitations of particular laureates. A verified year-by-year research table remains a content research task before calling that subsection complete.
+The requested 2017–2026 Nobel Literature review should be checked against the [Nobel Prize's official Literature laureate index](https://www.nobelprize.org/prizes/lists/all-nobel-prizes-in-literature/) and the corresponding official laureate biographies. Both the Nobel API and the owner-provided index URL returned a 403 network policy response in this environment. Individual laureates, their narrative characteristics, and the 2026 award therefore remain **unverified here**. The narrative techniques in the library are **Curio's original editorial interpretations**, not claims about, quotations from, or imitations of particular laureates. A verified year-by-year research table remains pending; no names or traits were inferred from memory.
+
+## Real editorial baseline
+
+[`tests/fixtures/intervals-of-stillness-live.json`](../tests/fixtures/intervals-of-stillness-live.json) preserves the exact title, deck, three headlines, narratives and discovery questions supplied by the owner from the live *Intervals of Stillness* Muse test. The reported result was `source=meta`, `retrieval=d1`, 13,094 ms, 15,707 total tokens and four reserved inference units. The fixture is **text only**: it does not contain asset IDs, exact-version observations, source citations, a full plan, a Reviewer response, scores or model traces. It cannot be replayed through the complete technical validator or used to claim a V2 live improvement.
+
+The non-billable regression test records the observed repetition of light/shadow language and mechanical appearance wording. V2's qualitative target is a distinct supported idea per feature, more useful discovery questions and natural uncertainty language while preserving factual integrity. Actual improvement still requires a separately authorized live test and comparison with this baseline.
 
 ## Editing and activation
 
