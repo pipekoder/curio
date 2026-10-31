@@ -6,7 +6,14 @@ import MediaStudio from './MediaStudio';
 const SpatialApp=lazy(()=>import('./spatial/SpatialApp'));
 export default function App() {
   if(window.location.pathname==='/internal/media')return <MediaStudio/>;
-  if(window.location.pathname==='/spatial')return <Suspense fallback={<main className="page"><p role="status">Loading the spatial exhibition…</p></main>}><SpatialApp/></Suspense>;
+  // Silver Field is the default homepage. /spatial redirects for backward
+  // compatibility; the 2D experience lives on as /legacy; explore and
+  // unknown paths keep rendering the 2D reader.
+  if(window.location.pathname==='/'||window.location.pathname==='')return <Suspense fallback={<main className="page"><p role="status">Loading the spatial exhibition…</p></main>}><SpatialApp/></Suspense>;
+  if(window.location.pathname==='/spatial'||window.location.pathname==='/spatial/'){
+    window.location.replace('/');
+    return <main className="page"><p role="status">Loading the spatial exhibition…</p></main>;
+  }
   return <PublicApp/>;
 }
 export function PublicApp() {
