@@ -354,12 +354,11 @@ export async function generateEditorialResult(
     const raw: unknown = JSON.parse(choices[0].message.content);
     diagnostic = { code: "provider_plan_schema", field: "plan" };
     const structured = output.parse(raw);
-    diagnostic = { code: "original_language", field: "plan" };
-    requireGroundedEditorial(structured, visualContexts,sources);
-    diagnostic = diagnoseOriginalPlan(structured, eligible, p, approvals) ?? {
+    diagnostic = diagnoseOriginalPlan(structured, eligible, p, approvals,sources,visualContexts) ?? {
       code: "plan_schema",
       field: "plan",
     };
+    requireGroundedEditorial(structured, visualContexts,sources);
     const plan = validateOriginalPlan(structured, eligible, p, approvals,sources,visualContexts);
     measurement.latencyMs = Math.round(performance.now() - started);
     return { plan, measurement };

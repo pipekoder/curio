@@ -1,9 +1,10 @@
 import {afterEach,expect,it,vi} from 'vitest'
-import {evaluateChiefEditor,chiefEditorText} from '../shared/editorial-chief'
+import {evaluateChiefEditor,chiefEditorText,chiefEditorIssues} from '../shared/editorial-chief'
+import {chiefEditorIssueDiagnostic,diagnoseOriginalPlan} from '../shared/editorial-diagnostics'
 import type {EditorialSource} from '../shared/editorial-sources'
 import type {VisualContext} from '../shared/visual-observations'
 import {parsePilotVersions} from '../worker/editorial-sources'
-import {generateEditorialResult} from '../worker/editorial'
+import {EditorialGenerationError,generateEditorialResult} from '../worker/editorial'
 import {externalFixture} from './hybrid-fixtures'
 import type {ExternalAssetApprovals} from '../shared/url-policy'
 
@@ -14,6 +15,9 @@ const sources:EditorialSource[]=[
 ]
 const contexts:VisualContext[]=[{assetId:asset,versionId:asset,imageSha256:'b'.repeat(64),source:'meta_image_observation',model:'muse-spark-1.3',uncertainty:'appearance_not_verified_fact',observations:{subjects:['seating','lighting'],materialAppearance:['fabric-like'],environments:['interior-like'],relationships:['light-and-shadow','curve-and-space']}}]
 const plan={qualityVersion:3,title:'The Architecture of Attention',deck:'Light and space guide attention from foreground to background.',features:[{catalogId:'catalog-test',assetId:asset,headline:'Where Light Meets Seating',narrative:'A band of light frames the seating, while shadow separates its rounded form from the background.',observationKeys:['subjects.seating','relationships.light-and-shadow'],discoveryQuestion:'How might the curve redirect attention across the surrounding space?',sourceIds:sources.map(source=>source.id),layout:'hero',motion:'still',theme:'Scandinavian'}],connections:[]}
+const item={...externalFixture,id:'catalog-test',image:{...externalFixture.image,id:asset},permissions:{...externalFixture.permissions,aiAnalysis:{status:'approved' as const,evidence:'docs/TEST_ONLY.md'}}}
+const approvals:ExternalAssetApprovals={[asset]:{url:item.image.externalUrl!,sourcePage:item.provenance.originalSourcePage!,displayEvidence:item.permissions.display.evidence!}}
+const prefs={interests:'light and attention',aesthetics:['Scandinavian' as const],allocations:{home:100,fashion:0,travel:0},mode:'Focused' as const,consent:true}
 afterEach(()=>vi.unstubAllGlobals())
 
 it('accepts natural, source-cited visual storytelling without a closed vocabulary',()=>{
@@ -36,9 +40,29 @@ it('requires exactly six unique exact-version pilot IDs',()=>{
  expect(parsePilotVersions('asset-not-a-version')).toBeNull()
 })
 
+it('maps every Chief Editor policy rejection to a bounded public diagnostic',()=>{
+ const diagnostics=chiefEditorIssues.map(chiefEditorIssueDiagnostic)
+ expect(diagnostics.map(value=>value.code)).toEqual(chiefEditorIssues.map(issue=>`chief_${issue}`))
+ expect(diagnostics.every(value=>value.field==='plan'||value.field==='features')).toBe(true)
+ expect(JSON.stringify(diagnostics)).not.toContain(asset)
+})
+
+it('diagnoses qualityVersion 3 with its actual sources and observations instead of legacy language rules',()=>{
+ expect(diagnoseOriginalPlan(plan,[item],prefs,approvals,sources,contexts)).toBeNull()
+ const unsupported={...plan,features:[{...plan.features[0],observationKeys:['subjects.architecture']}]}
+ expect(diagnoseOriginalPlan(unsupported,[item],prefs,approvals,sources,contexts)).toEqual({code:'chief_unsupported_observation',field:'features'})
+})
+
+it('reports the Chief Editor rejection that previously surfaced as original_language',async()=>{
+ const unsupported={...plan,features:[{...plan.features[0],observationKeys:['subjects.architecture']}]}
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(unsupported)}}],usage:{prompt_tokens:4100,completion_tokens:2077,total_tokens:6177}})))
+ try{await generateEditorialResult(prefs,[item],'FAKE',contexts,[],approvals,sources);expect.fail('Expected policy rejection')}catch(error){
+  expect(error).toBeInstanceOf(EditorialGenerationError)
+  expect(error).toMatchObject({diagnostic:{code:'chief_unsupported_observation',field:'features'},measurement:{usage:{inputTokens:4100,outputTokens:2077,totalTokens:6177}}})
+ }
+})
+
 it('sends facts and observations as separate bounded inputs in one Chief Editor request',async()=>{
- const item={...externalFixture,id:'catalog-test',image:{...externalFixture.image,id:asset},permissions:{...externalFixture.permissions,aiAnalysis:{status:'approved' as const,evidence:'docs/TEST_ONLY.md'}}}
- const approvals:ExternalAssetApprovals={[asset]:{url:item.image.externalUrl!,sourcePage:item.provenance.originalSourcePage!,displayEvidence:item.permissions.display.evidence!}}
  const send=vi.fn(async(_url:string,init:RequestInit)=>{
   const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content)
   expect(body.model).toBe('muse-spark-1.3');expect(body.messages[0].content).toContain('Chief Editor policy v1')
@@ -46,7 +70,6 @@ it('sends facts and observations as separate bounded inputs in one Chief Editor 
   expect(input.catalog[0]).not.toHaveProperty('name');expect(input.catalog[0]).not.toHaveProperty('description');expect(input).not.toHaveProperty('visualVocabulary')
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(plan)}}],usage:{prompt_tokens:200,completion_tokens:100,total_tokens:300}})
  });vi.stubGlobal('fetch',send)
- const prefs={interests:'light and attention',aesthetics:['Scandinavian' as const],allocations:{home:100,fashion:0,travel:0},mode:'Focused' as const,consent:true}
  const result=await generateEditorialResult(prefs,[item],'FAKE',contexts,[],approvals,sources)
  expect(result.plan).toEqual(plan);expect(result.measurement.usage?.totalTokens).toBe(300);expect(send).toHaveBeenCalledOnce()
 })
