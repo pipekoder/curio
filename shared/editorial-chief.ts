@@ -3,6 +3,8 @@ import type { VisualContext } from './visual-observations'
 
 type Feature={assetId:string;headline:string;narrative:string;observationKeys?:string[];discoveryQuestion?:string;sourceIds?:string[]}
 type Plan={qualityVersion?:number;title:string;deck:string;features:Feature[];connections?:{thread:string}[]}
+export const chiefEditorIssues=['unsafe_editorial_language','factual_source_in_prose','bounded_copy','generic_description','repetitive_copy','unsupported_observation','missing_discovery_grounding','unsupported_source','unsupported_subject','unsupported_material'] as const
+export type ChiefEditorIssue=(typeof chiefEditorIssues)[number]
 const plain=/^[\p{L}\p{N} ,;:.?!'()\-–—]+$/u
 const unsafe=/\b(?:buy|shop|available now|in stock|best|award-winning|certified|authentic|sustainable|founded|established|designed by|manufactured by|made by|guaranteed|proven|perfect|must-have)\b/i
 const concrete=/\b(?:light|shadow|shape|curve|line|surface|space|foreground|background|composition|silhouette|seating|lighting|clothing|accessory|architecture|landscape|path|relationship|contrast|rhythm|scale|proportion|frame|layer|edge|volume|form)\b/i
@@ -12,7 +14,7 @@ const overlap=(a:string,b:string)=>{const left=content(a),right=content(b);retur
 
 export function chiefEditorText(value:string){return value.length>=5&&value.length<=400&&plain.test(value)&&!/[<>]|https?:|javascript:|```/i.test(value)&&!unsafe.test(value)}
 
-export function evaluateChiefEditor(plan:Plan,contexts:readonly VisualContext[],sources:readonly EditorialSource[]){
+export function evaluateChiefEditor(plan:Plan,contexts:readonly VisualContext[],sources:readonly EditorialSource[]):ChiefEditorIssue|null{
   const prose=[plan.title,plan.deck,...plan.features.flatMap(feature=>[feature.headline,feature.narrative,feature.discoveryQuestion??'']),...(plan.connections??[]).map(connection=>connection.thread)]
   if(prose.some(value=>!chiefEditorText(value)))return'unsafe_editorial_language'
   const complete=prose.join(' ').toLocaleLowerCase()
