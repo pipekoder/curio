@@ -300,6 +300,47 @@ test('unverifiable journey records fall back to the labeled manifest',async({pag
   await expect(page.getByRole('status').last()).toContainText('could not be verified')
 })
 
+test('failed journey revalidation also removes staged server exhibits',async({page})=>{
+  let calls=0
+  await page.route('**/api/catalog/published*',route=>{
+    const ids=new URL(route.request().url()).searchParams.get('ids')
+    calls++
+    if(ids||calls>1)return route.fulfill({status:503,json:{error:'catalog down'}})
+    return route.fulfill({status:200,json:{items:publishedRecords,nextCursor:null}})
+  })
+  await stageVersionedEdition(page,publishedRecords)
+  expect(await page.evaluate(()=>window.__spatial?.().exhibits)).toBe(2)
+  await page.getByRole('button',{name:'Journey',exact:true}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await expect(page.getByRole('navigation',{name:'Journey network'})).toContainText('local manifest')
+  expect(await page.evaluate(()=>window.__spatial?.().exhibits)).toBe(0)
+  await expect(page.getByTestId('spatial-edition-chip')).toBeHidden()
+  await expect(page.getByRole('status').last()).toContainText('exhibits were removed')
+})
+
+test('failed journey revalidation leaves local demo exhibits alone',async({page})=>{
+  let calls=0
+  await page.route('**/api/catalog/published*',route=>{
+    const ids=new URL(route.request().url()).searchParams.get('ids')
+    calls++
+    if(ids||calls>1)return route.fulfill({status:503,json:{error:'catalog down'}})
+    return route.fulfill({status:200,json:{items:publishedRecords,nextCursor:null}})
+  })
+  await page.route('**/api/editorial',route=>route.fulfill({status:503,json:{error:'AI disabled'}}))
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/')
+  await submitPrompt(page)
+  await expect(page.getByTestId('spatial-edition-chip')).toContainText('AI not used',{timeout:15000})
+  await expect(page.getByRole('button',{name:'Journey',exact:true})).toBeEnabled({timeout:15000})
+  const staged=await page.evaluate(()=>window.__spatial?.().exhibits??0)
+  expect(staged).toBeGreaterThan(0)
+  await page.getByRole('button',{name:'Journey',exact:true}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await expect(page.getByRole('navigation',{name:'Journey network'})).toContainText('local manifest')
+  expect(await page.evaluate(()=>window.__spatial?.().exhibits)).toBe(staged)
+  await expect(page.getByTestId('spatial-edition-chip')).toContainText('AI not used')
+})
+
 test('artwork that 404s removes its exhibit instead of lingering',async({page})=>{
   await page.route('**/api/catalog/published*',publishedRoute(()=>[]))
   await page.route('**/api/editorial',route=>route.fulfill({status:200,json:{plan:versionPlan([publishedRecords[0]]),items:[publishedRecords[0]],source:'meta',retrieval:'d1',cached:false}}))

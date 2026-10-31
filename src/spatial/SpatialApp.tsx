@@ -547,12 +547,21 @@ export default function SpatialApp(){
         const {eligible,verified}=await revalidateVersions(current.map(node=>node.assetId))
         if(!verified){
           // Fail closed: unverified records leave, and the labeled local
-          // manifest keeps Journey usable without redisplaying them.
+          // manifest keeps Journey usable without redisplaying them. Staged
+          // server exhibits go too — only local demo content is unaffected.
           const fresh=await loadCatalogNodes()
           current=fresh.nodes
           setNodes(current)
           setSource(fresh.source)
-          setStatus('The live catalog could not be verified; unverified records were removed.')
+          let dropped=0
+          if(serverSourced()){
+            const before=exhibitsRef.current.length
+            stagedNow=pruneExhibits(()=>false,'unverified')
+            dropped=before-stagedNow.length
+          }
+          setStatus(dropped
+            ?'The live catalog could not be verified; unverified records and exhibits were removed.'
+            :'The live catalog could not be verified; unverified records were removed.')
         }else{
           const checked=new Set(current.map(node=>node.assetId))
           const removed=current.filter(node=>!eligible.has(node.assetId))
