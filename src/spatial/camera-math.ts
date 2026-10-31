@@ -43,6 +43,23 @@ export function magnetEscape(velocity:number,threshold:number):boolean{
   return Math.abs(velocity)>threshold
 }
 
+// Promenade layout: origin rest, one dock per exhibit down-axis, an overlook
+// past the last mount. Pure so the camera path is unit-tested.
+export function exhibitLayout(count:number,spacing=40,startZ=-40):{waypoints:Waypoint[];docks:number[];mounts:{x:number;z:number}[];pathLength:number}{
+  const waypoints:Waypoint[]=[{d:0,p:[0,2.2,26]}]
+  const docks:number[]=[]
+  const mounts:{x:number;z:number}[]=[]
+  for(let i=0;i<count;i++){
+    const d=60+i*spacing
+    docks.push(d)
+    waypoints.push({d,p:[0,2.2,startZ-i*spacing]})
+    mounts.push({x:i%2?2.4:-2.4,z:startZ-i*spacing-12})
+  }
+  const pathLength=60+Math.max(0,count-1)*spacing+50
+  waypoints.push({d:pathLength,p:[0,6,startZ-Math.max(0,count-1)*spacing-50]})
+  return {waypoints,docks,mounts,pathLength}
+}
+
 // Native scroll offset to path distance. Guards unsettled layout.
 export function scrollToDistance(scrollY:number,maxScroll:number,pathLength:number):number{
   if(!(maxScroll>0)||!(pathLength>0))return 0
