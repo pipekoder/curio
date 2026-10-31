@@ -59,3 +59,30 @@ export async function loadCatalogNodes(fetchImpl:typeof fetch=fetch):Promise<{no
     return fallback()
   }
 }
+
+const versionId=/^version-[a-f0-9]{64}$/
+
+// Revalidation against the same endpoint: exact asset-version IDs the
+// session already holds, in server-accepted batches of 60. Anything the
+// server no longer returns — or anything the check cannot confirm — is
+// absent from `eligible`, and `verified:false` fails closed when the check
+// itself cannot run. Local demo IDs never match the version pattern, so
+// they are never sent and never confirmed.
+export async function revalidateVersions(ids:readonly string[],fetchImpl:typeof fetch=fetch):Promise<{eligible:Set<string>;verified:boolean}>{
+  const exact=[...new Set(ids.filter(id=>versionId.test(id)))]
+  const failed={eligible:new Set<string>(),verified:false}
+  if(!exact.length)return {eligible:new Set<string>(),verified:true}
+  try{
+    const eligible=new Set<string>()
+    for(let at=0;at<exact.length;at+=60){
+      const batch=exact.slice(at,at+60)
+      const response=await fetchImpl(`/api/catalog/published?ids=${batch.map(encodeURIComponent).join(',')}`,{signal:AbortSignal.timeout(3000)})
+      if(!response.ok)return failed
+      const parsed=publishedPage.parse(await response.json())
+      for(const item of parsed.items)if(batch.includes(item.image.id))eligible.add(item.image.id)
+    }
+    return {eligible,verified:true}
+  }catch{
+    return failed
+  }
+}

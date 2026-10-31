@@ -5,7 +5,7 @@ import {SilverField,webglAvailable} from './SilverField'
 import {CameraRig} from './CameraRig'
 import {ExhibitMounts} from './ExhibitMounts'
 import {HudBridge} from './HudBridge'
-import {loadCatalogNodes} from './nodes'
+import {loadCatalogNodes,revalidateVersions} from './nodes'
 import type {CatalogNode} from './contracts'
 import {fetchEdition,type HonestState} from './edition'
 import {stageEdition,type StagedExhibit} from './staging'
@@ -101,6 +101,11 @@ export default function SpatialApp(){
   nodesRef.current=nodes
   const sourceRef=useRef(source)
   sourceRef.current=source
+  const inspectRef=useRef(inspect)
+  inspectRef.current=inspect
+  // Guards the async revalidation window on journey/exhibit transitions so
+  // a second transition cannot interleave before the first settles.
+  const verifyingRef=useRef(false)
 
   useEffect(()=>{
     if(!supported)return
@@ -125,7 +130,7 @@ export default function SpatialApp(){
       // Returning stays explicit via Promenade, Esc, dive, or curate.
       if(modeRef.current==='promenade'&&!composingRef.current&&!transitRef.current
         &&nodesRef.current.length>0&&maxScroll>0&&window.scrollY/maxScroll>0.985){
-        openNetworkRef.current?.()
+        void openNetworkRef.current?.()
       }
     }
     readScroll()
@@ -317,9 +322,12 @@ export default function SpatialApp(){
   },[supported])
 
   useEffect(()=>{
-    // Stage the promenade path whenever exhibits arrive.
+    // Stage the promenade path whenever exhibits arrive. Artwork that fails
+    // to load (notably a revoked /api/media version answering 404) removes
+    // its exhibit instead of lingering as an empty board.
     const rig=rigRef.current,mounts=mountsRef.current
     if(!rig||!mounts)return
+    mounts.onArtworkError=(assetId:string)=>{pruneExhibits(id=>id!==assetId,'revoked')}
     const layout=exhibitLayout(exhibits.length)
     layoutRef.current=layout
     rig.setPath(layout.waypoints,layout.docks)
@@ -507,17 +515,67 @@ export default function SpatialApp(){
     lockScroll(false)
   }
 
-  const openNetwork=()=>{
+  // Only server-answered editions hold revocable publications; local demo
+  // editions and the manifest fallback have nothing to revalidate.
+  const serverSourced=()=>labelRef.current==='meta'||labelRef.current==='meta-cached'||labelRef.current==='deterministic-d1'
+
+  // Drop exhibits the catalog no longer confirms. Mounts rebuild from state
+  // and dispose their textures, so pruned artwork cannot resurface.
+  const pruneExhibits=(keep:(assetId:string)=>boolean,reason:'revoked'|'unverified'):StagedExhibit[]=>{
+    const before=exhibitsRef.current
+    const kept=before.filter(exhibit=>keep(exhibit.assetId))
+    if(kept.length===before.length)return before
+    const removed=before.length-kept.length
+    setExhibits(kept)
+    const viewing=inspectRef.current
+    if(viewing&&!kept.some(exhibit=>exhibit.assetId===viewing.assetId))setInspect(null)
+    if(!kept.length){setShowDock(true);setEditionLabel(null);setFallbackReason(null)}
+    setStatus(reason==='unverified'
+      ?'The exhibition could not be verified; unverified exhibits were removed.'
+      :`${removed} exhibit${removed===1?'':'s'} ${removed===1?'was':'were'} removed: the catalog no longer lists ${removed===1?'it':'them'}.`)
+    return kept
+  }
+
+  const openNetwork=async()=>{
     const chamber=chamberRef.current,fly=flyRef.current
-    if(modeRef.current==='network'||!nodesRef.current.length||composing||transitRef.current)return
+    if(modeRef.current==='network'||!nodesRef.current.length||composing||transitRef.current||verifyingRef.current)return
+    let current=nodesRef.current
+    let stagedNow=exhibitsRef.current
+    if(sourceRef.current==='published'){
+      verifyingRef.current=true
+      try{
+        const {eligible,verified}=await revalidateVersions(current.map(node=>node.assetId))
+        if(!verified){
+          // Fail closed: unverified records leave, and the labeled local
+          // manifest keeps Journey usable without redisplaying them.
+          const fresh=await loadCatalogNodes()
+          current=fresh.nodes
+          setNodes(current)
+          setSource(fresh.source)
+          setStatus('The live catalog could not be verified; unverified records were removed.')
+        }else{
+          const checked=new Set(current.map(node=>node.assetId))
+          const removed=current.filter(node=>!eligible.has(node.assetId))
+          if(removed.length){
+            current=current.filter(node=>eligible.has(node.assetId))
+            setNodes(current)
+            setStatus(`${removed.length} record${removed.length===1?'':'s'} left the catalog and ${removed.length===1?'was':'were'} removed from the journey.`)
+          }
+          if(serverSourced())stagedNow=pruneExhibits(id=>!checked.has(id)||eligible.has(id),'revoked')
+        }
+      }finally{
+        verifyingRef.current=false
+      }
+      if(!current.length)return
+    }
     setInspect(null)
     setSelected(-1)
     setShowDock(false)
     setMode('network')
-    setAnnounce(`Journey network. ${nodesRef.current.length} records.`)
+    setAnnounce(`Journey network. ${current.length} records.`)
     bridgeRef.current!.emit({type:'network',open:true})
     if(reduced.current||!chamber||!fly)return
-    chamber.setNodes(nodesRef.current,new Set(exhibitsRef.current.map(e=>e.assetId)))
+    chamber.setNodes(current,new Set(stagedNow.map(e=>e.assetId)))
     lockScroll(true)
     const orbit=orbitRef.current
     const view=orbitCamera(NETWORK_CENTER,orbit.yaw,orbit.pitch,orbit.radius)
@@ -525,9 +583,24 @@ export default function SpatialApp(){
   }
   openNetworkRef.current=openNetwork
 
-  const backToPromenade=()=>{
+  const backToPromenade=async()=>{
     const fly=flyRef.current
-    if(transitRef.current)return
+    if(transitRef.current||verifyingRef.current)return
+    if(serverSourced()&&exhibitsRef.current.length){
+      verifyingRef.current=true
+      try{
+        const checked=new Set(exhibitsRef.current.map(exhibit=>exhibit.assetId))
+        const {eligible,verified}=await revalidateVersions([...checked])
+        pruneExhibits(id=>verified&&eligible.has(id),verified?'revoked':'unverified')
+        if(verified){
+          // The same response settles the matching Journey nodes for free.
+          const remaining=nodesRef.current.filter(node=>!checked.has(node.assetId)||eligible.has(node.assetId))
+          if(remaining.length!==nodesRef.current.length)setNodes(remaining)
+        }
+      }finally{
+        verifyingRef.current=false
+      }
+    }
     const layout=layoutRef.current
     const dock=layout.docks[Math.max(0,currentRef.current)]??layout.docks[0]??60
     setSelected(-1)
@@ -550,13 +623,35 @@ export default function SpatialApp(){
     })
   }
 
-  const diveTo=(index:number)=>{
+  const diveTo=async(index:number)=>{
     const fly=flyRef.current
     const node=nodesRef.current[index]
-    if(!node||transitRef.current)return
-    const exhibit=exhibitsRef.current.findIndex(e=>e.assetId===node.assetId)
+    if(!node||transitRef.current||verifyingRef.current)return
+    let stagedNow=exhibitsRef.current
+    if(serverSourced()&&stagedNow.length){
+      verifyingRef.current=true
+      try{
+        const {eligible,verified}=await revalidateVersions(stagedNow.map(exhibit=>exhibit.assetId))
+        stagedNow=pruneExhibits(id=>verified&&eligible.has(id),verified?'revoked':'unverified')
+        if(!verified||!eligible.has(node.assetId)){
+          // Stay in the network: the target is gone, and so is its node.
+          const remaining=nodesRef.current.filter(candidate=>candidate.assetId!==node.assetId)
+          setNodes(remaining)
+          selectNode(-1)
+          chamberRef.current?.setNodes(remaining,new Set(stagedNow.map(exhibit=>exhibit.assetId)))
+          setAnnounce(`${node.label} is no longer available.`)
+          return
+        }
+      }finally{
+        verifyingRef.current=false
+      }
+    }
+    const exhibit=stagedNow.findIndex(e=>e.assetId===node.assetId)
     if(exhibit<0)return
-    const layout=layoutRef.current
+    // Pruning can shift positions, so the dive targets a layout rebuilt for
+    // the confirmed exhibits; the staging effect converges on the same one.
+    const layout=exhibitLayout(stagedNow.length)
+    layoutRef.current=layout
     const dock=layout.docks[exhibit]??60
     const mount=layout.mounts[exhibit]??{x:0,z:-52}
     setAnnounce(`Entering ${node.label}.`)

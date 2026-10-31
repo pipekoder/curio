@@ -1,4 +1,4 @@
-import {test,expect,type Page} from '@playwright/test'
+import {test,expect,type Page,type Route} from '@playwright/test'
 import {readFileSync} from 'node:fs'
 import {fileURLToPath} from 'node:url'
 import {join,dirname} from 'node:path'
@@ -186,6 +186,133 @@ test('the no-WebGL fallback stays a readable Silver Field edition',async({page})
   await page.getByRole('button',{name:'Begin exploration'}).click()
   await expect(page.locator('.spatial-fallback article').first()).toBeVisible({timeout:15000})
   await expect(page.locator('.spatial-fallback section')).toContainText('Journey catalog')
+})
+
+// Version-pattern publication fixtures for the revocation suite: the same
+// grounded records with exact asset-version image IDs, as real D1
+// publications carry. Local demo IDs can never revalidate, by design.
+type VersionedRecord={id:string;name:string;image:{id:string;path:string}}
+const publishedRecords=(groundedItems as VersionedRecord[])
+  .map((item,index)=>({...item,image:{...item.image,id:`version-${index.toString(16).padStart(64,'0')}`}}))
+const versionPlan=(records:VersionedRecord[])=>({
+  title:'A versioned promenade',
+  deck:'Published exhibits for the revocation suite.',
+  features:records.map((record,index)=>({
+    catalogId:record.id,assetId:record.image.id,
+    headline:`A closer look ${index+1}`,
+    narrative:'A subjective visual reading of the composition and the space between its forms.',
+    layout:'hero',motion:'still',theme:'Quiet Luxury',
+  })),
+})
+const publishedRoute=(revoked:()=>string[])=>async(route:Route)=>{
+  const ids=new URL(route.request().url()).searchParams.get('ids')?.split(',')??null
+  let records=publishedRecords
+  if(ids)records=records.filter(record=>ids.includes(record.image.id))
+  const gone=new Set(revoked())
+  records=records.filter(record=>!gone.has(record.image.id))
+  await route.fulfill({status:200,json:{items:records,nextCursor:null}})
+}
+const stageVersionedEdition=async(page:Page,records:VersionedRecord[])=>{
+  await page.route('**/api/editorial',route=>route.fulfill({status:200,json:{plan:versionPlan(records),items:records,source:'meta',retrieval:'d1',cached:false}}))
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/')
+  await submitPrompt(page)
+  await expect(page.getByTestId('spatial-edition-chip')).toContainText('Meta AI',{timeout:15000})
+  await expect(page.getByRole('button',{name:'Journey',exact:true})).toBeEnabled({timeout:15000})
+}
+
+test('re-entering journey drops records revoked mid-session',async({page})=>{
+  const revoked=new Set<string>()
+  await page.route('**/api/catalog/published*',publishedRoute(()=>[...revoked]))
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/')
+  await page.waitForFunction(()=>((window.__spatial?.().nodes)??0)>0)
+  await page.getByRole('button',{name:'Journey',exact:true}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await page.waitForTimeout(1800)
+  await expect(page.getByRole('navigation',{name:'Journey network'})).toContainText('live catalog')
+  expect(await page.evaluate(()=>window.__spatial?.().nodes)).toBe(2)
+  revoked.add(publishedRecords[1].image.id)
+  await page.getByRole('button',{name:'← Promenade'}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='promenade',{timeout:10000})
+  await page.getByRole('button',{name:'Journey',exact:true}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await expect(page.getByRole('navigation',{name:'Journey network'})).toContainText('1 records')
+  expect(await page.evaluate(()=>window.__spatial?.().nodeIds)).toEqual([publishedRecords[0].image.id])
+  await expect(page.getByRole('status').last()).toContainText('removed from the journey')
+})
+
+test('entering a revoked exhibit stays in journey and prunes it',async({page})=>{
+  const revoked=new Set<string>()
+  await page.route('**/api/catalog/published*',publishedRoute(()=>[...revoked]))
+  await stageVersionedEdition(page,publishedRecords)
+  await page.getByRole('button',{name:'Journey',exact:true}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await page.waitForTimeout(1800)
+  const target=await page.evaluate(()=>{
+    const snapshot=window.__spatial?.()
+    return snapshot?.nodeIds.findIndex(id=>snapshot.staged.includes(id))??-1
+  })
+  expect(target).toBeGreaterThanOrEqual(0)
+  for(let i=0;i<=target;i++)await page.getByRole('button',{name:'Next node'}).click()
+  const panel=page.getByTestId('spatial-node-panel')
+  await expect(panel.getByRole('button',{name:'Enter exhibit →'})).toBeVisible()
+  revoked.add(await page.evaluate(index=>window.__spatial?.().nodeIds[index]??'',target))
+  await panel.getByRole('button',{name:'Enter exhibit →'}).click()
+  await page.waitForFunction(()=>window.__spatial?.().exhibits===1)
+  expect(await page.evaluate(()=>window.__spatial?.().mode)).toBe('network')
+  expect(await page.evaluate(()=>window.__spatial?.().nodeIds)).toHaveLength(1)
+  await expect(panel).toBeHidden()
+  await expect(page.locator('p.spatial-sr')).toContainText('no longer available')
+})
+
+test('returning to the promenade drops exhibits revoked mid-session',async({page})=>{
+  const revoked=new Set<string>()
+  await page.route('**/api/catalog/published*',publishedRoute(()=>[...revoked]))
+  await stageVersionedEdition(page,publishedRecords)
+  await page.getByRole('button',{name:'Journey',exact:true}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await page.waitForTimeout(1800)
+  revoked.add(publishedRecords[0].image.id)
+  await page.getByRole('button',{name:'← Promenade'}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='promenade',{timeout:10000})
+  expect(await page.evaluate(()=>window.__spatial?.().exhibits)).toBe(1)
+  expect(await page.evaluate(()=>window.__spatial?.().nodeIds)).toHaveLength(1)
+  await expect(page.getByRole('status').last()).toContainText('no longer lists')
+})
+
+test('unverifiable journey records fall back to the labeled manifest',async({page})=>{
+  let calls=0
+  await page.route('**/api/catalog/published*',route=>{
+    const ids=new URL(route.request().url()).searchParams.get('ids')
+    calls++
+    if(ids||calls>1)return route.fulfill({status:503,json:{error:'catalog down'}})
+    return route.fulfill({status:200,json:{items:publishedRecords,nextCursor:null}})
+  })
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/')
+  await page.waitForFunction(()=>((window.__spatial?.().nodes)??0)>0)
+  expect(await page.evaluate(()=>window.__spatial?.().source)).toBe('published')
+  await page.getByRole('button',{name:'Journey',exact:true}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await expect(page.getByRole('navigation',{name:'Journey network'})).toContainText('local manifest')
+  expect(await page.evaluate(()=>window.__spatial?.().nodes)).toBeGreaterThanOrEqual(6)
+  await expect(page.getByRole('status').last()).toContainText('could not be verified')
+})
+
+test('artwork that 404s removes its exhibit instead of lingering',async({page})=>{
+  await page.route('**/api/catalog/published*',publishedRoute(()=>[]))
+  await page.route('**/api/editorial',route=>route.fulfill({status:200,json:{plan:versionPlan([publishedRecords[0]]),items:[publishedRecords[0]],source:'meta',retrieval:'d1',cached:false}}))
+  await page.route(`**${publishedRecords[0].image.path}`,route=>route.fulfill({status:404}))
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/')
+  await submitPrompt(page)
+  // The staged state flashes by: the 404 prune lands before any stable
+  // assertion on it, so the removal message is the deterministic signal.
+  await expect(page.getByRole('status').last()).toContainText('no longer lists',{timeout:15000})
+  expect(await page.evaluate(()=>window.__spatial?.().exhibits)).toBe(0)
+  await expect(page.getByLabel('Your curiosity')).toBeVisible()
+  await expect(page.getByTestId('spatial-edition-chip')).toBeHidden()
 })
 
 test('assembly honors the director minimum on instant responses',async({page})=>{
