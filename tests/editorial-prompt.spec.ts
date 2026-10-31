@@ -4,7 +4,7 @@ for (const width of [1440, 390]) test(`one prompt generates and refines a magazi
   await page.emulateMedia({ reducedMotion: "reduce" });
   const requests: { prompt: string; consent: boolean }[] = [];
   await page.route("**/api/editorial", route => { requests.push(route.request().postDataJSON()); return route.fulfill({ status: 503, json: { error: "AI off" } }); });
-  await page.goto("/?legacy=1");
+  await page.goto("/legacy?legacy=1");
   const prompt = page.getByRole("textbox", { name: "Your discovery prompt" });
   await expect(prompt).toBeVisible();
   expect((await prompt.boundingBox())!.y).toBeLessThan(800);
@@ -37,7 +37,7 @@ for (const width of [1440, 390]) test(`one prompt generates and refines a magazi
 test("asks one inline clarification only when every supported category is explicitly excluded", async ({ page }) => {
   let requests = 0;
   await page.route("**/api/editorial", route => { requests++; return route.abort(); });
-  await page.goto("/?legacy=1");
+  await page.goto("/legacy?legacy=1");
   await page.getByLabel("Your discovery prompt").fill("No home, no fashion, no travel");
   await page.getByRole("button", { name: "Generate magazine" }).click();
   await expect(page.getByRole("alert")).toContainText("Include at least one");

@@ -589,7 +589,7 @@ export default function SpatialApp(){
           ?<button type="button" onClick={backToPromenade}>Promenade</button>
           :<button type="button" onClick={openNetwork} disabled={!nodes.length||composing}>Journey</button>}
         {staged&&mode==='promenade'&&<button type="button" onClick={reopen}>New prompt</button>}
-        <a href="/">2D edition</a>
+        <a href="/legacy">2D edition</a>
         <button type="button" onClick={clear}>Clear</button>
       </div>
     </header>

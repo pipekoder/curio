@@ -3,7 +3,7 @@ import {test,expect} from '@playwright/test'
 test('sentence slots, custom words, surprise and manual entry share the existing Discover submission',async({page})=>{
  await page.setViewportSize({width:1440,height:900})
  await page.route('**/api/editorial',route=>route.fulfill({status:503,body:'AI disabled'}))
- await page.goto('/')
+ await page.goto('/legacy')
  await expect(page.getByRole('heading',{name:'What are you curious about?'})).toBeVisible()
  await expect(page.locator('.reference-photo img')).toHaveCount(5)
  await page.getByRole('button',{name:'Places & culture'}).click()
@@ -24,7 +24,7 @@ test('sentence slots, custom words, surprise and manual entry share the existing
 test('mobile keyboard and reduced-motion interaction keeps the orbital composition and consent accessible',async({page})=>{
  await page.setViewportSize({width:390,height:844})
  await page.emulateMedia({reducedMotion:'reduce'})
- await page.goto('/')
+ await page.goto('/legacy')
  await expect(page.locator('.reference-photo img')).toHaveCount(5)
  await expect(page.locator('.reference-orbits')).toBeVisible()
  await page.getByRole('button',{name:/Change subject: emerging brands/}).focus()
