@@ -14,6 +14,7 @@ import {
   visualWords,
 } from "../shared/editorial-language";
 import { Hono } from "hono";
+import {timingSafeEqual} from 'hono/utils/buffer'
 import { z } from "zod";
 import {
   curationCatalog,
@@ -153,7 +154,10 @@ editorialApi.post("/", async (c) => {
   )
     return fallback();
   if(!pool.items.some(a=>a.provenance.origin==='authored_geometry'||a.permissions.aiAnalysis.status==='approved'&&a.permissions.aiAnalysis.evidence)) {fallbackReason='analysis_permissions';return fallback();}
-  const reviewEnabled=env.EDITORIAL_REVIEW_ENABLED==='true'&&pool.sources.length>0
+  const suppliedPilotToken=c.req.header('X-Curio-Editorial-Pilot')??''
+  const pilotAuthorized=Boolean(pilot&&pool.retrieval==='d1'&&env.EDITORIAL_REVIEW_PILOT_TOKEN&&env.EDITORIAL_REVIEW_PILOT_TOKEN.length>=32&&suppliedPilotToken.length>=32&&timingSafeEqual(suppliedPilotToken,env.EDITORIAL_REVIEW_PILOT_TOKEN))
+  const reviewEnabled=env.EDITORIAL_REVIEW_ENABLED==='true'&&pool.sources.length>0&&pilotAuthorized
+  if(env.EDITORIAL_REVIEW_ENABLED==='true'&&pool.sources.length>0&&!pilotAuthorized){fallbackReason='pilot_authorization';return fallback()}
   const key = await catalogDigest(
     JSON.stringify(["editorial-v4-prompt", EDITORIAL_QUALITY_VERSION, PROMPT_INTENT_VERSION, VISUAL_LANGUAGE_VERSION,reviewEnabled?EDITORIAL_STANDARD_VERSION:null, p, pool.items, pool.visualContexts,pool.sources]),
   );
@@ -174,7 +178,7 @@ editorialApi.post("/", async (c) => {
       plans.delete(key);
     }
   try {
-    const budget = await reserveInference(env, ip,reviewEnabled?4:1);
+    const budget = await reserveInference(env, ip,reviewEnabled?4:1,undefined,reviewEnabled);
     if (budget.allowed !== true) {
       fallbackReason = "budget";
       return fallback();
