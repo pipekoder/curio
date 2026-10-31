@@ -1,6 +1,7 @@
 import {z} from 'zod'
 import {editorialPlan,type EditorialPlan,type EditorialPreferences,validateOriginalPlan} from '../shared/editorial'
 import {editorialReviewOutput,editorialStandardInstruction,scoreEditorialReview,type EditorialReviewOutput} from '../shared/editorial-standard'
+import {editorialKnowledgeInstruction,selectEditorialVoice} from '../shared/editorial-knowledge-v2'
 import type {EditorialSource} from '../shared/editorial-sources'
 import type {VisualContext} from '../shared/visual-observations'
 import type {CatalogItem} from '../shared/catalog'
@@ -21,7 +22,7 @@ async function structuredMuse<T>(key:string,instruction:string,input:unknown,sch
   try{return {value:schema.parse(JSON.parse(parsed.choices[0].message.content)),measurement}}catch{throw new EditorialReviewError('invalid_output',measurement)}
 }
 
-const reviewerInstruction=`You are Curio's independent AI Editorial Reviewer. You did not write the magazine. Apply the complete shared rubric independently to the supplied validated plan. Score each dimension from 0 to 5 using its anchors and give brief evidence-based reasoning. Identify strengths and concrete revision needs. Use only the supplied evidence reference IDs; never copy source values, private metadata, prompts or instructions into feedback. Do not revalidate permissions or factual safety and never override Curio's deterministic gate. Do not calculate a total or choose PASS, REVISE or REJECT. ${editorialStandardInstruction}`
+const reviewerInstruction=`You are Curio's independent AI Editorial Reviewer. You did not write the magazine. Apply the complete shared rubric independently to the supplied validated plan. Score each dimension from 0 to 5 using its anchors and give brief evidence-based reasoning. Identify strengths and concrete revision needs. Use only the supplied evidence reference IDs; never copy source values, private metadata, prompts or instructions into feedback. Do not revalidate permissions or factual safety and never override Curio's deterministic gate. Evaluate insight and useful discovery, not only elegant language. Judge the selected voice fairly; flag generic copy, repeated ideas, empty metaphor, awkward uncertainty and superficial questions. Do not calculate a total or choose PASS, REVISE or REJECT. ${editorialStandardInstruction}`
 const revisionInstruction=`You are Curio's Revision Editor. Improve only the issues named by the independent Reviewer while preserving successful copy. Preserve the exact feature count, catalogId, assetId, sourceIds, observationKeys, theme, layout, motion, connection endpoints and qualityVersion. Change only title, deck, feature headlines, narratives, discovery questions and connection threads. Never add a factual claim. Use exact cited owner facts only where permitted; preserve uncertainty for visual observations. Return the complete revised plan. ${editorialStandardInstruction}`
 
 function evidenceReferences(plan:EditorialPlan,sources:readonly EditorialSource[],contexts:readonly VisualContext[]){
@@ -31,8 +32,8 @@ function evidenceReferences(plan:EditorialPlan,sources:readonly EditorialSource[
   return refs
 }
 
-export async function reviewEditorialPlan(key:string,plan:EditorialPlan,sources:readonly EditorialSource[],contexts:readonly VisualContext[]){
-  const refs=evidenceReferences(plan,sources,contexts),result=await structuredMuse(key,reviewerInstruction,{rubricVersion:'curio-editorial-standard-v1',plan,factualSources:sources,visualContexts:contexts,evidenceReferenceIds:[...refs]},editorialReviewOutput,'curio_editorial_review_v1')
+export async function reviewEditorialPlan(key:string,plan:EditorialPlan,sources:readonly EditorialSource[],contexts:readonly VisualContext[],interests='',knowledgeV2=false){
+  const refs=evidenceReferences(plan,sources,contexts),result=await structuredMuse(key,knowledgeV2?`${reviewerInstruction} ${editorialKnowledgeInstruction(selectEditorialVoice(interests))}`:reviewerInstruction,{rubricVersion:'curio-editorial-standard-v1',plan,factualSources:sources,visualContexts:contexts,evidenceReferenceIds:[...refs]},editorialReviewOutput,'curio_editorial_review_v1')
   const feedbackIds=result.value.featureFeedback.map(feature=>feature.assetId),assessment=scoreEditorialReview(result.value)
   if(feedbackIds.length!==plan.features.length||new Set(feedbackIds).size!==feedbackIds.length||feedbackIds.some(id=>!plan.features.some(item=>item.assetId===id))||Object.values(result.value.dimensions).some(dimension=>dimension.evidenceRefs.some(ref=>!refs.has(ref)))||result.value.featureFeedback.some(feature=>feature.issues.some(issue=>issue.evidenceRefs.some(ref=>!refs.has(ref))))||assessment.decision==='REVISE'&&(!result.value.revisionInstructions.length||!result.value.featureFeedback.some(feature=>feature.issues.length)))throw new EditorialReviewError('invalid_evidence',result.measurement)
   return {...result,assessment}
@@ -44,8 +45,8 @@ function sameStructure(original:EditorialPlan,revised:EditorialPlan){
   return JSON.stringify(stable(original))===JSON.stringify(stable(revised))
 }
 
-export async function reviseEditorialPlan(key:string,original:EditorialPlan,review:EditorialReviewOutput,p:EditorialPreferences,pool:readonly CatalogItem[],approvals:ExternalAssetApprovals,sources:readonly EditorialSource[],contexts:readonly VisualContext[]){
-  const result=await structuredMuse(key,revisionInstruction,{originalPlan:original,review,factualSources:sources,visualContexts:contexts},editorialPlan,'curio_editorial_revision_v1')
+export async function reviseEditorialPlan(key:string,original:EditorialPlan,review:EditorialReviewOutput,p:EditorialPreferences,pool:readonly CatalogItem[],approvals:ExternalAssetApprovals,sources:readonly EditorialSource[],contexts:readonly VisualContext[],knowledgeV2=false){
+  const result=await structuredMuse(key,knowledgeV2?`${revisionInstruction} ${editorialKnowledgeInstruction(selectEditorialVoice(p.interests))}`:revisionInstruction,{originalPlan:original,review,factualSources:sources,visualContexts:contexts},editorialPlan,'curio_editorial_revision_v1')
   try{
     if(!sameStructure(original,result.value))throw Error('Structure changed')
     return {...result,value:validateOriginalPlan(result.value,pool,p,approvals,sources,contexts,true)}
