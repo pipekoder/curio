@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest'
-import {NETWORK_CENTER,NETWORK_RADIUS,ORBIT_DEFAULT,ORBIT_MAX,ORBIT_MIN,buildEdges,layoutNetwork,orbitCamera,pickSurprise} from '../src/spatial/network-math'
+import {NETWORK_CENTER,NETWORK_RADIUS,ORBIT_DEFAULT,ORBIT_MAX,ORBIT_MIN,buildEdges,layoutNetwork,nodeScale,orbitCamera,pickSurprise,relevanceWeights} from '../src/spatial/network-math'
 
 describe('network layout',()=>{
  it('spreads every node deterministically inside the chamber shell',()=>{
@@ -24,6 +24,26 @@ describe('network edges',()=>{
  it('keeps only pairs where both endpoints exist, deduped',()=>{
   const hints=new Map([['a',['b','ghost','a']],['b',['a']],['c',['b']]])
   expect(buildEdges(['a','b','c'],hints).sort()).toEqual([[0,1],[1,2]])
+ })
+})
+
+describe('relevance weighting',()=>{
+ const near=([x,y,z]:[number,number,number])=>Math.hypot(x-NETWORK_CENTER[0],(y-NETWORK_CENTER[1])/0.72,z-NETWORK_CENTER[2])
+ it('pulls staged exhibits nearest and pushes the unrelated outward',()=>{
+  const weights=relevanceWeights(new Set([0]),[[0,1],[2,3]],4)
+  expect(weights).toEqual([1,0.55,0.15,0.15])
+  const positions=layoutNetwork(4,NETWORK_CENTER,NETWORK_RADIUS,weights)
+  expect(near(positions[0])).toBeLessThan(near(positions[1]))
+  expect(near(positions[1])).toBeLessThan(near(positions[2]))
+  expect(layoutNetwork(4,NETWORK_CENTER,NETWORK_RADIUS,weights)).toEqual(positions)
+ })
+ it('keeps a neutral middle distance before the first edition',()=>{
+  expect(relevanceWeights(new Set(),[[0,1]],3)).toEqual([0.6,0.6,0.6])
+ })
+ it('scales prominence with relevance',()=>{
+  expect(nodeScale(1)).toBeCloseTo(1.28,5)
+  expect(nodeScale(0.15)).toBeLessThan(nodeScale(0.55))
+  expect(nodeScale(99)).toBe(nodeScale(1))
  })
 })
 

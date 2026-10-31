@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import type {CatalogNode} from './contracts'
-import {NETWORK_CENTER,buildEdges,layoutNetwork} from './network-math'
+import {NETWORK_CENTER,NETWORK_RADIUS,buildEdges,layoutNetwork,nodeScale,relevanceWeights} from './network-math'
 
 // The Curiosity Journey constellation: one sprite per real catalog node,
 // edges only where edge hints resolve on both ends. No invented records,
@@ -16,6 +16,7 @@ export class NetworkChamber{
   private thumbs:THREE.Sprite[]=[]
   private rings:THREE.Sprite[]=[]
   private base:THREE.Vector3[]=[]
+  private ringBase:number[]=[]
   private edges:THREE.LineSegments|null=null
   private selected=-1
   private staged=new Set<string>()
@@ -29,22 +30,26 @@ export class NetworkChamber{
   setNodes(nodes:readonly CatalogNode[],stagedIds:ReadonlySet<string>):void{
     this.clear()
     this.staged=new Set(stagedIds)
-    const positions=layoutNetwork(nodes.length)
     const hints=new Map(nodes.map(node=>[node.assetId,node.edgeHints??[]] as const))
     const edgePairs=buildEdges(nodes.map(node=>node.assetId),hints)
+    const stagedIndexes=new Set(nodes.map((node,index)=>stagedIds.has(node.assetId)?index:-1).filter(i=>i>=0))
+    const weights=relevanceWeights(stagedIndexes,edgePairs,nodes.length)
+    const positions=layoutNetwork(nodes.length,NETWORK_CENTER,NETWORK_RADIUS,weights)
     nodes.forEach((node,index)=>{
       const [x,y,z]=positions[index]
+      const scale=nodeScale(weights[index])
       const thumb=new THREE.Sprite(new THREE.SpriteMaterial({color:0xdde3e9,transparent:true,fog:false}))
-      thumb.scale.set(NODE_SIZE,NODE_SIZE,1)
+      thumb.scale.set(NODE_SIZE*scale,NODE_SIZE*scale,1)
       thumb.position.set(x,y,z)
       thumb.userData={index,assetId:node.assetId}
       const ring=new THREE.Sprite(new THREE.SpriteMaterial({map:NetworkChamber.ringTexture(),transparent:true,fog:false,depthWrite:false}))
-      ring.scale.set(RING_SIZE,RING_SIZE,1)
+      ring.scale.set(RING_SIZE*scale,RING_SIZE*scale,1)
       ring.position.set(x,y,z)
       this.group.add(thumb,ring)
       this.loadThumb(node.thumbnail,thumb)
       this.thumbs.push(thumb)
       this.rings.push(ring)
+      this.ringBase.push(RING_SIZE*scale)
       this.base.push(new THREE.Vector3(x,y,z))
       this.paintRing(index)
     })
@@ -123,7 +128,8 @@ export class NetworkChamber{
     if(!reducedMotion&&!interacting&&this.idleMs>2500)this.group.rotation.y+=dt*0.025
     if(this.selected>=0&&this.rings[this.selected]&&!reducedMotion){
       const pulse=1+Math.sin(elapsed*3.2)*0.07
-      this.rings[this.selected].scale.set(RING_SIZE*pulse,RING_SIZE*pulse,1)
+      const base=this.ringBase[this.selected]??RING_SIZE
+      this.rings[this.selected].scale.set(base*pulse,base*pulse,1)
     }
   }
 
@@ -165,6 +171,7 @@ export class NetworkChamber{
     this.thumbs=[]
     this.rings=[]
     this.base=[]
+    this.ringBase=[]
     this.edges?.geometry.dispose()
     ;(this.edges?.material as THREE.Material|undefined)?.dispose()
     this.edges=null
