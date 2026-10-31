@@ -10,7 +10,7 @@ for (const width of [1440, 390]) {
       return route.fulfill({ status: 503, json: { error: "AI disabled" } });
     });
     await page.route("https://api.meta.ai/**", route => { modelRequests.push(route.request().url()); return route.abort(); });
-    await page.goto("/?legacy=1");
+    await page.goto("/legacy?legacy=1");
     await page.getByRole("button", { name: "Try a prompt: Quiet rooms" }).click();
     await page.getByRole("button", { name: "Generate magazine" }).click();
     await expect(page.getByRole("heading", { name: "The art of quiet rooms" })).toBeVisible();

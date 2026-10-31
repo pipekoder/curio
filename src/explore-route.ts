@@ -21,7 +21,7 @@ export function readExploreEdition():ExploreSnapshot|null {
   return parsed.data
  }catch{return null}
 }
-export function navigateExplore(path:'/'|'/explore'){
+export function navigateExplore(path:'/legacy'|'/explore'){
  if(window.location.pathname!==path)window.history.pushState({curio:true},'',path)
  window.dispatchEvent(new Event('curio:route'))
 }

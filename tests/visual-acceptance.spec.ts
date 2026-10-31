@@ -24,7 +24,7 @@ for (const width of [1440,390]) test(`reader accessibility, privacy and syntheti
     if(url.pathname.startsWith('/api/'))return route.fulfill({status:503,json:{error:'AI disabled'}})
     return route.continue()
   })
-  await page.goto('/?legacy=1')
+  await page.goto('/legacy?legacy=1')
   await expectKeyboardSkip(page)
   await page.getByRole('button',{name:'Try a prompt: Quiet rooms'}).click()
   const started=Date.now()
@@ -40,7 +40,7 @@ for (const width of [1440,390]) test(`reader accessibility, privacy and syntheti
   expect(outbound).toBe(0)
   const files=readdirSync('dist/assets')
   const size=(names:string[])=>names.reduce((n,f)=>n+statSync(`dist/assets/${f}`).size,0)
-  // This route loads only the entry chunk; the spatial chunk is lazy-loaded on /spatial.
+  // This route loads only the entry chunk; the spatial chunk is lazy-loaded on / (/spatial redirects there).
   const entry=files.filter(n=>/^index-.*\.js$/.test(n))
   expect(entry.length).toBeGreaterThan(0)
   const entryBytes=size(entry)
@@ -76,7 +76,7 @@ for (const width of [1440,390]) test(`keyboard skip waits for delayed applicatio
   try {
     // Intentionally navigate before the app bundle loads: a load-event/React
     // scheduling gap must not allow the first Tab to be sent to an empty page.
-    await page.goto('/?legacy=1',{waitUntil:'commit'})
+    await page.goto('/legacy?legacy=1',{waitUntil:'commit'})
     await bundleRequested
     const keyboardCheck = expectKeyboardSkip(page)
     await expect(page.locator('#root')).toBeEmpty()
