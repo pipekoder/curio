@@ -4,6 +4,9 @@ export type SpatialEvent=
   |{type:'prompt';prompt:string}
   |{type:'arrive';index:number}
   |{type:'pick';assetId:string}
+  |{type:'network';open:boolean}
+  |{type:'dive';assetId:string}
+  |{type:'surprise';assetId:string}
   |{type:'clear';removed:string[]}
 
 export class HudBridge{

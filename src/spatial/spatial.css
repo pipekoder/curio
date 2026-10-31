@@ -45,7 +45,11 @@
 .spatial-inspect p{font-size:14px;line-height:1.65;color:#3c4652}
 .spatial-inspect ul{margin:10px 0;padding-left:20px;font-size:13px;line-height:1.7;color:#3c4652}
 .spatial-inspect-close{position:absolute;top:12px;right:12px;width:40px;height:40px;border:1px solid #b9c1cb;border-radius:50%;background:#fff;color:#23272e;font-size:20px;cursor:pointer}
+.spatial-journey-bar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:15;display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:94vw;background:#fffffff0;border:1px solid #d5dae0;border-radius:999px;padding:8px 14px;box-shadow:0 12px 32px #6d7c8c26}
+.spatial-journey-bar button{min-height:40px;padding:8px 14px;border:1px solid #b9c1cb;border-radius:999px;background:#fff;color:#23272e;cursor:pointer;font:inherit;font-size:12px}
+.spatial-node-enter{min-height:44px;padding:10px 20px;border:0;border-radius:999px;background:#23272e;color:#fff;font:inherit;font-size:13px;cursor:pointer;margin-top:8px}
+.spatial-index li button{margin-left:auto;flex:none;min-height:40px;padding:8px 14px;border:1px solid #b9c1cb;border-radius:999px;background:#fff;color:#23272e;cursor:pointer;font:inherit;font-size:12px}
 .spatial-fallback{padding:30px;font:15px/1.6 Arial,sans-serif;color:#23272e;background:#f4f5f7}
-.spatial-hud a:focus-visible,.spatial-hud button:focus-visible,.spatial-dock button:focus-visible,.spatial-dock textarea:focus-visible,.spatial-skip:focus-visible,.spatial-rail-card button:focus-visible,.spatial-inspect-close:focus-visible{outline:2px solid #8a6a2f;outline-offset:3px}
-@media(max-width:640px){.spatial-hud{gap:10px;padding:10px 14px}.spatial-crumb{display:none}.spatial-dock{padding:20px}}
+.spatial-hud a:focus-visible,.spatial-hud button:focus-visible,.spatial-dock button:focus-visible,.spatial-dock textarea:focus-visible,.spatial-skip:focus-visible,.spatial-rail-card button:focus-visible,.spatial-inspect-close:focus-visible,.spatial-journey-bar button:focus-visible,.spatial-node-enter:focus-visible,.spatial-index li button:focus-visible{outline:2px solid #8a6a2f;outline-offset:3px}
+@media(max-width:640px){.spatial-hud{gap:10px;padding:10px 14px}.spatial-crumb{display:none}.spatial-dock{padding:20px}.spatial-node-panel{top:auto;bottom:84px;left:12px;right:12px;width:auto;max-height:42vh}.spatial-journey-bar{bottom:12px;gap:8px;padding:6px 10px;flex-wrap:nowrap;overflow-x:auto;max-width:calc(100vw - 24px)}.spatial-journey-bar button{flex:none;min-height:36px;padding:6px 12px}.spatial-journey-bar .spatial-fine{display:none}}
 @media(prefers-reduced-motion:reduce){.spatial-dock{animation:none}.spatial-root{scroll-behavior:auto}}

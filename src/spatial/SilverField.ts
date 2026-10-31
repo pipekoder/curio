@@ -10,6 +10,15 @@ export function webglAvailable():boolean{
   }catch{return false}
 }
 
+export type DisplayTier={pixelRatioCap:number;antialias:boolean;dust:number}
+// Mobile thermal tier: coarse pointers get capped pixels, no MSAA, half
+// the ambient dust. Desktop keeps full quality.
+export function displayTier(coarse:boolean):DisplayTier{
+  return coarse
+    ?{pixelRatioCap:1.5,antialias:false,dust:300}
+    :{pixelRatioCap:2,antialias:true,dust:600}
+}
+
 // The infinite silver field: fog void, soft key light, ambient dust.
 // Owns renderer + scene only; the CameraRig owns the camera.
 export class SilverField{
@@ -19,9 +28,10 @@ export class SilverField{
   private dustSpin=0
 
   constructor(canvas:HTMLCanvasElement){
-    this.renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'})
     const coarse=typeof window!=='undefined'&&typeof window.matchMedia==='function'&&window.matchMedia('(pointer:coarse)').matches
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,coarse?1.5:2))
+    const tier=displayTier(coarse)
+    this.renderer=new THREE.WebGLRenderer({canvas,antialias:tier.antialias,powerPreference:'high-performance'})
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,tier.pixelRatioCap))
     this.renderer.outputColorSpace=THREE.SRGBColorSpace
     this.renderer.toneMapping=THREE.ACESFilmicToneMapping
     this.renderer.toneMappingExposure=1.05
@@ -32,12 +42,12 @@ export class SilverField{
     const key=new THREE.DirectionalLight(0xffffff,1.1)
     key.position.set(-18,30,12)
     this.scene.add(key)
-    this.dust=SilverField.makeDust()
+    this.dust=SilverField.makeDust(tier.dust)
     this.scene.add(this.dust)
   }
 
-  private static makeDust():THREE.Points{
-    const count=600,positions=new Float32Array(count*3)
+  private static makeDust(count:number):THREE.Points{
+    const positions=new Float32Array(count*3)
     for(let i=0;i<count;i++){
       positions[i*3]=(Math.random()-0.5)*240
       positions[i*3+1]=Math.random()*60-6

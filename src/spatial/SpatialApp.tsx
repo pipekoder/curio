@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from 'react'
+import * as THREE from 'three'
 import {PublicApp} from '../App'
 import {SilverField,webglAvailable} from './SilverField'
 import {CameraRig} from './CameraRig'
@@ -10,13 +11,17 @@ import {fetchEdition} from './edition'
 import {stageEdition,type StagedExhibit} from './staging'
 import {AssemblyDirector} from './assembly'
 import {AssemblyField} from './AssemblyField'
-import {exhibitLayout,type Waypoint} from './camera-math'
+import {exhibitLayout,splinePosition,type Waypoint} from './camera-math'
+import {NETWORK_CENTER,ORBIT_DEFAULT,pickSurprise,orbitCamera} from './network-math'
+import {NetworkChamber} from './NetworkChamber'
 import {SPATIAL_SESSION_KEY,clearSpatialSession} from './clear'
 import type {NodeSource} from './nodes'
 import './spatial.css'
 
-type DebugSnapshot={distance:number;cameraZ:number;cameraY:number;current:number;exhibits:number;nodes:number;source:NodeSource|'pending';assembly:string}
+type DebugSnapshot={distance:number;cameraZ:number;cameraY:number;current:number;exhibits:number;nodes:number;source:NodeSource|'pending';assembly:string;mode:string;orbit:{yaw:number;pitch:number;radius:number};selected:number;staged:string[];nodeIds:string[]}
 type Inspect={assetId:string;hotspotId?:string}
+type Transit={t0:number;dur:number;fromPos:THREE.Vector3;fromLook:THREE.Vector3;toPos:THREE.Vector3;toLook:THREE.Vector3;onFrame?:(k:number)=>void;onDone:()=>void}
+type FlyTo=(toPos:[number,number,number],toLook:[number,number,number],dur:number,onDone:()=>void,onFrame?:(k:number)=>void)=>void
 
 // Phase 1: prompt -> validated edition -> staged promenade with lateral
 // rails and inspect panels. Assembly particles arrive in Phase 2.
@@ -35,6 +40,9 @@ export default function SpatialApp(){
   const [current,setCurrent]=useState(-1)
   const [inspect,setInspect]=useState<Inspect|null>(null)
   const [elapsed,setElapsed]=useState(0)
+  const [mode,setMode]=useState<'promenade'|'network'>('promenade')
+  const [selected,setSelected]=useState(-1)
+  const [announce,setAnnounce]=useState('')
   const canvasRef=useRef<HTMLCanvasElement>(null)
   const reduced=useRef(false)
   const bridgeRef=useRef<HudBridge|null>(null)
@@ -50,6 +58,15 @@ export default function SpatialApp(){
   const tickerRef=useRef(0)
   const submitIdRef=useRef(0)
   const layoutRef=useRef(exhibitLayout(0))
+  const chamberRef=useRef<NetworkChamber|null>(null)
+  const orbitRef=useRef({yaw:0.5,pitch:0.15,radius:ORBIT_DEFAULT})
+  const transitRef=useRef<Transit|null>(null)
+  const flyRef=useRef<FlyTo|null>(null)
+  const interactingRef=useRef(false)
+  const modeRef=useRef(mode)
+  modeRef.current=mode
+  const selectedRef=useRef(selected)
+  selectedRef.current=selected
   const exhibitsRef=useRef(exhibits)
   exhibitsRef.current=exhibits
   const currentRef=useRef(current)
@@ -71,6 +88,8 @@ export default function SpatialApp(){
     rigRef.current=rig
     const mounts=new ExhibitMounts(field.scene)
     mountsRef.current=mounts
+    const chamber=new NetworkChamber(field.scene)
+    chamberRef.current=chamber
     void loadCatalogNodes().then(({nodes:loaded,source:loadedSource})=>{setNodes(loaded);setSource(loadedSource)})
     const readScroll=()=>{
       const maxScroll=document.documentElement.scrollHeight-window.innerHeight
@@ -86,64 +105,144 @@ export default function SpatialApp(){
     resize()
     window.addEventListener('resize',resize)
     let down:{x:number;y:number}|null=null
-    const onDown=(event:PointerEvent)=>{down={x:event.clientX,y:event.clientY}}
+    let anchor:{x:number;y:number}|null=null
+    const pointers=new Map<number,{x:number;y:number}>()
+    let pinchDist=0
+    const onDown=(event:PointerEvent)=>{
+      down={x:event.clientX,y:event.clientY}
+      anchor={x:event.clientX,y:event.clientY}
+      pointers.set(event.pointerId,{x:event.clientX,y:event.clientY})
+      if(pointers.size===2){
+        const [a,b]=[...pointers.values()]
+        pinchDist=Math.hypot(a.x-b.x,a.y-b.y)
+      }
+    }
+    const onMove=(event:PointerEvent)=>{
+      if(!down||!pointers.has(event.pointerId))return
+      pointers.set(event.pointerId,{x:event.clientX,y:event.clientY})
+      if(modeRef.current!=='network')return
+      if(pointers.size===2){
+        const [a,b]=[...pointers.values()]
+        const dist=Math.hypot(a.x-b.x,a.y-b.y)
+        if(pinchDist>0)orbitRef.current.radius*=pinchDist/Math.max(1,dist)
+        pinchDist=dist
+        interactingRef.current=true
+        return
+      }
+      const orbit=orbitRef.current
+      orbit.yaw-=(event.clientX-down.x)*0.005
+      orbit.pitch+=(event.clientY-down.y)*0.005
+      down={x:event.clientX,y:event.clientY}
+      interactingRef.current=true
+    }
     const onUp=(event:PointerEvent)=>{
-      if(!down)return
-      const moved=Math.hypot(event.clientX-down.x,event.clientY-down.y)
+      pointers.delete(event.pointerId)
+      if(pointers.size<2)pinchDist=0
+      interactingRef.current=pointers.size>0
+      if(!down||!anchor)return
+      const moved=Math.hypot(event.clientX-anchor.x,event.clientY-anchor.y)
       down=null
-      if(moved>6)return
+      anchor=null
+      if(moved>6||transitRef.current)return
       const rect=canvas.getBoundingClientRect()
+      if(modeRef.current==='network'){
+        const index=chamber.pick(event.clientX,event.clientY,rig.camera,rect)
+        setSelected(index)
+        chamber.setSelected(index)
+        return
+      }
       const pick=mounts.pick(event.clientX,event.clientY,rig.camera,rect)
       if(!pick)return
       bridgeRef.current!.emit({type:'pick',assetId:pick.assetId})
       setInspect({assetId:pick.assetId,hotspotId:pick.hotspotId})
     }
+    const onWheel=(event:WheelEvent)=>{
+      if(modeRef.current!=='network')return
+      event.preventDefault()
+      orbitRef.current.radius*=1+event.deltaY*0.001
+    }
     canvas.addEventListener('pointerdown',onDown)
+    canvas.addEventListener('pointermove',onMove)
     canvas.addEventListener('pointerup',onUp)
+    canvas.addEventListener('pointercancel',onUp)
+    canvas.addEventListener('wheel',onWheel,{passive:false})
+    const flyTo:FlyTo=(toPos,toLook,dur,onDone,onFrame)=>{
+      const direction=new THREE.Vector3()
+      rig.camera.getWorldDirection(direction)
+      const fromPos=rig.camera.position.clone()
+      const fromLook=fromPos.clone().add(direction.multiplyScalar(20))
+      if(reduced.current||dur<=0){
+        rig.camera.position.set(...toPos)
+        rig.camera.lookAt(...toLook)
+        onFrame?.(1)
+        onDone()
+        return
+      }
+      transitRef.current={t0:performance.now(),dur,fromPos,fromLook,toPos:new THREE.Vector3(...toPos),toLook:new THREE.Vector3(...toLook),onFrame,onDone}
+    }
+    flyRef.current=flyTo
     let frame=0,last=performance.now(),alive=true
     const loop=(now:number)=>{
       if(!alive)return
       const dt=Math.min((now-last)/1000,0.1)
       last=now
-      rig.update(dt)
-      mounts.update(now/1000,reduced.current)
-      field.update(dt,reduced.current)
-      const director=directorRef.current,assembly=assemblyRef.current
-      if(assembly){
-        const {phase,t,holdMs}=director.update()
-        assembly.update(phase,t,now/1000)
-        const base=phase==='stream'?t*21:phase==='lattice'?21+t*21:phase==='resolve'?42+t*18:60
-        rig.setCinematic(Math.min(base+Math.min(holdMs/1000*2.5,12),60))
-        if(phase==='resolve'){
-          if(!resolveFiredRef.current){
-            resolveFiredRef.current=true
-            const staged=stagedRef.current
-            if(staged){
-              setExhibits(staged.exhibits)
-              setEditionLabel(staged.label)
-              setStatus(staged.skipped?`${staged.skipped} feature${staged.skipped===1?'':'s'} referenced unavailable imagery and ${staged.skipped===1?'was':'were'} left out.`:'')
-              setShowDock(false)
+      const transit=transitRef.current
+      if(transit){
+        const k=Math.min(1,(now-transit.t0)/transit.dur)
+        const eased=k<0.5?2*k*k:1-Math.pow(-2*k+2,2)/2
+        rig.camera.position.lerpVectors(transit.fromPos,transit.toPos,eased)
+        rig.camera.lookAt(transit.fromLook.clone().lerp(transit.toLook,eased))
+        transit.onFrame?.(eased)
+        if(k>=1){transitRef.current=null;transit.onDone()}
+      }else if(modeRef.current==='network'){
+        chamber.update(now/1000,dt,interactingRef.current,reduced.current)
+        const orbit=orbitRef.current
+        const view=orbitCamera(NETWORK_CENTER,orbit.yaw,orbit.pitch,orbit.radius)
+        rig.camera.position.set(...view.position)
+        rig.camera.lookAt(...view.look)
+      }else{
+        rig.update(dt)
+        const director=directorRef.current,assembly=assemblyRef.current
+        if(assembly){
+          const {phase,t,holdMs}=director.update()
+          assembly.update(phase,t,now/1000)
+          const base=phase==='stream'?t*21:phase==='lattice'?21+t*21:phase==='resolve'?42+t*18:60
+          rig.setCinematic(Math.min(base+Math.min(holdMs/1000*2.5,12),60))
+          if(phase==='resolve'){
+            if(!resolveFiredRef.current){
+              resolveFiredRef.current=true
+              const staged=stagedRef.current
+              if(staged){
+                setExhibits(staged.exhibits)
+                setEditionLabel(staged.label)
+                setStatus(staged.skipped?`${staged.skipped} feature${staged.skipped===1?'':'s'} referenced unavailable imagery and ${staged.skipped===1?'was':'were'} left out.`:'')
+                setShowDock(false)
+              }
             }
+            mounts.setResolve(t)
           }
-          mounts.setResolve(t)
-        }
-        if(phase!==lastPhaseRef.current){
-          lastPhaseRef.current=phase
-          if(phase==='done'){
-            setComposing(false)
-            window.clearInterval(tickerRef.current)
-            assembly.dispose(field.scene)
-            if(assemblyRef.current===assembly)assemblyRef.current=null
-            director.reset()
-            rig.setCinematic(null)
-            const maxScroll=document.documentElement.scrollHeight-window.innerHeight
-            const dock=layoutRef.current.docks[0]??rig.state.distance
-            if(maxScroll>0)window.scrollTo(0,dock/layoutRef.current.pathLength*maxScroll)
+          if(phase!==lastPhaseRef.current){
+            lastPhaseRef.current=phase
+            if(phase==='done'){
+              setComposing(false)
+              window.clearInterval(tickerRef.current)
+              assembly.dispose(field.scene)
+              if(assemblyRef.current===assembly)assemblyRef.current=null
+              director.reset()
+              rig.setCinematic(null)
+              const maxScroll=document.documentElement.scrollHeight-window.innerHeight
+              const dock=layoutRef.current.docks[0]??rig.state.distance
+              if(maxScroll>0)window.scrollTo(0,dock/layoutRef.current.pathLength*maxScroll)
+            }
           }
         }
       }
+      mounts.group.visible=modeRef.current==='promenade'||transitRef.current!==null
+      chamber.group.visible=modeRef.current==='network'
+      mounts.update(now/1000,reduced.current)
+      field.update(dt,reduced.current)
       field.render(rig.camera)
-      const nearest=rig.state.nearest
+      const nearest=modeRef.current==='network'?-1:rig.state.nearest
       if(nearest!==currentRef.current)setCurrent(nearest)
       frame=requestAnimationFrame(loop)
     }
@@ -151,7 +250,10 @@ export default function SpatialApp(){
     ;(window as unknown as {__spatial?:()=>DebugSnapshot}).__spatial=()=>({
       distance:rig.state.distance,cameraZ:rig.state.cameraZ,cameraY:rig.state.cameraY,current:currentRef.current,
       exhibits:exhibitsRef.current.length,nodes:nodesRef.current.length,source:sourceRef.current,
-      assembly:directorRef.current.phase,
+      assembly:directorRef.current.phase,mode:modeRef.current,
+      orbit:{...orbitRef.current},selected:selectedRef.current,
+      staged:exhibitsRef.current.map(e=>e.assetId),
+      nodeIds:nodesRef.current.map(n=>n.assetId),
     })
     return ()=>{
       alive=false
@@ -159,14 +261,22 @@ export default function SpatialApp(){
       window.clearInterval(tickerRef.current)
       assemblyRef.current?.dispose(field.scene)
       assemblyRef.current=null
+      transitRef.current=null
+      flyRef.current=null
+      document.documentElement.style.overflow=''
       window.removeEventListener('scroll',readScroll)
       window.removeEventListener('resize',resize)
       canvas.removeEventListener('pointerdown',onDown)
+      canvas.removeEventListener('pointermove',onMove)
       canvas.removeEventListener('pointerup',onUp)
+      canvas.removeEventListener('pointercancel',onUp)
+      canvas.removeEventListener('wheel',onWheel)
       mounts.dispose()
+      chamber.dispose()
       field.dispose()
       rigRef.current=null
       mountsRef.current=null
+      chamberRef.current=null
       delete (window as unknown as {__spatial?:unknown}).__spatial
     }
   },[supported])
@@ -211,6 +321,23 @@ export default function SpatialApp(){
     return ()=>window.removeEventListener('keydown',onKey)
   },[inspect])
 
+  useEffect(()=>{
+    // Network owns every touch gesture for orbit/pinch; the promenade
+    // keeps native vertical scroll.
+    if(canvasRef.current)canvasRef.current.style.touchAction=mode==='network'?'none':'pan-y'
+  },[mode])
+
+  useEffect(()=>{
+    if(mode!=='network')return
+    const onKey=(event:KeyboardEvent)=>{
+      if(event.key!=='Escape')return
+      if(selectedRef.current>=0){selectNode(-1);return}
+      backToPromenade()
+    }
+    window.addEventListener('keydown',onKey)
+    return ()=>window.removeEventListener('keydown',onKey)
+  },[mode])
+
   if(!supported){
     return <div className="spatial-fallback">
       <p role="status">The 3D exhibition needs WebGL, which this browser has disabled. The full 2D edition follows.</p>
@@ -218,10 +345,11 @@ export default function SpatialApp(){
     </div>
   }
 
-  const submit=async(event:React.FormEvent)=>{
-    event.preventDefault()
-    const trimmed=prompt.trim()
+  const submit=async(event?:React.FormEvent,promptOverride?:string)=>{
+    event?.preventDefault()
+    const trimmed=(promptOverride??prompt).trim()
     if(!trimmed||composing)return
+    if(modeRef.current==='network')exitNetworkInstant()
     setComposing(true)
     setCleared(null)
     setElapsed(0)
@@ -280,6 +408,20 @@ export default function SpatialApp(){
   }
 
   const clear=()=>{
+    if(transitRef.current){transitRef.current=null;finishClear();return}
+    const fly=flyRef.current,chamber=chamberRef.current
+    // The Clear exhale from the network: the constellation disperses while
+    // the camera glides home, then the visit is wiped as everywhere else.
+    if(modeRef.current==='network'&&!reduced.current&&fly&&chamber){
+      const target=chamber
+      setSelected(-1)
+      fly([0,2.2,26],[0,2.4,-20],1400,()=>finishClear(),k=>target.disperse(k))
+      return
+    }
+    finishClear()
+  }
+
+  const finishClear=()=>{
     submitIdRef.current++
     rigRef.current?.setCinematic(null)
     setComposing(false)
@@ -288,6 +430,7 @@ export default function SpatialApp(){
     if(field&&assembly){assembly.dispose(field.scene);assemblyRef.current=null}
     directorRef.current.reset()
     window.clearInterval(tickerRef.current)
+    exitNetworkInstant()
     setCleared(removed)
     setPrompt('')
     setStatus('')
@@ -296,6 +439,7 @@ export default function SpatialApp(){
     setEditionLabel(null)
     setInspect(null)
     setShowDock(true)
+    setAnnounce(removed.length?`Visit cleared. ${removed.length} keys removed.`:'Visit cleared.')
     bridgeRef.current!.emit({type:'clear',removed})
     window.scrollTo({top:0,behavior:reduced.current?'auto':'smooth'})
   }
@@ -306,11 +450,131 @@ export default function SpatialApp(){
     window.scrollTo({top:0,behavior:reduced.current?'auto':'smooth'})
   }
 
+  const lockScroll=(locked:boolean)=>{document.documentElement.style.overflow=locked?'hidden':''}
+
+  const scrollToDock=(dock:number)=>{
+    const maxScroll=document.documentElement.scrollHeight-window.innerHeight
+    if(maxScroll>0)window.scrollTo(0,dock/layoutRef.current.pathLength*maxScroll)
+  }
+
+  const selectNode=(index:number)=>{
+    setSelected(index)
+    chamberRef.current?.setSelected(index)
+    const node=index>=0?nodesRef.current[index]:undefined
+    if(node)setAnnounce(`${node.label}. ${node.kind}.`)
+  }
+
+  const exitNetworkInstant=()=>{
+    transitRef.current=null
+    setMode('promenade')
+    setSelected(-1)
+    chamberRef.current?.setSelected(-1)
+    lockScroll(false)
+  }
+
+  const openNetwork=()=>{
+    const chamber=chamberRef.current,fly=flyRef.current
+    if(!nodesRef.current.length||composing||transitRef.current)return
+    setInspect(null)
+    setSelected(-1)
+    setMode('network')
+    setAnnounce(`Journey network. ${nodesRef.current.length} records.`)
+    bridgeRef.current!.emit({type:'network',open:true})
+    if(reduced.current||!chamber||!fly){
+      requestAnimationFrame(()=>document.getElementById('spatial-index')?.scrollIntoView())
+      return
+    }
+    chamber.setNodes(nodesRef.current,new Set(exhibitsRef.current.map(e=>e.assetId)))
+    lockScroll(true)
+    const orbit=orbitRef.current
+    const view=orbitCamera(NETWORK_CENTER,orbit.yaw,orbit.pitch,orbit.radius)
+    fly(view.position,view.look,1600,()=>{})
+  }
+
+  const backToPromenade=()=>{
+    const fly=flyRef.current
+    if(transitRef.current)return
+    const layout=layoutRef.current
+    const dock=layout.docks[Math.max(0,currentRef.current)]??layout.docks[0]??60
+    setSelected(-1)
+    chamberRef.current?.setSelected(-1)
+    bridgeRef.current!.emit({type:'network',open:false})
+    if(reduced.current||!fly){
+      exitNetworkInstant()
+      setAnnounce('Back at the promenade.')
+      scrollToDock(dock)
+      return
+    }
+    const pos=splinePosition(dock,layout.waypoints),look=splinePosition(dock+18,layout.waypoints)
+    fly(pos,look,1400,()=>{
+      setMode('promenade')
+      lockScroll(false)
+      setAnnounce('Back at the promenade.')
+      scrollToDock(dock)
+    })
+  }
+
+  const diveTo=(index:number)=>{
+    const fly=flyRef.current
+    const node=nodesRef.current[index]
+    if(!node||transitRef.current)return
+    const exhibit=exhibitsRef.current.findIndex(e=>e.assetId===node.assetId)
+    if(exhibit<0)return
+    const layout=layoutRef.current
+    const dock=layout.docks[exhibit]??60
+    const mount=layout.mounts[exhibit]??{x:0,z:-52}
+    setAnnounce(`Entering ${node.label}.`)
+    bridgeRef.current!.emit({type:'dive',assetId:node.assetId})
+    if(reduced.current||!fly){
+      exitNetworkInstant()
+      scrollToDock(dock)
+      return
+    }
+    setSelected(-1)
+    chamberRef.current?.setSelected(-1)
+    fly([mount.x*0.4,2.6,mount.z+13],[mount.x,2.6,mount.z],1800,()=>{
+      setMode('promenade')
+      lockScroll(false)
+      scrollToDock(dock)
+    })
+  }
+
+  const surprise=()=>{
+    if(!nodesRef.current.length)return
+    const pick=pickSurprise(nodesRef.current.length,selectedRef.current)
+    selectNode(pick)
+    const node=nodesRef.current[pick]
+    if(node){
+      bridgeRef.current!.emit({type:'surprise',assetId:node.assetId})
+      setAnnounce(`Surprise: ${node.label}. Choose whether to enter.`)
+    }
+  }
+
+  const stepNode=(direction:1|-1)=>{
+    const count=nodesRef.current.length
+    if(!count)return
+    selectNode((selectedRef.current+direction+count)%count)
+  }
+
+  const curateFrom=(index:number)=>{
+    const node=nodesRef.current[index]
+    if(!node||composing)return
+    exitNetworkInstant()
+    setPrompt(node.label)
+    void submit(undefined,node.label)
+  }
+
   const staged=exhibits.length>0
+  const stagedIds=new Set(exhibits.map(e=>e.assetId))
   const active=current>=0?exhibits[current]:null
   const inspected=inspect?exhibits.find(e=>e.assetId===inspect.assetId)??null:null
   const inspectedHotspot=inspected?.hotspots.find(h=>h.id===inspect?.hotspotId)??inspected?.hotspots[0]
+  const selectedNode=selected>=0?nodes[selected]??null:null
+  const selectedStaged=selectedNode?stagedIds.has(selectedNode.assetId):false
   const sourceLabel=nodes.length?`${nodes.length} records (${source==='endpoint'?'live catalog':'local manifest'})`:'loading…'
+  const crumb=mode==='network'
+    ?selectedNode?`Journey · ${selectedNode.label}`:`Journey · ${sourceLabel}`
+    :staged&&active?`Exhibit ${current+1} of ${exhibits.length} · ${active.title}`:staged?'Your exhibition':'Discover · Silver Field'
   return <main className="spatial-root" aria-label="Curio spatial exhibition">
     <a className="spatial-skip" href="#spatial-index">Skip to exhibit list</a>
     <canvas ref={canvasRef} className="spatial-canvas" aria-hidden="true"/>
@@ -318,10 +582,13 @@ export default function SpatialApp(){
     <header className="spatial-hud">
       <a className="spatial-brand" href="/" aria-label="Curio home">curio<span>.</span></a>
       <nav className="spatial-crumb" aria-label="Journey" aria-live="polite">
-        {staged&&active?`Exhibit ${current+1} of ${exhibits.length} · ${active.title}`:staged?'Your exhibition':'Discover · Silver Field'}
+        {crumb}
       </nav>
       <div className="spatial-actions">
-        {staged&&<button type="button" onClick={reopen}>New prompt</button>}
+        {mode==='network'
+          ?<button type="button" onClick={backToPromenade}>Promenade</button>
+          :<button type="button" onClick={openNetwork} disabled={!nodes.length||composing}>Journey</button>}
+        {staged&&mode==='promenade'&&<button type="button" onClick={reopen}>New prompt</button>}
         <a href="/">2D edition</a>
         <button type="button" onClick={clear}>Clear</button>
       </div>
@@ -343,7 +610,7 @@ export default function SpatialApp(){
         Visit cleared from this browser{cleared.length?`: ${cleared.join(', ')}`:'. No visit data was found in this browser.'} Server data handling: pending confirmation.
       </p>}
     </section>}
-    {active&&!inspect&&<section className="spatial-rail" aria-label={`Contents of ${active.title}`}>
+    {active&&!inspect&&mode==='promenade'&&<section className="spatial-rail" aria-label={`Contents of ${active.title}`}>
       <article className="spatial-rail-card">
         <p className="spatial-eyebrow">Story</p>
         <h2>{active.title}</h2>
@@ -377,15 +644,35 @@ export default function SpatialApp(){
           <p className="spatial-fine">Manually authored hotspot · no SAM inference. Material and specifications unverified.</p></>
         :<><p>{inspected.narrative}</p><p className="spatial-fine">{inspected.attribution}</p></>}
     </aside>}
+    {mode==='network'&&<nav className="spatial-journey-bar" aria-label="Journey network">
+      <button type="button" onClick={backToPromenade}>← Promenade</button>
+      <button type="button" onClick={surprise}>Surprise me</button>
+      <button type="button" onClick={()=>stepNode(-1)} aria-label="Previous node">←</button>
+      <button type="button" onClick={()=>stepNode(1)} aria-label="Next node">→</button>
+      <span className="spatial-fine">{sourceLabel}</span>
+    </nav>}
+    {mode==='network'&&selectedNode&&<aside className="spatial-inspect spatial-node-panel" aria-label={`Node ${selectedNode.label}`} data-testid="spatial-node-panel">
+      <button type="button" className="spatial-inspect-close" onClick={()=>selectNode(-1)} aria-label="Close node panel">×</button>
+      <p className="spatial-eyebrow">04 · Journey</p>
+      <h2>{selectedNode.label}</h2>
+      <p>{selectedNode.kind} · {selectedStaged?'in your current edition':'in the catalog, outside your current edition'}</p>
+      {selectedStaged
+        ?<button type="button" className="spatial-node-enter" onClick={()=>diveTo(selected)}>Enter exhibit →</button>
+        :<button type="button" className="spatial-node-enter" onClick={()=>curateFrom(selected)}>Curate from this node →</button>}
+    </aside>}
     <div className="spatial-scroll-proxy" style={staged?{height:`${140+exhibits.length*90}vh`}:undefined} aria-hidden="true"/>
     <section id="spatial-index" className="spatial-index" aria-labelledby="spatial-index-heading">
       <p className="spatial-eyebrow">Exhibit index</p>
       <h2 id="spatial-index-heading">Every exhibit, one list</h2>
       <p className="spatial-source">Catalog: {sourceLabel}</p>
-      <ul>{nodes.map(node=><li key={node.assetId}>
+      <ul>{nodes.map((node,index)=><li key={node.assetId}>
         <img src={node.thumbnail} alt="" loading="lazy" width={72} height={72}/>
         <div><strong>{node.label}</strong><span>{node.kind} · {node.assetId}</span></div>
+        {mode==='network'&&(stagedIds.has(node.assetId)
+          ?<button type="button" onClick={()=>diveTo(index)}>Enter exhibit →</button>
+          :<button type="button" onClick={()=>curateFrom(index)}>Curate from this node →</button>)}
       </li>)}</ul>
     </section>
+    <p className="spatial-sr" aria-live="polite">{announce}</p>
   </main>
 }
