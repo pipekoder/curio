@@ -148,6 +148,8 @@ test('Clear wipes the visit session and says what was removed',async({page})=>{
   expect(await page.evaluate(()=>sessionStorage.getItem('curio.spatial.session.v1'))).toBeNull()
   await expect(page.getByRole('status').last()).toContainText('curio.spatial.session.v1')
   await expect(page.getByRole('status').last()).toContainText('pending confirmation')
+  await page.getByRole('button',{name:'Clear',exact:true}).click()
+  await expect(page.getByRole('status').last()).toContainText('No visit data was found in this browser')
   await expect(page.getByLabel('Your curiosity')).toBeVisible()
   await page.screenshot({path:'test-results/spatial-discover-390.png'})
 })

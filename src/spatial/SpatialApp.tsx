@@ -340,7 +340,7 @@ export default function SpatialApp(){
         <button type="submit" disabled={!prompt.trim()||composing}>{composing?'Composing…':'Begin exploration →'}</button>
       </form>
       {cleared&&<p role="status" className="spatial-status">
-        Visit cleared from this browser{cleared.length?`: ${cleared.join(', ')}`:'. Nothing was stored.'} Server data handling: pending confirmation.
+        Visit cleared from this browser{cleared.length?`: ${cleared.join(', ')}`:'. No visit data was found in this browser.'} Server data handling: pending confirmation.
       </p>}
     </section>}
     {active&&!inspect&&<section className="spatial-rail" aria-label={`Contents of ${active.title}`}>
