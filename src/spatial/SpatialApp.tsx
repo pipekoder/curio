@@ -480,10 +480,7 @@ export default function SpatialApp(){
     setMode('network')
     setAnnounce(`Journey network. ${nodesRef.current.length} records.`)
     bridgeRef.current!.emit({type:'network',open:true})
-    if(reduced.current||!chamber||!fly){
-      requestAnimationFrame(()=>document.getElementById('spatial-index')?.scrollIntoView())
-      return
-    }
+    if(reduced.current||!chamber||!fly)return
     chamber.setNodes(nodesRef.current,new Set(exhibitsRef.current.map(e=>e.assetId)))
     lockScroll(true)
     const orbit=orbitRef.current
@@ -576,7 +573,9 @@ export default function SpatialApp(){
     ?selectedNode?`Journey · ${selectedNode.label}`:`Journey · ${sourceLabel}`
     :staged&&active?`Exhibit ${current+1} of ${exhibits.length} · ${active.title}`:staged?'Your exhibition':'Discover · Silver Field'
   return <main className="spatial-root" aria-label="Curio spatial exhibition">
-    <a className="spatial-skip" href="#spatial-index">Skip to exhibit list</a>
+    <a className="spatial-skip" href={mode==='network'?'#spatial-journey':showDock?'#spatial-prompt-heading':'#spatial-rail'}>
+      {mode==='network'?'Skip to journey controls':showDock?'Skip to curiosity prompt':'Skip to exhibit contents'}
+    </a>
     <canvas ref={canvasRef} className="spatial-canvas" aria-hidden="true"/>
     <div className="spatial-vignette" aria-hidden="true"/>
     <header className="spatial-hud">
@@ -589,8 +588,6 @@ export default function SpatialApp(){
           ?<button type="button" onClick={backToPromenade}>Promenade</button>
           :<button type="button" onClick={openNetwork} disabled={!nodes.length||composing}>Journey</button>}
         {staged&&mode==='promenade'&&<button type="button" onClick={reopen}>New prompt</button>}
-        <a href="/legacy">2D edition</a>
-        <button type="button" onClick={clear}>Clear</button>
       </div>
     </header>
     {editionLabel==='authored-fallback'&&<p className="spatial-chip" role="note" data-testid="spatial-edition-chip">Curio-authored edition · AI not used</p>}
@@ -598,7 +595,7 @@ export default function SpatialApp(){
     {!composing&&status&&<p role="status" className={`spatial-chip${editionLabel?' is-sub':''}`}>{status}</p>}
     {showDock&&<section className={`spatial-dock${entered?' is-docked':''}${composing?' is-composing':''}`} aria-labelledby="spatial-prompt-heading">
       <p className="spatial-eyebrow">01 · Discover</p>
-      <h1 id="spatial-prompt-heading">What are you curious about?</h1>
+      <h1 id="spatial-prompt-heading" tabIndex={-1}>What are you curious about?</h1>
       <form onSubmit={submit}>
         <label className="spatial-sr" htmlFor="spatial-prompt">Your curiosity</label>
         <textarea id="spatial-prompt" rows={2} maxLength={1000} value={prompt}
@@ -610,7 +607,7 @@ export default function SpatialApp(){
         Visit cleared from this browser{cleared.length?`: ${cleared.join(', ')}`:'. No visit data was found in this browser.'} Server data handling: pending confirmation.
       </p>}
     </section>}
-    {active&&!inspect&&mode==='promenade'&&<section className="spatial-rail" aria-label={`Contents of ${active.title}`}>
+    {active&&!inspect&&mode==='promenade'&&<section id="spatial-rail" tabIndex={-1} className="spatial-rail" aria-label={`Contents of ${active.title}`}>
       <article className="spatial-rail-card">
         <p className="spatial-eyebrow">Story</p>
         <h2>{active.title}</h2>
@@ -644,7 +641,8 @@ export default function SpatialApp(){
           <p className="spatial-fine">Manually authored hotspot · no SAM inference. Material and specifications unverified.</p></>
         :<><p>{inspected.narrative}</p><p className="spatial-fine">{inspected.attribution}</p></>}
     </aside>}
-    {mode==='network'&&<nav className="spatial-journey-bar" aria-label="Journey network">
+    {mode==='network'&&<button type="button" className="spatial-clear-corner" onClick={clear}>Clear</button>}
+    {mode==='network'&&<nav id="spatial-journey" tabIndex={-1} className="spatial-journey-bar" aria-label="Journey network">
       <button type="button" onClick={backToPromenade}>← Promenade</button>
       <button type="button" onClick={surprise}>Surprise me</button>
       <button type="button" onClick={()=>stepNode(-1)} aria-label="Previous node">←</button>
@@ -661,18 +659,6 @@ export default function SpatialApp(){
         :<button type="button" className="spatial-node-enter" onClick={()=>curateFrom(selected)}>Curate from this node →</button>}
     </aside>}
     <div className="spatial-scroll-proxy" style={staged?{height:`${140+exhibits.length*90}vh`}:undefined} aria-hidden="true"/>
-    <section id="spatial-index" className="spatial-index" aria-labelledby="spatial-index-heading">
-      <p className="spatial-eyebrow">Exhibit index</p>
-      <h2 id="spatial-index-heading">Every exhibit, one list</h2>
-      <p className="spatial-source">Catalog: {sourceLabel}</p>
-      <ul>{nodes.map((node,index)=><li key={node.assetId}>
-        <img src={node.thumbnail} alt="" loading="lazy" width={72} height={72}/>
-        <div><strong>{node.label}</strong><span>{node.kind} · {node.assetId}</span></div>
-        {mode==='network'&&(stagedIds.has(node.assetId)
-          ?<button type="button" onClick={()=>diveTo(index)}>Enter exhibit →</button>
-          :<button type="button" onClick={()=>curateFrom(index)}>Curate from this node →</button>)}
-      </li>)}</ul>
-    </section>
     <p className="spatial-sr" aria-live="polite">{announce}</p>
   </main>
 }
