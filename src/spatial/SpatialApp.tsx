@@ -67,6 +67,9 @@ export default function SpatialApp(){
   modeRef.current=mode
   const selectedRef=useRef(selected)
   selectedRef.current=selected
+  const composingRef=useRef(composing)
+  composingRef.current=composing
+  const openNetworkRef=useRef<(()=>void)|null>(null)
   const exhibitsRef=useRef(exhibits)
   exhibitsRef.current=exhibits
   const currentRef=useRef(current)
@@ -94,6 +97,13 @@ export default function SpatialApp(){
     const readScroll=()=>{
       const maxScroll=document.documentElement.scrollHeight-window.innerHeight
       rig.setScroll(window.scrollY,maxScroll,layoutRef.current.pathLength)
+      // The journey lives where the exhibition list did: scrolling to the
+      // bottom of the promenade opens the network without a button press.
+      // Returning stays explicit via Promenade, Esc, dive, or curate.
+      if(modeRef.current==='promenade'&&!composingRef.current&&!transitRef.current
+        &&nodesRef.current.length>0&&maxScroll>0&&window.scrollY/maxScroll>0.985){
+        openNetworkRef.current?.()
+      }
     }
     readScroll()
     window.addEventListener('scroll',readScroll,{passive:true})
@@ -474,9 +484,10 @@ export default function SpatialApp(){
 
   const openNetwork=()=>{
     const chamber=chamberRef.current,fly=flyRef.current
-    if(!nodesRef.current.length||composing||transitRef.current)return
+    if(modeRef.current==='network'||!nodesRef.current.length||composing||transitRef.current)return
     setInspect(null)
     setSelected(-1)
+    setShowDock(false)
     setMode('network')
     setAnnounce(`Journey network. ${nodesRef.current.length} records.`)
     bridgeRef.current!.emit({type:'network',open:true})
@@ -487,6 +498,7 @@ export default function SpatialApp(){
     const view=orbitCamera(NETWORK_CENTER,orbit.yaw,orbit.pitch,orbit.radius)
     fly(view.position,view.look,1600,()=>{})
   }
+  openNetworkRef.current=openNetwork
 
   const backToPromenade=()=>{
     const fly=flyRef.current
@@ -498,6 +510,7 @@ export default function SpatialApp(){
     bridgeRef.current!.emit({type:'network',open:false})
     if(reduced.current||!fly){
       exitNetworkInstant()
+      if(!exhibitsRef.current.length)setShowDock(true)
       setAnnounce('Back at the promenade.')
       scrollToDock(dock)
       return
@@ -505,6 +518,7 @@ export default function SpatialApp(){
     const pos=splinePosition(dock,layout.waypoints),look=splinePosition(dock+18,layout.waypoints)
     fly(pos,look,1400,()=>{
       setMode('promenade')
+      if(!exhibitsRef.current.length)setShowDock(true)
       lockScroll(false)
       setAnnounce('Back at the promenade.')
       scrollToDock(dock)
@@ -641,10 +655,10 @@ export default function SpatialApp(){
           <p className="spatial-fine">Manually authored hotspot · no SAM inference. Material and specifications unverified.</p></>
         :<><p>{inspected.narrative}</p><p className="spatial-fine">{inspected.attribution}</p></>}
     </aside>}
-    {mode==='network'&&<button type="button" className="spatial-clear-corner" onClick={clear}>Clear</button>}
     {mode==='network'&&<nav id="spatial-journey" tabIndex={-1} className="spatial-journey-bar" aria-label="Journey network">
       <button type="button" onClick={backToPromenade}>← Promenade</button>
       <button type="button" onClick={surprise}>Surprise me</button>
+      <button type="button" onClick={clear}>Clear</button>
       <button type="button" onClick={()=>stepNode(-1)} aria-label="Previous node">←</button>
       <button type="button" onClick={()=>stepNode(1)} aria-label="Next node">→</button>
       <span className="spatial-fine">{sourceLabel}</span>

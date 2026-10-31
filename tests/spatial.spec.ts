@@ -48,10 +48,39 @@ test('scrolling travels the camera through genuine depth',async({page})=>{
   await page.goto('/spatial')
   await expect(page.locator('.spatial-canvas')).toBeVisible()
   const top=await page.evaluate(()=>window.__spatial?.().cameraZ)
-  await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight))
+  await page.evaluate(()=>window.scrollTo(0,(document.documentElement.scrollHeight-window.innerHeight)*0.8))
   await expect.poll(()=>page.evaluate(()=>window.__spatial?.().cameraZ)).toBeLessThan(top!)
+  const mid=await page.evaluate(()=>window.__spatial?.())
+  expect(mid?.mode).toBe('promenade')
   await page.evaluate(()=>window.scrollTo(0,0))
   await expect.poll(()=>page.evaluate(()=>window.__spatial?.().cameraZ)).toBeGreaterThan(top!-1)
+})
+
+test('scrolling to the end of the promenade opens the journey',async({page})=>{
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await page.waitForFunction(()=>((window.__spatial?.().nodes)??0)>0)
+  await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight))
+  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await expect(page.getByRole('navigation',{name:'Journey network'})).toBeVisible()
+  await expect(page.getByLabel('Your curiosity')).toBeHidden()
+  await page.waitForTimeout(1800)
+  await page.getByRole('button',{name:'← Promenade'}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='promenade',{timeout:10000})
+  await expect(page.getByLabel('Your curiosity')).toBeVisible()
+})
+
+test('clear sits with surprise me in the journey controls',async({page})=>{
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await page.waitForFunction(()=>((window.__spatial?.().nodes)??0)>0)
+  await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight))
+  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  const order=await page.evaluate(()=>{
+    const bar=document.getElementById('spatial-journey')
+    return [...(bar?.querySelectorAll('button')??[])].map(b=>b.textContent)
+  })
+  expect(order.indexOf('Clear')).toBe(order.indexOf('Surprise me')+1)
 })
 
 test('arriving at an exhibit reveals its lateral rail',async({page})=>{
