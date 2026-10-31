@@ -6,7 +6,6 @@ import type {VisualContext} from '../shared/visual-observations'
 import type {CatalogItem} from '../shared/catalog'
 import type {ExternalAssetApprovals} from '../shared/url-policy'
 import {boundedText} from './meta'
-import {requireGroundedEditorial} from './editorial-quality'
 
 const token=z.number().int().min(0).max(10000000)
 const usage=z.object({prompt_tokens:token,completion_tokens:token,total_tokens:token,prompt_tokens_details:z.object({cached_tokens:token}).optional()}).optional()
@@ -38,6 +37,7 @@ export async function reviewEditorialPlan(key:string,plan:EditorialPlan,sources:
   if(feedbackIds.length!==plan.features.length||new Set(feedbackIds).size!==feedbackIds.length||feedbackIds.some(id=>!plan.features.some(item=>item.assetId===id))||Object.values(result.value.dimensions).some(dimension=>dimension.evidenceRefs.some(ref=>!refs.has(ref)))||result.value.featureFeedback.some(feature=>feature.issues.some(issue=>issue.evidenceRefs.some(ref=>!refs.has(ref))))||assessment.decision==='REVISE'&&(!result.value.revisionInstructions.length||!result.value.featureFeedback.some(feature=>feature.issues.length)))throw new EditorialReviewError('invalid_evidence',result.measurement)
   return {...result,assessment}
 }
+export function reviewHasHardFailure(review:EditorialReviewOutput){return review.featureFeedback.some(feature=>feature.issues.some(issue=>issue.severity==='high'))}
 
 function sameStructure(original:EditorialPlan,revised:EditorialPlan){
   const stable=(plan:EditorialPlan)=>({qualityVersion:plan.qualityVersion,features:plan.features.map(({catalogId,assetId,observationKeys,sourceIds,layout,motion,theme})=>({catalogId,assetId,observationKeys,sourceIds,layout,motion,theme})),connections:(plan.connections??[]).map(({fromAssetId,toAssetId})=>({fromAssetId,toAssetId}))})
@@ -48,8 +48,7 @@ export async function reviseEditorialPlan(key:string,original:EditorialPlan,revi
   const result=await structuredMuse(key,revisionInstruction,{originalPlan:original,review,factualSources:sources,visualContexts:contexts},editorialPlan,'curio_editorial_revision_v1')
   try{
     if(!sameStructure(original,result.value))throw Error('Structure changed')
-    requireGroundedEditorial(result.value,contexts,sources)
-    return {...result,value:validateOriginalPlan(result.value,pool,p,approvals,sources,contexts)}
+    return {...result,value:validateOriginalPlan(result.value,pool,p,approvals,sources,contexts,true)}
   }catch{throw new EditorialReviewError('invalid_revision',result.measurement)}
 }
 

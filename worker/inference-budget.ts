@@ -9,7 +9,7 @@ export class InferenceReservation{
 
 // Shared namespace/name and unchanged ceilings for magazine and Decoder calls.
 // Multi-model operations reserve every possible call atomically, never refund.
-export async function reserveInference(env: Bindings, ip: string, units: 1 | 2 | 3 = 1, samAssetId?: string) {
+export async function reserveInference(env: Bindings, ip: string, units: 1 | 2 | 3 | 4 = 1, samAssetId?: string) {
   if (!env.RATE_LIMIT_SALT || env.RATE_LIMIT_SALT.length < 32 || !env.INFERENCE_BUDGET) throw new Error('Budget unavailable')
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.RATE_LIMIT_SALT), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
   const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(ip))

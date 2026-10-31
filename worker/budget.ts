@@ -7,7 +7,7 @@ export class InferenceBudget {
     state.storage.sql.exec(`CREATE TABLE IF NOT EXISTS counters (key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL)`)
   }
   async fetch(request: Request): Promise<Response> {
-    const parsed = z.strictObject({ ip: z.string().regex(/^[a-f0-9]{64}$/), ceiling: z.number().int().min(1).max(100), units: z.union([z.literal(1), z.literal(2),z.literal(3)]).default(1), samAssetId: z.string().regex(/^[a-z0-9-]+$/).max(80).optional() }).safeParse(await request.json())
+    const parsed = z.strictObject({ ip: z.string().regex(/^[a-f0-9]{64}$/), ceiling: z.number().int().min(1).max(100), units: z.union([z.literal(1), z.literal(2),z.literal(3),z.literal(4)]).default(1), samAssetId: z.string().regex(/^[a-z0-9-]+$/).max(80).optional() }).safeParse(await request.json())
     if (!parsed.success) return Response.json({ error: 'Invalid reservation' }, { status: 400 })
     const { ip, ceiling, units, samAssetId } = parsed.data
     const now = Date.now(), minute = 60000, hour = 3600000, day = 86400000

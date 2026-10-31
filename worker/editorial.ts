@@ -33,7 +33,7 @@ import { boundedText } from "./meta";
 import { catalogDigest } from "./catalog-store";
 import { chiefEditorInstruction } from '../shared/editorial-chief';
 import {EDITORIAL_STANDARD_VERSION,editorialStandardInstruction} from '../shared/editorial-standard';
-import {EditorialReviewError,reviewEditorialPlan,reviseEditorialPlan,type EditorialMeasurement} from './editorial-reviewer';
+import {EditorialReviewError,reviewEditorialPlan,reviewHasHardFailure,reviseEditorialPlan,type EditorialMeasurement} from './editorial-reviewer';
 import type { EditorialSource } from '../shared/editorial-sources';
 import { loadEditorialSources,parsePilotVersions } from './editorial-sources';
 import type { Bindings } from "./index";
@@ -161,7 +161,7 @@ editorialApi.post("/", async (c) => {
   if (cached && cached.expires > Date.now())
     try {
       return c.json({
-        plan: validateOriginalPlan(cached.plan, pool.items, p, pool.approvals,pool.sources,pool.visualContexts),
+        plan: validateOriginalPlan(cached.plan, pool.items, p, pool.approvals,pool.sources,pool.visualContexts,reviewEnabled),
         items: pool.items,
         source: "meta",
         retrieval: pool.retrieval,
@@ -174,12 +174,12 @@ editorialApi.post("/", async (c) => {
       plans.delete(key);
     }
   try {
-    const budget = await reserveInference(env, ip,reviewEnabled?3:1);
+    const budget = await reserveInference(env, ip,reviewEnabled?4:1);
     if (budget.allowed !== true) {
       fallbackReason = "budget";
       return fallback();
     }
-    const reservation=new InferenceReservation(reviewEnabled?3:1)
+    const reservation=new InferenceReservation(reviewEnabled?4:1)
     inference = { ...inference, attempted: true, reservedUnits: reservation.reservedUnits };
     fallbackReason = "provider_or_validation";
     callStarted = performance.now();
@@ -236,11 +236,16 @@ export async function runEditorialWorkflow(p:EditorialPreferences,pool:CatalogIt
   try{review=await deps.review(key,generated.plan,sources,visualContexts)}catch(error){throw new EditorialReviewError(error instanceof EditorialReviewError?error.code:'invalid_output',combineMeasurements(generated.measurement,error instanceof EditorialReviewError?error.measurement:{latencyMs:0,usage:null}))}
   const reviewedMeasurement=combineMeasurements(generated.measurement,review.measurement)
   if(review.assessment.decision==='REJECT')return {status:'rejected' as const,plan:generated.plan,measurement:reviewedMeasurement,revised:false}
-  if(review.assessment.decision==='PASS')return {status:'pass' as const,plan:generated.plan,measurement:reviewedMeasurement,revised:false}
+  if(review.assessment.decision==='PASS'&&!reviewHasHardFailure(review.value))return {status:'pass' as const,plan:generated.plan,measurement:reviewedMeasurement,revised:false}
   if(!reservation.claim())throw new EditorialWorkflowBudgetError(reviewedMeasurement)
   let revision:Awaited<ReturnType<typeof reviseEditorialPlan>>
   try{revision=await deps.revise(key,generated.plan,review.value,p,pool,approvals,sources,visualContexts)}catch(error){throw new EditorialReviewError(error instanceof EditorialReviewError?error.code:'invalid_revision',combineMeasurements(reviewedMeasurement,error instanceof EditorialReviewError?error.measurement:{latencyMs:0,usage:null}))}
-  return {status:'pass' as const,plan:revision.value,measurement:combineMeasurements(generated.measurement,review.measurement,revision.measurement),revised:true}
+  const revisedMeasurement=combineMeasurements(generated.measurement,review.measurement,revision.measurement)
+  if(!reservation.claim())throw new EditorialWorkflowBudgetError(revisedMeasurement)
+  const confirmation=await deps.review(key,revision.value,sources,visualContexts)
+  const finalMeasurement=combineMeasurements(revisedMeasurement,confirmation.measurement)
+  if(confirmation.assessment.decision!=='PASS'||reviewHasHardFailure(confirmation.value))return {status:'rejected' as const,plan:revision.value,measurement:finalMeasurement,revised:true}
+  return {status:'pass' as const,plan:revision.value,measurement:finalMeasurement,revised:true}
 }
 export class EditorialWorkflowBudgetError extends Error{constructor(public measurement:EditorialMeasurement){super('Editorial workflow budget unavailable')}}
 const tokens = z.number().int().min(0).max(10000000);
@@ -378,8 +383,8 @@ export async function generateEditorialResult(
       code: "plan_schema",
       field: "plan",
     };
-    requireGroundedEditorial(structured, visualContexts,sources);
-    const plan = validateOriginalPlan(structured, eligible, p, approvals,sources,visualContexts);
+    if(!sources.length)requireGroundedEditorial(structured, visualContexts,sources);
+    const plan = validateOriginalPlan(structured, eligible, p, approvals,sources,visualContexts,Boolean(sources.length));
     measurement.latencyMs = Math.round(performance.now() - started);
     return { plan, measurement };
   } catch {

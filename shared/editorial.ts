@@ -85,7 +85,7 @@ export const editorialPlan = z
       ctx.addIssue({ code: "custom", message: "Duplicate assets." });
   });
 export type EditorialPlan = z.infer<typeof editorialPlan>;
-export function validatePlan(input: unknown, pool: readonly CatalogItem[], approvals:ExternalAssetApprovals=approvedExternalAssets, sources:readonly EditorialSource[]=[] ) {
+export function validatePlan(input: unknown, pool: readonly CatalogItem[], approvals:ExternalAssetApprovals=approvedExternalAssets, sources:readonly EditorialSource[]=[],technicalOnly=false ) {
   const p = editorialPlan.parse(input);
   for (const f of p.features) {
     const ad = pool.find(
@@ -95,9 +95,9 @@ export function validatePlan(input: unknown, pool: readonly CatalogItem[], appro
     if (!ad) throw Error("Unapproved editorial asset");
     const copy = editorialCopy(ad);
     if (
-      !(copy.headlines.includes(f.headline) || (p.qualityVersion === 2 ? editorialV2Text(f.headline) : p.qualityVersion===3?chiefEditorText(f.headline):visualPhrase(f.headline))) ||
+      !(technicalOnly&&p.qualityVersion===3||copy.headlines.includes(f.headline) || (p.qualityVersion === 2 ? editorialV2Text(f.headline) : p.qualityVersion===3?chiefEditorText(f.headline):visualPhrase(f.headline))) ||
       !(
-        copy.narratives.includes(f.narrative) || (p.qualityVersion === 2 ? editorialV2Text(f.narrative) : p.qualityVersion===3?chiefEditorText(f.narrative):visualNarrative(f.narrative))
+        technicalOnly&&p.qualityVersion===3||copy.narratives.includes(f.narrative) || (p.qualityVersion === 2 ? editorialV2Text(f.narrative) : p.qualityVersion===3?chiefEditorText(f.narrative):visualNarrative(f.narrative))
       ) ||
       !ad.lifestyleTags.some((t) => t === f.theme)
     )
@@ -109,7 +109,7 @@ export function validatePlan(input: unknown, pool: readonly CatalogItem[], appro
       connection.fromAssetId === connection.toAssetId ||
       !p.features.some((f) => f.assetId === connection.fromAssetId) ||
       !p.features.some((f) => f.assetId === connection.toAssetId) ||
-      !(p.qualityVersion === 2 ? editorialV2Text(connection.thread) : p.qualityVersion===3?chiefEditorText(connection.thread):visualNarrative(connection.thread))
+      !(technicalOnly&&p.qualityVersion===3||(p.qualityVersion === 2 ? editorialV2Text(connection.thread) : p.qualityVersion===3?chiefEditorText(connection.thread):visualNarrative(connection.thread)))
     )
       throw Error("Ungrounded editorial connection");
   }
@@ -273,10 +273,19 @@ export function validateOriginalPlan(
   approvals:ExternalAssetApprovals=approvedExternalAssets,
   sources:readonly EditorialSource[]=[],
   contexts:readonly import('./visual-observations').VisualContext[]=[],
+  technicalOnly=false,
 ) {
   const eligible = pool.filter((a) => prefs.allocations[a.category] > 0);
-  const plan = validatePlan(input, eligible, approvals,sources);
-  if(plan.qualityVersion===3){const issue=evaluateChiefEditor(plan,contexts,sources);if(issue)throw Error(`Chief Editor output rejected: ${issue}`)}
+  const plan = validatePlan(input, eligible, approvals,sources,technicalOnly);
+  if(plan.qualityVersion===3&&technicalOnly){
+    for(const feature of plan.features){
+      const context=contexts.find(row=>row.assetId===feature.assetId)
+      const keys=context?Object.entries(context.observations).flatMap(([group,values])=>values.map(value=>`${group}.${value}`)):[]
+      if(!context||!feature.observationKeys?.length||feature.observationKeys.some(key=>!keys.includes(key)))throw Error('Unsupported observation reference')
+      if(!feature.sourceIds?.length||feature.sourceIds.some(id=>!sources.some(source=>source.id===id&&source.assetId===feature.assetId)))throw Error('Unsupported source reference')
+    }
+  }
+  if(plan.qualityVersion===3&&!technicalOnly){const issue=evaluateChiefEditor(plan,contexts,sources);if(issue)throw Error(`Chief Editor output rejected: ${issue}`)}
   if (plan.qualityVersion !== 2 && plan.qualityVersion !== 3 && (
     !visualPhrase(plan.title) ||
     plan.title.length > 80 ||
@@ -291,7 +300,7 @@ export function validateOriginalPlan(
     )
   ))
     throw Error("Original visual interpretation required");
-  if (
+  if (!technicalOnly &&
     new Set(plan.features.map((f) => f.headline)).size !==
       plan.features.length ||
     new Set(plan.features.map((f) => f.narrative)).size !== plan.features.length
@@ -304,7 +313,7 @@ export function validateOriginalPlan(
     Math.min(eligible.length, prefs.mode === "Focused" ? 2 : 3)
   )
     throw Error("Insufficient editorial coverage");
-  if (
+  if (!technicalOnly &&
     plan.features.length > 1 &&
     new Set(plan.features.map((f) => f.layout)).size < 2
   )
