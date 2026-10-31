@@ -7,17 +7,25 @@ export type Pick={assetId:string;hotspotId?:string}
 // hotspot rings. One group per staged exhibit along the promenade.
 export class ExhibitMounts{
   readonly group=new THREE.Group()
-  private loader=new THREE.TextureLoader()
+  onArtworkError?:(assetId:string)=>void
+  private loader:THREE.TextureLoader
   private raycaster=new THREE.Raycaster()
   private pickables:THREE.Object3D[]=[]
   private floats:{group:THREE.Group;baseY:number;phase:number}[]=[]
+  // Mount lifecycle: every clear starts a new epoch, so asynchronous
+  // texture callbacks can tell whether their mount is still staged. A
+  // detached mount group keeps its children (art.parent stays set), so
+  // scene-graph parenting cannot serve as this guard.
+  private epoch=0
 
-  constructor(scene:THREE.Scene){
+  constructor(scene:THREE.Scene,loader=new THREE.TextureLoader()){
+    this.loader=loader
     scene.add(this.group)
   }
 
   setExhibits(exhibits:readonly StagedExhibit[],mounts:readonly {x:number;z:number}[]):void{
     this.clear()
+    const epoch=this.epoch
     exhibits.forEach((exhibit,index)=>{
       const at=mounts[index]??{x:0,z:-52-index*40}
       const mount=new THREE.Group()
@@ -43,11 +51,19 @@ export class ExhibitMounts{
       mount.add(art)
       this.pickables.push(art)
       this.loader.load(exhibit.image,texture=>{
+        // A texture arriving after its mount was pruned is disposed rather
+        // than attached, so revoked artwork cannot resurface.
+        if(epoch!==this.epoch){texture.dispose();return}
         texture.colorSpace=THREE.SRGBColorSpace
         ;(art.material as THREE.MeshBasicMaterial).map=texture
         ;(art.material as THREE.MeshBasicMaterial).color.set(0xffffff)
         ;(art.material as THREE.MeshBasicMaterial).needsUpdate=true
-      },undefined,()=>{/* Placeholder board stays; the rail still shows content. */})
+      },undefined,()=>{
+        // A stale error must not prune a replacement mount staged under the
+        // same asset ID.
+        if(epoch!==this.epoch)return
+        this.onArtworkError?.(exhibit.assetId)
+      })
       for(const hotspot of exhibit.hotspots){
         const ring=new THREE.Mesh(
           new THREE.TorusGeometry(0.16,0.028,12,32),
@@ -115,6 +131,7 @@ export class ExhibitMounts{
   }
 
   private clear():void{
+    this.epoch++
     this.pickables=[]
     this.floats=[]
     this.group.traverse(object=>{

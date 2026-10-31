@@ -1,13 +1,13 @@
 import {useEffect,useRef,useState} from 'react'
 import * as THREE from 'three'
-import {PublicApp} from '../App'
+import {SpatialFallback} from './fallback'
 import {SilverField,webglAvailable} from './SilverField'
 import {CameraRig} from './CameraRig'
 import {ExhibitMounts} from './ExhibitMounts'
 import {HudBridge} from './HudBridge'
-import {loadCatalogNodes} from './nodes'
+import {loadCatalogNodes,revalidateVersions} from './nodes'
 import type {CatalogNode} from './contracts'
-import {fetchEdition} from './edition'
+import {fetchEdition,type HonestState} from './edition'
 import {stageEdition,type StagedExhibit} from './staging'
 import {AssemblyDirector} from './assembly'
 import {AssemblyField} from './AssemblyField'
@@ -18,9 +18,26 @@ import {SPATIAL_SESSION_KEY,clearSpatialSession} from './clear'
 import type {NodeSource} from './nodes'
 import './spatial.css'
 
-type DebugSnapshot={distance:number;cameraZ:number;cameraY:number;current:number;exhibits:number;nodes:number;source:NodeSource|'pending';assembly:string;mode:string;orbit:{yaw:number;pitch:number;radius:number};selected:number;staged:string[];nodeIds:string[]}
+type DebugSnapshot={distance:number;cameraZ:number;cameraY:number;current:number;exhibits:number;nodes:number;source:NodeSource|'pending';assembly:string;mode:string;orbit:{yaw:number;pitch:number;radius:number};selected:number;staged:string[];nodeIds:string[];honest:HonestState|null}
 type Inspect={assetId:string;hotspotId?:string}
 type Transit={t0:number;dur:number;fromPos:THREE.Vector3;fromLook:THREE.Vector3;toPos:THREE.Vector3;toLook:THREE.Vector3;onFrame?:(k:number)=>void;onDone:()=>void}
+
+// Honest edition provenance, always visible once staged. A cached Meta plan
+// is still a Meta result; a deterministic plan is never labeled as one,
+// even when it was assembled from the verified D1 catalog.
+const HONEST_COPY:Record<HonestState,string>={
+  'meta':'AI-curated edition · Meta AI',
+  'meta-cached':'AI-curated edition · Meta AI (cached)',
+  'deterministic-d1':'Curio-authored edition · verified catalog',
+  'deterministic-fictional':'Curio-authored edition · AI not used',
+  'authored-fallback':'Curio-authored edition · AI not used',
+}
+const REASON_COPY:Record<string,string>={
+  disabled:'AI disabled',consent_missing:'AI consent off',
+  pilot_allowlist:'pilot unavailable',pilot_not_ready:'pilot unavailable',pilot_authorization:'pilot unavailable',
+  configuration:'AI unavailable',analysis_permissions:'AI unavailable',budget:'AI budget reached',
+  invalid_output:'AI output rejected',editorial_rejected:'AI output rejected',
+}
 type FlyTo=(toPos:[number,number,number],toLook:[number,number,number],dur:number,onDone:()=>void,onFrame?:(k:number)=>void)=>void
 
 // Phase 1: prompt -> validated edition -> staged promenade with lateral
@@ -34,7 +51,11 @@ export default function SpatialApp(){
   const [cleared,setCleared]=useState<string[]|null>(null)
   const [entered,setEntered]=useState(false)
   const [exhibits,setExhibits]=useState<StagedExhibit[]>([])
-  const [editionLabel,setEditionLabel]=useState<'meta'|'authored-fallback'|null>(null)
+  const [editionLabel,setEditionLabel]=useState<HonestState|null>(null)
+  const [fallbackReason,setFallbackReason]=useState<string|null>(null)
+  // Explicit per-visit AI consent, default off, never persisted: a reload or
+  // Clear returns to consent:false, and true is sent only from this checkbox.
+  const [consent,setConsent]=useState(false)
   const [composing,setComposing]=useState(false)
   const [showDock,setShowDock]=useState(true)
   const [current,setCurrent]=useState(-1)
@@ -52,7 +73,7 @@ export default function SpatialApp(){
   const fieldRef=useRef<SilverField|null>(null)
   const directorRef=useRef(new AssemblyDirector())
   const assemblyRef=useRef<AssemblyField|null>(null)
-  const stagedRef=useRef<{exhibits:StagedExhibit[];label:'meta'|'authored-fallback';skipped:number}|null>(null)
+  const stagedRef=useRef<{exhibits:StagedExhibit[];label:HonestState;skipped:number;reason?:string}|null>(null)
   const resolveFiredRef=useRef(false)
   const lastPhaseRef=useRef('idle')
   const tickerRef=useRef(0)
@@ -70,6 +91,8 @@ export default function SpatialApp(){
   const composingRef=useRef(composing)
   composingRef.current=composing
   const openNetworkRef=useRef<(()=>void)|null>(null)
+  const labelRef=useRef<HonestState|null>(null)
+  labelRef.current=editionLabel
   const exhibitsRef=useRef(exhibits)
   exhibitsRef.current=exhibits
   const currentRef=useRef(current)
@@ -78,6 +101,11 @@ export default function SpatialApp(){
   nodesRef.current=nodes
   const sourceRef=useRef(source)
   sourceRef.current=source
+  const inspectRef=useRef(inspect)
+  inspectRef.current=inspect
+  // Guards the async revalidation window on journey/exhibit transitions so
+  // a second transition cannot interleave before the first settles.
+  const verifyingRef=useRef(false)
 
   useEffect(()=>{
     if(!supported)return
@@ -102,7 +130,7 @@ export default function SpatialApp(){
       // Returning stays explicit via Promenade, Esc, dive, or curate.
       if(modeRef.current==='promenade'&&!composingRef.current&&!transitRef.current
         &&nodesRef.current.length>0&&maxScroll>0&&window.scrollY/maxScroll>0.985){
-        openNetworkRef.current?.()
+        void openNetworkRef.current?.()
       }
     }
     readScroll()
@@ -225,6 +253,7 @@ export default function SpatialApp(){
               if(staged){
                 setExhibits(staged.exhibits)
                 setEditionLabel(staged.label)
+                setFallbackReason(staged.reason??null)
                 setStatus(staged.skipped?`${staged.skipped} feature${staged.skipped===1?'':'s'} referenced unavailable imagery and ${staged.skipped===1?'was':'were'} left out.`:'')
                 setShowDock(false)
               }
@@ -264,6 +293,7 @@ export default function SpatialApp(){
       orbit:{...orbitRef.current},selected:selectedRef.current,
       staged:exhibitsRef.current.map(e=>e.assetId),
       nodeIds:nodesRef.current.map(n=>n.assetId),
+      honest:labelRef.current,
     })
     return ()=>{
       alive=false
@@ -292,9 +322,12 @@ export default function SpatialApp(){
   },[supported])
 
   useEffect(()=>{
-    // Stage the promenade path whenever exhibits arrive.
+    // Stage the promenade path whenever exhibits arrive. Artwork that fails
+    // to load (notably a revoked /api/media version answering 404) removes
+    // its exhibit instead of lingering as an empty board.
     const rig=rigRef.current,mounts=mountsRef.current
     if(!rig||!mounts)return
+    mounts.onArtworkError=(assetId:string)=>{pruneExhibits(id=>id!==assetId,'revoked')}
     const layout=exhibitLayout(exhibits.length)
     layoutRef.current=layout
     rig.setPath(layout.waypoints,layout.docks)
@@ -349,10 +382,7 @@ export default function SpatialApp(){
   },[mode])
 
   if(!supported){
-    return <div className="spatial-fallback">
-      <p role="status">The 3D exhibition needs WebGL, which this browser has disabled. The full 2D edition follows.</p>
-      <PublicApp/>
-    </div>
+    return <SpatialFallback/>
   }
 
   const submit=async(event?:React.FormEvent,promptOverride?:string)=>{
@@ -387,7 +417,7 @@ export default function SpatialApp(){
       const begun=Date.now()
       tickerRef.current=window.setInterval(()=>setElapsed(Math.floor((Date.now()-begun)/1000)),500)
     }
-    const {edition,honest}=await fetchEdition(trimmed,fetch,{onResponse:()=>directorRef.current.onResponse()})
+    const {edition,honest,fallbackReason:reason}=await fetchEdition(trimmed,consent,fetch,{onResponse:()=>directorRef.current.onResponse()})
     if(submitId!==submitIdRef.current)return
     const {exhibits:staged,skipped}=stageEdition(edition)
     if(!staged.length){
@@ -403,6 +433,7 @@ export default function SpatialApp(){
     if(reduced.current||!assemblyRef.current){
       setExhibits(staged)
       setEditionLabel(honest)
+      setFallbackReason(reason??null)
       setShowDock(false)
       setComposing(false)
       setStatus(skipped?`${skipped} feature${skipped===1?'':'s'} referenced unavailable imagery and ${skipped===1?'was':'were'} left out.`:'')
@@ -413,7 +444,7 @@ export default function SpatialApp(){
       }))
       return
     }
-    stagedRef.current={exhibits:staged,label:honest,skipped}
+    stagedRef.current={exhibits:staged,label:honest,skipped,reason}
     directorRef.current.onSettled()
   }
 
@@ -443,10 +474,12 @@ export default function SpatialApp(){
     exitNetworkInstant()
     setCleared(removed)
     setPrompt('')
+    setConsent(false)
     setStatus('')
     setElapsed(0)
     setExhibits([])
     setEditionLabel(null)
+    setFallbackReason(null)
     setInspect(null)
     setShowDock(true)
     setAnnounce(removed.length?`Visit cleared. ${removed.length} keys removed.`:'Visit cleared.')
@@ -482,17 +515,76 @@ export default function SpatialApp(){
     lockScroll(false)
   }
 
-  const openNetwork=()=>{
+  // Only server-answered editions hold revocable publications; local demo
+  // editions and the manifest fallback have nothing to revalidate.
+  const serverSourced=()=>labelRef.current==='meta'||labelRef.current==='meta-cached'||labelRef.current==='deterministic-d1'
+
+  // Drop exhibits the catalog no longer confirms. Mounts rebuild from state
+  // and dispose their textures, so pruned artwork cannot resurface.
+  const pruneExhibits=(keep:(assetId:string)=>boolean,reason:'revoked'|'unverified'):StagedExhibit[]=>{
+    const before=exhibitsRef.current
+    const kept=before.filter(exhibit=>keep(exhibit.assetId))
+    if(kept.length===before.length)return before
+    const removed=before.length-kept.length
+    setExhibits(kept)
+    const viewing=inspectRef.current
+    if(viewing&&!kept.some(exhibit=>exhibit.assetId===viewing.assetId))setInspect(null)
+    if(!kept.length){setShowDock(true);setEditionLabel(null);setFallbackReason(null)}
+    setStatus(reason==='unverified'
+      ?'The exhibition could not be verified; unverified exhibits were removed.'
+      :`${removed} exhibit${removed===1?'':'s'} ${removed===1?'was':'were'} removed: the catalog no longer lists ${removed===1?'it':'them'}.`)
+    return kept
+  }
+
+  const openNetwork=async()=>{
     const chamber=chamberRef.current,fly=flyRef.current
-    if(modeRef.current==='network'||!nodesRef.current.length||composing||transitRef.current)return
+    if(modeRef.current==='network'||!nodesRef.current.length||composing||transitRef.current||verifyingRef.current)return
+    let current=nodesRef.current
+    let stagedNow=exhibitsRef.current
+    if(sourceRef.current==='published'){
+      verifyingRef.current=true
+      try{
+        const {eligible,verified}=await revalidateVersions(current.map(node=>node.assetId))
+        if(!verified){
+          // Fail closed: unverified records leave, and the labeled local
+          // manifest keeps Journey usable without redisplaying them. Staged
+          // server exhibits go too — only local demo content is unaffected.
+          const fresh=await loadCatalogNodes()
+          current=fresh.nodes
+          setNodes(current)
+          setSource(fresh.source)
+          let dropped=0
+          if(serverSourced()){
+            const before=exhibitsRef.current.length
+            stagedNow=pruneExhibits(()=>false,'unverified')
+            dropped=before-stagedNow.length
+          }
+          setStatus(dropped
+            ?'The live catalog could not be verified; unverified records and exhibits were removed.'
+            :'The live catalog could not be verified; unverified records were removed.')
+        }else{
+          const checked=new Set(current.map(node=>node.assetId))
+          const removed=current.filter(node=>!eligible.has(node.assetId))
+          if(removed.length){
+            current=current.filter(node=>eligible.has(node.assetId))
+            setNodes(current)
+            setStatus(`${removed.length} record${removed.length===1?'':'s'} left the catalog and ${removed.length===1?'was':'were'} removed from the journey.`)
+          }
+          if(serverSourced())stagedNow=pruneExhibits(id=>!checked.has(id)||eligible.has(id),'revoked')
+        }
+      }finally{
+        verifyingRef.current=false
+      }
+      if(!current.length)return
+    }
     setInspect(null)
     setSelected(-1)
     setShowDock(false)
     setMode('network')
-    setAnnounce(`Journey network. ${nodesRef.current.length} records.`)
+    setAnnounce(`Journey network. ${current.length} records.`)
     bridgeRef.current!.emit({type:'network',open:true})
     if(reduced.current||!chamber||!fly)return
-    chamber.setNodes(nodesRef.current,new Set(exhibitsRef.current.map(e=>e.assetId)))
+    chamber.setNodes(current,new Set(stagedNow.map(e=>e.assetId)))
     lockScroll(true)
     const orbit=orbitRef.current
     const view=orbitCamera(NETWORK_CENTER,orbit.yaw,orbit.pitch,orbit.radius)
@@ -500,9 +592,24 @@ export default function SpatialApp(){
   }
   openNetworkRef.current=openNetwork
 
-  const backToPromenade=()=>{
+  const backToPromenade=async()=>{
     const fly=flyRef.current
-    if(transitRef.current)return
+    if(transitRef.current||verifyingRef.current)return
+    if(serverSourced()&&exhibitsRef.current.length){
+      verifyingRef.current=true
+      try{
+        const checked=new Set(exhibitsRef.current.map(exhibit=>exhibit.assetId))
+        const {eligible,verified}=await revalidateVersions([...checked])
+        pruneExhibits(id=>verified&&eligible.has(id),verified?'revoked':'unverified')
+        if(verified){
+          // The same response settles the matching Journey nodes for free.
+          const remaining=nodesRef.current.filter(node=>!checked.has(node.assetId)||eligible.has(node.assetId))
+          if(remaining.length!==nodesRef.current.length)setNodes(remaining)
+        }
+      }finally{
+        verifyingRef.current=false
+      }
+    }
     const layout=layoutRef.current
     const dock=layout.docks[Math.max(0,currentRef.current)]??layout.docks[0]??60
     setSelected(-1)
@@ -525,13 +632,35 @@ export default function SpatialApp(){
     })
   }
 
-  const diveTo=(index:number)=>{
+  const diveTo=async(index:number)=>{
     const fly=flyRef.current
     const node=nodesRef.current[index]
-    if(!node||transitRef.current)return
-    const exhibit=exhibitsRef.current.findIndex(e=>e.assetId===node.assetId)
+    if(!node||transitRef.current||verifyingRef.current)return
+    let stagedNow=exhibitsRef.current
+    if(serverSourced()&&stagedNow.length){
+      verifyingRef.current=true
+      try{
+        const {eligible,verified}=await revalidateVersions(stagedNow.map(exhibit=>exhibit.assetId))
+        stagedNow=pruneExhibits(id=>verified&&eligible.has(id),verified?'revoked':'unverified')
+        if(!verified||!eligible.has(node.assetId)){
+          // Stay in the network: the target is gone, and so is its node.
+          const remaining=nodesRef.current.filter(candidate=>candidate.assetId!==node.assetId)
+          setNodes(remaining)
+          selectNode(-1)
+          chamberRef.current?.setNodes(remaining,new Set(stagedNow.map(exhibit=>exhibit.assetId)))
+          setAnnounce(`${node.label} is no longer available.`)
+          return
+        }
+      }finally{
+        verifyingRef.current=false
+      }
+    }
+    const exhibit=stagedNow.findIndex(e=>e.assetId===node.assetId)
     if(exhibit<0)return
-    const layout=layoutRef.current
+    // Pruning can shift positions, so the dive targets a layout rebuilt for
+    // the confirmed exhibits; the staging effect converges on the same one.
+    const layout=exhibitLayout(stagedNow.length)
+    layoutRef.current=layout
     const dock=layout.docks[exhibit]??60
     const mount=layout.mounts[exhibit]??{x:0,z:-52}
     setAnnounce(`Entering ${node.label}.`)
@@ -582,7 +711,7 @@ export default function SpatialApp(){
   const inspectedHotspot=inspected?.hotspots.find(h=>h.id===inspect?.hotspotId)??inspected?.hotspots[0]
   const selectedNode=selected>=0?nodes[selected]??null:null
   const selectedStaged=selectedNode?stagedIds.has(selectedNode.assetId):false
-  const sourceLabel=nodes.length?`${nodes.length} records (${source==='endpoint'?'live catalog':'local manifest'})`:'loading…'
+  const sourceLabel=nodes.length?`${nodes.length} records (${source==='published'?'live catalog':'local manifest'})`:'loading…'
   const crumb=mode==='network'
     ?selectedNode?`Journey · ${selectedNode.label}`:`Journey · ${sourceLabel}`
     :staged&&active?`Exhibit ${current+1} of ${exhibits.length} · ${active.title}`:staged?'Your exhibition':'Discover · Silver Field'
@@ -604,7 +733,7 @@ export default function SpatialApp(){
         {staged&&mode==='promenade'&&<button type="button" onClick={reopen}>New prompt</button>}
       </div>
     </header>
-    {editionLabel==='authored-fallback'&&<p className="spatial-chip" role="note" data-testid="spatial-edition-chip">Curio-authored edition · AI not used</p>}
+    {editionLabel&&<p className="spatial-chip" role="note" data-testid="spatial-edition-chip">{HONEST_COPY[editionLabel]}{fallbackReason&&REASON_COPY[fallbackReason]?` (${REASON_COPY[fallbackReason]})`:''}</p>}
     {composing&&<p role="status" className="spatial-chip">Composing your exhibition…{elapsed>0?` (${elapsed}s)`:''}</p>}
     {!composing&&status&&<p role="status" className={`spatial-chip${editionLabel?' is-sub':''}`}>{status}</p>}
     {showDock&&<section className={`spatial-dock${entered?' is-docked':''}${composing?' is-composing':''}`} aria-labelledby="spatial-prompt-heading">
@@ -615,8 +744,13 @@ export default function SpatialApp(){
         <textarea id="spatial-prompt" rows={2} maxLength={1000} value={prompt}
           placeholder="A quiet room, a bold garment, an unfamiliar coast…"
           onChange={event=>setPrompt(event.target.value)}/>
+        <label className="spatial-consent">
+          <input type="checkbox" checked={consent} disabled={composing} onChange={event=>setConsent(event.target.checked)}/>
+          Allow AI curation
+        </label>
         <button type="submit" disabled={!prompt.trim()||composing}>{composing?'Composing…':'Begin exploration →'}</button>
       </form>
+      <p className="spatial-fine">Off by default. When on, your prompt may be sent to Meta for curation.</p>
       {cleared&&<p role="status" className="spatial-status">
         Visit cleared from this browser{cleared.length?`: ${cleared.join(', ')}`:'. No visit data was found in this browser.'} Server data handling: pending confirmation.
       </p>}
