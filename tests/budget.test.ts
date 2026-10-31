@@ -71,6 +71,33 @@ it('charges two-model reservations against unchanged global/hourly ceilings atom
   } finally { db.close() }
 })
 
+it('reserves the three-call editorial workflow atomically without changing ceilings or cooldowns',async()=>{
+  const {state,db}=storage(),budget=new InferenceBudget(state)
+  const attempt=(ip:string,units:number)=>budget.fetch(new Request('https://budget',{method:'POST',body:JSON.stringify({ip,ceiling:4,units})}))
+  try{
+    expect(await (await attempt('a'.repeat(64),3)).json()).toMatchObject({allowed:true})
+    expect(await (await attempt('a'.repeat(64),1)).json()).toMatchObject({allowed:false})
+    expect(await (await attempt('b'.repeat(64),2)).json()).toMatchObject({allowed:false})
+    expect(await (await attempt('b'.repeat(64),1)).json()).toMatchObject({allowed:true})
+  }finally{db.close()}
+})
+it('allows two authorized four-unit pilot reservations per UTC hour and keeps ordinary traffic at three',async()=>{
+  vi.useFakeTimers();vi.setSystemTime(new Date('2026-10-31T09:00:00Z'))
+  const {state,db}=storage(),budget=new InferenceBudget(state)
+  const attempt=(ip:string,units:number,editorialPilot=false)=>budget.fetch(new Request('https://budget',{method:'POST',body:JSON.stringify({ip,ceiling:20,units,...(editorialPilot?{editorialPilot:true}:{})})}))
+  try{
+    expect(await (await attempt('a'.repeat(64),4)).json()).toMatchObject({allowed:false})
+    expect(await (await attempt('a'.repeat(64),4,true)).json()).toMatchObject({allowed:true})
+    vi.advanceTimersByTime(61000)
+    expect(await (await attempt('a'.repeat(64),4,true)).json()).toMatchObject({allowed:true})
+    vi.advanceTimersByTime(61000)
+    expect(await (await attempt('a'.repeat(64),4,true)).json()).toMatchObject({allowed:false})
+    expect(await (await attempt('a'.repeat(64),1)).json()).toMatchObject({allowed:false})
+    expect(await (await attempt('b'.repeat(64),1)).json()).toMatchObject({allowed:true})
+    expect((await attempt('c'.repeat(64),1,true)).status).toBe(400)
+  }finally{db.close()}
+})
+
 it('permits only one SAM reservation per exact asset across IPs and UTC days', async () => {
   vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-27T10:00:00Z'))
   const { state, db } = storage()
