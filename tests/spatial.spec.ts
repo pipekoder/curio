@@ -1,4 +1,11 @@
 import {test,expect,type Page} from '@playwright/test'
+import {readFileSync} from 'node:fs'
+import {fileURLToPath} from 'node:url'
+import {join,dirname} from 'node:path'
+
+// Serialized readerDemoCatalog records (demo-curio-owner-08/18-v1); the
+// edition adapter validates them strictly, so fixture drift fails loudly.
+const groundedItems=JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)),'spatial-grounded-items.json'),'utf8')) as unknown[]
 
 // Grounded in readerDemoCatalog records: names, tags, and the fixed
 // editorialCopy narrative shared by every catalog item.
@@ -124,15 +131,61 @@ test('clicking a staged mount opens inspection through the scene',async({page})=
   await expect(page.locator('.spatial-inspect')).toBeVisible({timeout:5000})
 })
 
-test('a grounded meta edition stages without the fallback disclosure',async({page})=>{
-  await page.route('**/api/editorial',route=>route.fulfill({status:200,json:{plan:metaPlan,items:[],source:'meta',retrieval:'d1',cached:false}}))
+test('a grounded meta edition shows Meta provenance and consent off by default',async({page})=>{
+  let consent:unknown='unset'
+  await page.route('**/api/editorial',route=>{
+    consent=(route.request().postDataJSON() as {consent:boolean})?.consent??'missing'
+    return route.fulfill({status:200,json:{plan:metaPlan,items:groundedItems,source:'meta',retrieval:'d1',cached:false}})
+  })
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await expect(page.getByLabel('Allow AI curation')).not.toBeChecked()
+  await submitPrompt(page)
+  await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of',{timeout:15000})
+  await expect(page.getByTestId('spatial-edition-chip')).toContainText('AI-curated edition · Meta AI')
+  expect(consent).toBe(false)
+})
+
+test('checking AI curation sends the actual consent value',async({page})=>{
+  let consent:unknown='unset'
+  await page.route('**/api/editorial',route=>{
+    consent=(route.request().postDataJSON() as {consent:boolean})?.consent??'missing'
+    return route.fulfill({status:503,json:{error:'AI disabled'}})
+  })
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await page.getByLabel('Allow AI curation').check()
+  await submitPrompt(page)
+  await expect(page.getByTestId('spatial-edition-chip')).toContainText('Curio-authored edition · AI not used',{timeout:15000})
+  expect(consent).toBe(true)
+})
+
+test('cached meta and deterministic states stay honestly labeled',async({page})=>{
+  await page.route('**/api/editorial',route=>route.fulfill({status:200,json:{plan:metaPlan,items:groundedItems,source:'meta',retrieval:'d1',cached:true}}))
   await page.setViewportSize({width:1440,height:900})
   await page.goto('/spatial')
   await submitPrompt(page)
-  await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of',{timeout:15000})
-  await expect(page.getByTestId('spatial-edition-chip')).toBeHidden()
-  const exhibits=await page.evaluate(()=>window.__spatial?.().exhibits??0)
-  expect(exhibits).toBeGreaterThan(0)
+  await expect(page.getByTestId('spatial-edition-chip')).toContainText('Meta AI (cached)',{timeout:15000})
+  await page.unroute('**/api/editorial')
+  await page.route('**/api/editorial',route=>route.fulfill({status:200,json:{plan:metaPlan,items:groundedItems,source:'deterministic',retrieval:'d1',cached:false,fallbackReason:'consent_missing'}}))
+  await page.reload()
+  await submitPrompt(page)
+  await expect(page.getByTestId('spatial-edition-chip')).toContainText('verified catalog',{timeout:15000})
+  await expect(page.getByTestId('spatial-edition-chip')).toContainText('AI consent off')
+})
+
+test('the no-WebGL fallback stays a readable Silver Field edition',async({page})=>{
+  await page.addInitScript(()=>{HTMLCanvasElement.prototype.getContext=(function(){return null} as unknown) as typeof HTMLCanvasElement.prototype.getContext})
+  await page.route('**/api/editorial',route=>route.fulfill({status:503,json:{error:'AI disabled'}}))
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/')
+  await expect(page.locator('.spatial-fallback')).toBeVisible()
+  await expect(page.getByText('The 3D exhibition needs WebGL')).toBeVisible()
+  await expect(page.locator('.spatial-canvas')).toBeHidden()
+  await page.getByLabel('Your curiosity').fill('A quiet room with soft light')
+  await page.getByRole('button',{name:'Begin exploration'}).click()
+  await expect(page.locator('.spatial-fallback article').first()).toBeVisible({timeout:15000})
+  await expect(page.locator('.spatial-fallback section')).toContainText('Journey catalog')
 })
 
 test('assembly honors the director minimum on instant responses',async({page})=>{

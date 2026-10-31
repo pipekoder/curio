@@ -69,7 +69,12 @@ export class NetworkChamber{
   // Same-origin imagery needs no CORS handling; on failure the graphite
   // disc stays and the HUD panel carries the label.
   private loadThumb(url:string,thumb:THREE.Sprite):void{
+    if(!url)return
     const image=new Image()
+    // Anonymous CORS: a tainted canvas would throw at WebGL upload time, so
+    // uncooperative hosts fail here instead and keep the graphite disc.
+    image.crossOrigin='anonymous'
+    image.onerror=()=>{/* Graphite disc stays; the HUD panel carries the label. */}
     image.onload=()=>{
       const size=256,canvas=document.createElement('canvas')
       canvas.width=size;canvas.height=size
