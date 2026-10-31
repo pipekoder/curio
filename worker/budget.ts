@@ -7,16 +7,17 @@ export class InferenceBudget {
     state.storage.sql.exec(`CREATE TABLE IF NOT EXISTS counters (key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL)`)
   }
   async fetch(request: Request): Promise<Response> {
-    const parsed = z.strictObject({ ip: z.string().regex(/^[a-f0-9]{64}$/), ceiling: z.number().int().min(1).max(100), units: z.union([z.literal(1), z.literal(2)]).default(1), samAssetId: z.string().regex(/^[a-z0-9-]+$/).max(80).optional() }).safeParse(await request.json())
+    const parsed = z.strictObject({ ip: z.string().regex(/^[a-f0-9]{64}$/), ceiling: z.number().int().min(1).max(100), units: z.union([z.literal(1), z.literal(2),z.literal(3),z.literal(4)]).default(1), samAssetId: z.string().regex(/^[a-z0-9-]+$/).max(80).optional(),editorialPilot:z.boolean().optional() }).safeParse(await request.json())
     if (!parsed.success) return Response.json({ error: 'Invalid reservation' }, { status: 400 })
-    const { ip, ceiling, units, samAssetId } = parsed.data
+    const { ip, ceiling, units, samAssetId,editorialPilot=false } = parsed.data
+    if(editorialPilot&&(units!==4||samAssetId))return Response.json({error:'Invalid pilot reservation'},{status:400})
     const now = Date.now(), minute = 60000, hour = 3600000, day = 86400000
     const result = this.state.storage.transactionSync(() => {
       const counters = [
         ...(samAssetId ? [{ key: `sam-once:${samAssetId}`, limit: 1, expires: 0 }] : []),
         { key: 'lifetime', limit: ceiling, expires: 0 },
         { key: `day:${Math.floor(now / day)}`, limit: 20, expires: (Math.floor(now / day) + 1) * day },
-        { key: `hour:${ip}:${Math.floor(now / hour)}`, limit: 3, expires: (Math.floor(now / hour) + 1) * hour },
+        { key: `hour:${ip}:${Math.floor(now / hour)}`, limit: editorialPilot?8:3, expires: (Math.floor(now / hour) + 1) * hour },
         // Rolling cooldown avoids minute-boundary bursts.
         { key: `cooldown:${ip}`, limit: 1, expires: now + minute },
       ]
