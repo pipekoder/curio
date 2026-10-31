@@ -55,7 +55,9 @@ export async function editorialPool(
         brandDiversity: p.mode !== "Focused",
         serendipity:
           p.mode === "Surprise Me" ? 0.25 : p.mode === "Balanced" ? 0.1 : 0,
-        seed: p.interests,
+        // Retrieval accepts a bounded seed while prompts may be 1,000 chars.
+        // Hash the full prompt so long, valid prompts retain stable variety.
+        seed: (await catalogDigest(p.interests)).slice(0, 40),
         scope: "reader",
         publishedOnly:env.CATALOG_PUBLIC_ENABLED === "true",
         limit: 50,

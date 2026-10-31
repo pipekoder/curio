@@ -1,6 +1,7 @@
 import { catalogItem, type CatalogItem } from '../shared/catalog'
 import { imageDimensions } from './asset-classifier'
 import { CatalogConflict } from './catalog-store'
+import { CatalogPublications } from './catalog-publications'
 import { mediaLinkInput, mediaMetadataUpdate, studioImport, type StudioImport } from './media-contracts'
 import type {z} from 'zod'
 
@@ -182,7 +183,12 @@ export class MediaStore {
   async get(versionId:string){return this.db.prepare('SELECT * FROM media_objects WHERE version_id=?').bind(versionId).first<MediaRow>()}
   async bytes(versionId:string,publicRead=false){
     const row=await this.get(versionId);if(!row||!row.active)throw new CatalogConflict('Media is unavailable.')
-    if(publicRead){const allowed=await this.db.prepare(`SELECT 1 FROM catalog_publications pub JOIN asset_versions v ON v.id=pub.version_id JOIN catalog_assets a ON a.id=v.asset_id JOIN asset_permissions p ON p.version_id=v.id AND p.purpose='display' WHERE pub.version_id=? AND a.archived_at IS NULL AND p.status='approved'`).bind(versionId).first();if(!allowed)throw new CatalogConflict('Media is not published.')}
+    if(publicRead){
+      // Match the public catalog's complete, current-version eligibility check.
+      // A stale publication row alone cannot authorize delivery of R2 bytes.
+      const published=await new CatalogPublications(this.db).list('',1,[versionId])
+      if(!published.items.some(item=>item.image.id===versionId))throw new CatalogConflict('Media is not published.')
+    }
     const object=await this.bucket.get(row.r2_key);if(!object)throw new CatalogConflict('Media bytes are unavailable.')
     return {row,object}
   }
