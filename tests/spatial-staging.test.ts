@@ -1,8 +1,12 @@
 import {describe,expect,it} from 'vitest'
+import {existsSync} from 'node:fs'
+import {fileURLToPath} from 'node:url'
+import {join,dirname} from 'node:path'
 import {defaultPreferences,editorialDemoCatalog,fallbackPlan,type EditorialEdition} from '../shared/editorial'
 import {readerDemoCatalog} from '../src/editorial-demo-media'
 import {stageEdition} from '../src/spatial/staging'
-import manifest from '../src/spatial/nodes.manifest.json'
+
+const root=join(dirname(fileURLToPath(import.meta.url)),'..')
 
 const pool=[...readerDemoCatalog,...editorialDemoCatalog]
 const editionFor=(prompt:string):EditorialEdition=>({
@@ -11,16 +15,24 @@ const editionFor=(prompt:string):EditorialEdition=>({
 })
 
 describe('spatial staging',()=>{
- it('stages real fallback exhibits with approved local artwork only',()=>{
-  const {exhibits,skipped}=stageEdition(editionFor('quiet rooms'))
+ it('stages real fallback exhibits from joined items only, with approved artwork',()=>{
+  const edition=editionFor('quiet rooms')
+  const {exhibits,skipped}=stageEdition(edition)
   expect(exhibits.length).toBeGreaterThan(0)
   expect(exhibits.length).toBeLessThanOrEqual(6)
   expect(new Set(exhibits.map(e=>e.assetId)).size).toBe(exhibits.length)
   for(const exhibit of exhibits){
-    expect(exhibit.image.startsWith('/editorial/')).toBe(true)
-    expect(manifest.some(m=>m.assetId===exhibit.assetId)).toBe(true)
+    const item=edition.items.find(candidate=>candidate.image.id===exhibit.assetId)
+    expect(item,exhibit.assetId).toBeDefined()
+    expect(exhibit.image).toBe(item!.image.path??item!.image.externalUrl??item!.image.fallbackPath)
+    const approved=exhibit.image.startsWith('/editorial/')||exhibit.image.startsWith('/catalog/')
+      ||exhibit.image.startsWith('/api/media/')||exhibit.image.startsWith('https://')
+    expect(approved,exhibit.image).toBe(true)
+    if(exhibit.image.startsWith('/editorial/')||exhibit.image.startsWith('/catalog/'))
+      expect(existsSync(join(root,'public',exhibit.image)),exhibit.image).toBe(true)
     expect(exhibit.title.length).toBeGreaterThan(0)
     expect(exhibit.narrative.length).toBeGreaterThan(0)
+    expect(exhibit.attribution.length).toBeGreaterThan(0)
     for(const hotspot of exhibit.hotspots){
       expect(hotspot.x).toBeGreaterThanOrEqual(0);expect(hotspot.x).toBeLessThanOrEqual(1)
       expect(hotspot.y).toBeGreaterThanOrEqual(0);expect(hotspot.y).toBeLessThanOrEqual(1)
