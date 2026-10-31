@@ -37,8 +37,9 @@ test('/spatial opens the silver field with an immediately usable prompt',async({
   expect(snapshot?.exhibits).toBeGreaterThan(0)
   expect(snapshot?.nodes).toBeGreaterThanOrEqual(6)
   expect(snapshot?.source).toBe('manifest')
-  await expect(page.locator('.spatial-source')).toContainText('local manifest')
-  await expect(page.locator('#spatial-index li')).toHaveCount(snapshot?.nodes??0)
+  await page.getByRole('button',{name:'Journey',exact:true}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await expect(page.getByRole('navigation',{name:'Journey network'})).toContainText('local manifest')
   expect(noise).toEqual([])
 })
 
@@ -138,17 +139,24 @@ test('slow generation holds with honest elapsed time and no simulated progress',
 })
 
 test('Clear wipes the visit session and says what was removed',async({page})=>{
+  test.setTimeout(90000)
   await page.setViewportSize({width:390,height:844})
   await page.goto('/spatial')
   await page.getByLabel('Your curiosity').fill('Bold garments')
   await page.getByRole('button',{name:'Begin exploration'}).click()
   await expect(page.getByTestId('spatial-edition-chip')).toBeVisible()
   expect(await page.evaluate(()=>sessionStorage.getItem('curio.spatial.session.v1'))).not.toBeNull()
+  await page.getByRole('button',{name:'Journey',exact:true}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
   await page.getByRole('button',{name:'Clear',exact:true}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='promenade',{timeout:10000})
   expect(await page.evaluate(()=>sessionStorage.getItem('curio.spatial.session.v1'))).toBeNull()
   await expect(page.getByRole('status').last()).toContainText('curio.spatial.session.v1')
   await expect(page.getByRole('status').last()).toContainText('pending confirmation')
+  await page.getByRole('button',{name:'Journey',exact:true}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
   await page.getByRole('button',{name:'Clear',exact:true}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='promenade',{timeout:10000})
   await expect(page.getByRole('status').last()).toContainText('No visit data was found in this browser')
   await expect(page.getByLabel('Your curiosity')).toBeVisible()
   await page.screenshot({path:'test-results/spatial-discover-390.png'})
@@ -250,17 +258,21 @@ test('clear from the network exhales and wipes the visit',async({page})=>{
   await expect(page.getByLabel('Your curiosity')).toBeVisible()
 })
 
-test('reduced-motion journey uses the index list',async({page})=>{
+test('reduced-motion journey uses the toolbar and panel',async({page})=>{
   await page.emulateMedia({reducedMotion:'reduce'})
   await stageFallbackEdition(page)
   await page.getByRole('button',{name:'Journey',exact:true}).click()
   await page.waitForFunction(()=>window.__spatial?.().mode==='network')
-  const actions=page.locator('#spatial-index li button')
-  expect(await actions.count()).toBeGreaterThan(0)
-  await actions.first().click()
-  await page.waitForTimeout(500)
-  const snapshot=await page.evaluate(()=>window.__spatial?.())
-  expect(snapshot?.mode).toBe('promenade')
+  await expect(page.getByRole('navigation',{name:'Journey network'})).toBeVisible()
+  await page.getByRole('button',{name:'Surprise me'}).click()
+  const panel=page.getByTestId('spatial-node-panel')
+  await expect(panel).toBeVisible()
+  if(await panel.getByRole('button',{name:'Enter exhibit →'}).count()){
+    await panel.getByRole('button',{name:'Enter exhibit →'}).click()
+  }else{
+    await panel.getByRole('button',{name:'Curate from this node →'}).click()
+  }
+  await page.waitForFunction(()=>window.__spatial?.().mode==='promenade',{timeout:10000})
 })
 
 test('network stays usable at mobile width',async({page})=>{

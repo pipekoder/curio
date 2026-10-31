@@ -9,7 +9,9 @@ export const ORBIT_MAX=110
 export const ORBIT_DEFAULT=64
 
 // Fibonacci sphere: evenly spread, deterministic, stable across renders.
-export function layoutNetwork(count:number,center:Vec3=NETWORK_CENTER,radius=NETWORK_RADIUS):Vec3[]{
+// Optional weights pull relevant nodes nearer the center: staged exhibits
+// and their direct neighbors sit close and large; the rest extends outward.
+export function layoutNetwork(count:number,center:Vec3=NETWORK_CENTER,radius=NETWORK_RADIUS,weights?:readonly number[]):Vec3[]{
   if(count<=0)return []
   if(count===1)return [[...center] as Vec3]
   const positions:Vec3[]=[]
@@ -18,9 +20,33 @@ export function layoutNetwork(count:number,center:Vec3=NETWORK_CENTER,radius=NET
     const y=1-(i/(count-1))*2
     const shell=Math.sqrt(Math.max(0,1-y*y))
     const theta=golden*i
-    positions.push([center[0]+Math.cos(theta)*shell*radius,center[1]+y*radius*0.72,center[2]+Math.sin(theta)*shell*radius])
+    const w=weights?Math.min(1,Math.max(0,weights[i]??0.5)):1
+    const r=weights?radius*(1.18-0.55*w):radius
+    positions.push([center[0]+Math.cos(theta)*shell*r,center[1]+y*r*0.72,center[2]+Math.sin(theta)*shell*r])
   }
   return positions
+}
+
+// Grounded relevance only: staged exhibits first, their direct edge
+// neighbors second, everything else distant. No staged exhibits (before
+// the first edition) keeps every node at a neutral middle distance.
+export function relevanceWeights(staged:ReadonlySet<number>,edges:readonly (readonly [number,number])[],count:number):number[]{
+  const weights=new Array(count).fill(0.15)
+  if(!staged.size)return new Array(count).fill(0.6)
+  const neighbors=new Set<number>()
+  for(const [a,b] of edges){
+    if(staged.has(a)&&!staged.has(b))neighbors.add(b)
+    if(staged.has(b)&&!staged.has(a))neighbors.add(a)
+  }
+  for(const i of staged)if(i>=0&&i<count)weights[i]=1
+  for(const i of neighbors)weights[i]=0.55
+  return weights
+}
+
+// Node prominence follows relevance: 0.72 at the far edge, 1.28 nearest.
+export function nodeScale(weight:number):number{
+  const w=Math.min(1,Math.max(0,weight))
+  return 0.72+0.56*w
 }
 
 // Edge pairs only where both endpoints exist. Deduped, direction-free.
