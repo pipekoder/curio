@@ -22,14 +22,15 @@ export class CameraRig{
   private lookAhead=18
   private focus:{dock:number;mountX:number;mountZ:number}|null=null
   private focusBlend=0
+  private cinematic:number|null=null
 
   constructor(private opts:RigOptions,aspect:number){
     this.camera=new THREE.PerspectiveCamera(55,aspect,0.1,900)
     this.apply(0)
   }
 
-  get state():{distance:number;cameraZ:number;nearest:number}{
-    return {distance:this.distance,cameraZ:this.camera.position.z,nearest:this.nearestDock()}
+  get state():{distance:number;cameraZ:number;cameraY:number;nearest:number}{
+    return {distance:this.distance,cameraZ:this.camera.position.z,cameraY:this.camera.position.y,nearest:this.nearestDock()}
   }
 
   setPath(waypoints:readonly Waypoint[],docks:readonly number[]):void{
@@ -39,6 +40,12 @@ export class CameraRig{
 
   setFocus(focus:{dock:number;mountX:number;mountZ:number}|null):void{
     this.focus=focus
+  }
+
+  // Cinematic floor during assembly: the visitor may run ahead by scrolling,
+  // but the camera never falls behind the choreography.
+  setCinematic(distance:number|null):void{
+    this.cinematic=distance
   }
 
   nearestDock():number{
@@ -55,9 +62,10 @@ export class CameraRig{
   }
 
   update(dt:number):void{
-    const velocity=dt>0?(this.target-this.lastTarget)/dt:0
-    this.lastTarget=this.target
-    this.distance=this.opts.reducedMotion?this.target:dampedStep(this.distance,this.target,4.5,dt)
+    const effective=this.cinematic==null?this.target:Math.max(this.target,this.cinematic)
+    const velocity=dt>0?(effective-this.lastTarget)/dt:0
+    this.lastTarget=effective
+    this.distance=this.opts.reducedMotion?effective:dampedStep(this.distance,effective,4.5,dt)
     let settled=this.distance
     if(!this.opts.reducedMotion&&!magnetEscape(velocity,ESCAPE_VELOCITY))settled=dockMagnet(settled,this.opts.docks,DOCK_RADIUS)
     this.focusBlend=this.opts.reducedMotion?(this.focus?1:0):dampedStep(this.focusBlend,this.focus?1:0,5,dt)

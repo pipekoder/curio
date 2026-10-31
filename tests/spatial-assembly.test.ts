@@ -1,0 +1,73 @@
+import {describe,expect,it} from 'vitest'
+import {AssemblyDirector} from '../src/spatial/assembly'
+
+const clock=()=>{
+  let now=0
+  return {now:()=>now,advance:(ms:number)=>{now+=ms}}
+}
+
+describe('assembly director',()=>{
+ it('plays the full director cut even when the edition settles instantly',()=>{
+  const time=clock()
+  const director=new AssemblyDirector(time.now)
+  director.start()
+  director.onResponse()
+  director.onSettled()
+  expect(director.update().phase).toBe('stream')
+  time.advance(899)
+  expect(director.update().phase).toBe('stream')
+  time.advance(1)
+  expect(director.update().phase).toBe('lattice')
+  time.advance(699)
+  expect(director.update().phase).toBe('lattice')
+  time.advance(1)
+  expect(director.update().phase).toBe('resolve')
+  time.advance(599)
+  expect(director.update().phase).toBe('resolve')
+  time.advance(1)
+  const end=director.update()
+  expect(end.phase).toBe('done')
+  expect(end.t).toBe(1)
+ })
+ it('holds the lattice shimmer until the edition settles, however long that takes',()=>{
+  const time=clock()
+  const director=new AssemblyDirector(time.now)
+  director.start()
+  time.advance(900)
+  director.onResponse()
+  expect(director.update().phase).toBe('lattice')
+  time.advance(30000)
+  expect(director.update()).toEqual({phase:'lattice',t:1,holdMs:0})
+  time.advance(2000)
+  expect(director.update().holdMs).toBe(2000)
+  director.onSettled()
+  expect(director.update().phase).toBe('resolve')
+ })
+ it('waits for first response before leaving the stream',()=>{
+  const time=clock()
+  const director=new AssemblyDirector(time.now)
+  director.start()
+  time.advance(5000)
+  expect(director.update()).toEqual({phase:'stream',t:1,holdMs:0})
+  time.advance(4100)
+  expect(director.update().holdMs).toBe(4100)
+  director.onResponse()
+  expect(director.update().phase).toBe('lattice')
+ })
+ it('reports resolve progress monotonically',()=>{
+  const time=clock()
+  const director=new AssemblyDirector(time.now)
+  director.start()
+  director.onResponse()
+  director.onSettled()
+  time.advance(900)
+  director.update()
+  time.advance(700)
+  director.update()
+  time.advance(300)
+  const mid=director.update()
+  expect(mid.phase).toBe('resolve')
+  expect(mid.t).toBeGreaterThan(0.4)
+  expect(mid.t).toBeLessThan(0.6)
+ })
+})

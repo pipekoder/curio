@@ -12,7 +12,7 @@ const metaPlan={
 }
 
 declare global{
-  interface Window{__spatial?:()=>{distance:number;cameraZ:number;current:number;exhibits:number;nodes:number;source:string}}
+  interface Window{__spatial?:()=>{distance:number;cameraZ:number;cameraY:number;current:number;exhibits:number;nodes:number;source:string;assembly:string}}
 }
 
 async function submitPrompt(page:Page):Promise<void>{
@@ -31,8 +31,8 @@ test('/spatial opens the silver field with an immediately usable prompt',async({
   await expect(page.locator('.spatial-canvas')).toBeVisible()
   await expect(page.getByLabel('Your curiosity')).toBeVisible()
   await submitPrompt(page)
-  await expect(page.locator('.spatial-chip')).toContainText('Curio-authored edition · AI not used')
-  await expect(page.locator('.spatial-crumb')).toContainText('Your exhibition')
+  await expect(page.getByTestId('spatial-edition-chip')).toContainText('Curio-authored edition · AI not used')
+  await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of',{timeout:15000})
   const snapshot=await page.evaluate(()=>window.__spatial?.())
   expect(snapshot?.exhibits).toBeGreaterThan(0)
   expect(snapshot?.nodes).toBeGreaterThanOrEqual(6)
@@ -57,7 +57,7 @@ test('arriving at an exhibit reveals its lateral rail',async({page})=>{
   await page.setViewportSize({width:1440,height:900})
   await page.goto('/spatial')
   await submitPrompt(page)
-  await expect(page.locator('.spatial-chip')).toBeVisible()
+  await expect(page.getByTestId('spatial-edition-chip')).toBeVisible()
   const exhibits=await page.evaluate(()=>window.__spatial?.().exhibits??0)
   await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight*0.22))
   await expect(page.locator('.spatial-crumb')).toContainText(`Exhibit 1 of ${exhibits}`,{timeout:10000})
@@ -72,7 +72,7 @@ test('inspecting an exhibit shows its authored detail and releases',async({page}
   await page.setViewportSize({width:1440,height:900})
   await page.goto('/spatial')
   await submitPrompt(page)
-  await expect(page.locator('.spatial-chip')).toBeVisible()
+  await expect(page.getByTestId('spatial-edition-chip')).toBeVisible()
   await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight*0.22))
   await expect(page.locator('.spatial-rail')).toBeVisible()
   await page.locator('.spatial-rail-card').first().getByRole('button',{name:'Inspect exhibit'}).click()
@@ -87,7 +87,7 @@ test('clicking a staged mount opens inspection through the scene',async({page})=
   await page.setViewportSize({width:1440,height:900})
   await page.goto('/spatial')
   await submitPrompt(page)
-  await expect(page.locator('.spatial-chip')).toBeVisible()
+  await expect(page.getByTestId('spatial-edition-chip')).toBeVisible()
   await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight*0.22))
   await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of',{timeout:10000})
   await page.mouse.click(720,420)
@@ -99,10 +99,42 @@ test('a grounded meta edition stages without the fallback disclosure',async({pag
   await page.setViewportSize({width:1440,height:900})
   await page.goto('/spatial')
   await submitPrompt(page)
-  await expect(page.locator('.spatial-crumb')).toContainText('Your exhibition')
-  await expect(page.locator('.spatial-chip')).toBeHidden()
+  await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of',{timeout:15000})
+  await expect(page.getByTestId('spatial-edition-chip')).toBeHidden()
   const exhibits=await page.evaluate(()=>window.__spatial?.().exhibits??0)
   expect(exhibits).toBeGreaterThan(0)
+})
+
+test('assembly honors the director minimum on instant responses',async({page})=>{
+  await page.route('**/api/editorial',route=>route.fulfill({status:503,json:{error:'AI disabled'}}))
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await page.getByLabel('Your curiosity').fill('A quiet room with soft light')
+  const begun=Date.now()
+  await page.getByRole('button',{name:'Begin exploration'}).click()
+  await expect(page.getByRole('status').first()).toContainText('Composing your exhibition')
+  await expect(page.getByTestId('spatial-edition-chip')).toBeVisible({timeout:15000})
+  expect(Date.now()-begun).toBeGreaterThanOrEqual(1800)
+})
+
+test('slow generation holds with honest elapsed time and no simulated progress',async({page})=>{
+  await page.route('**/api/editorial',async route=>{
+    await new Promise(resolve=>setTimeout(resolve,4000))
+    await route.fulfill({status:503,json:{error:'AI disabled'}})
+  })
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await page.getByLabel('Your curiosity').fill('A quiet room with soft light')
+  await page.getByRole('button',{name:'Begin exploration'}).click()
+  await expect(page.getByRole('status').first()).toContainText(/\(\ds\)/,{timeout:10000})
+  await expect(page.getByRole('status').first()).not.toContainText('%')
+  const hold=await page.evaluate(()=>window.__spatial?.())
+  expect(['stream','lattice']).toContain(hold?.assembly)
+  expect(hold?.cameraY??-1).toBeGreaterThan(1.9)
+  expect(hold?.cameraY??9).toBeLessThan(2.5)
+  await page.waitForTimeout(1200)
+  await page.screenshot({path:'test-results/spatial-assembly-1440.png'})
+  await expect(page.getByTestId('spatial-edition-chip')).toBeVisible({timeout:15000})
 })
 
 test('Clear wipes the visit session and says what was removed',async({page})=>{
@@ -110,7 +142,7 @@ test('Clear wipes the visit session and says what was removed',async({page})=>{
   await page.goto('/spatial')
   await page.getByLabel('Your curiosity').fill('Bold garments')
   await page.getByRole('button',{name:'Begin exploration'}).click()
-  await expect(page.locator('.spatial-chip')).toBeVisible()
+  await expect(page.getByTestId('spatial-edition-chip')).toBeVisible()
   expect(await page.evaluate(()=>sessionStorage.getItem('curio.spatial.session.v1'))).not.toBeNull()
   await page.getByRole('button',{name:'Clear',exact:true}).click()
   expect(await page.evaluate(()=>sessionStorage.getItem('curio.spatial.session.v1'))).toBeNull()

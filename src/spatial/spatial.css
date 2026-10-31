@@ -13,6 +13,7 @@
 .spatial-actions button{min-height:40px;padding:8px 16px;border:1px solid #b9c1cb;border-radius:999px;background:#fff;color:#23272e;cursor:pointer;font:inherit;font-size:12px}
 .spatial-dock{position:fixed;left:50%;top:50%;z-index:10;width:min(92vw,560px);transform:translate(-50%,-50%);background:#ffffffd9;border:1px solid #d5dae0;border-radius:18px;box-shadow:0 24px 70px #6d7c8c2e;backdrop-filter:blur(14px);padding:clamp(22px,4vw,40px);text-align:center;animation:spatial-approach 1.6s cubic-bezier(.2,.7,.2,1) both}
 .spatial-dock.is-docked{animation:none;transform:translate(-50%,-50%);opacity:1;filter:none}
+.spatial-dock.is-composing{animation:none;opacity:0;transform:translate(-50%,-50%) translateY(60px) scale(.96);pointer-events:none;transition:opacity .5s ease,transform .5s ease}
 @keyframes spatial-approach{from{transform:translate(-50%,-50%) scale(.55);opacity:0;filter:blur(10px)}to{transform:translate(-50%,-50%) scale(1);opacity:1;filter:blur(0)}}
 .spatial-eyebrow{margin:0 0 10px;font-size:11px;letter-spacing:.18em;color:#b98a3e}
 .spatial-dock h1{margin:0 0 18px;font:400 clamp(30px,5vw,46px)/1.08 Georgia,serif;letter-spacing:-.01em}
@@ -31,6 +32,7 @@
 .spatial-index strong{display:block;font-size:14px}
 .spatial-index span{font-size:11px;color:#6a7480}
 .spatial-chip{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:20;margin:0;padding:7px 16px;background:#23272ef2;color:#f4f5f7;border-radius:999px;font-size:11px;letter-spacing:.1em}
+.spatial-chip.is-sub{top:106px;background:#fffffff2;color:#3c4652;border:1px solid #d5dae0}
 .spatial-rail{position:fixed;left:0;right:0;bottom:0;z-index:15;display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x proximity;padding:14px 18px 18px;background:linear-gradient(transparent,#f4f5f7f2 30%)}
 .spatial-rail-card{flex:0 0 min(78vw,340px);scroll-snap-align:start;background:#fffffff0;border:1px solid #d5dae0;border-radius:14px;padding:16px 18px;box-shadow:0 12px 32px #6d7c8c26}
 .spatial-rail-card h2{margin:0 0 8px;font:400 20px/1.25 Georgia,serif}

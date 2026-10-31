@@ -27,6 +27,15 @@ describe('spatial edition fetch',()=>{
   const {honest}=await fetchEdition('quiet rooms',fiction as unknown as typeof fetch)
   expect(honest).toBe('authored-fallback')
  })
+ it('reports first response for assembly timing, but not on network failure',async()=>{
+  const seen: string[]=[]
+  const ok=vi.fn(async()=>new Response(JSON.stringify({plan:fallbackPlan(prefs,pool),items:pool,source:'meta',retrieval:'d1'}),{status:200}))
+  await fetchEdition('quiet rooms',ok as unknown as typeof fetch,{onResponse:()=>seen.push('response')})
+  expect(seen).toEqual(['response'])
+  const failing=vi.fn(async()=>{throw Error('offline')})
+  await fetchEdition('quiet rooms',failing as unknown as typeof fetch,{onResponse:()=>seen.push('response')})
+  expect(seen).toEqual(['response'])
+ })
  it('falls back on invalid source claims',async()=>{
   const bad=vi.fn(async()=>new Response(JSON.stringify({plan:fallbackPlan(prefs,pool),items:pool,source:'studio',retrieval:'d1'}),{status:200}))
   const {honest}=await fetchEdition('quiet rooms',bad as unknown as typeof fetch)
