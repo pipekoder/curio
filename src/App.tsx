@@ -1,12 +1,15 @@
 /// <reference types="vite/client" />
 import EditorialExperience from "./EditorialExperience";
-import {useEffect,useState} from 'react';
+import {Suspense,lazy,useEffect,useState} from 'react';
 import {isExplorePath} from './explore-route';
 import MediaStudio from './MediaStudio';
+const SpatialApp=lazy(()=>import('./spatial/SpatialApp'));
 export default function App() {
-  return window.location.pathname==='/internal/media'?<MediaStudio/>:<PublicApp/>;
+  if(window.location.pathname==='/internal/media')return <MediaStudio/>;
+  if(window.location.pathname==='/spatial')return <Suspense fallback={<main className="page"><p role="status">Loading the spatial exhibition…</p></main>}><SpatialApp/></Suspense>;
+  return <PublicApp/>;
 }
-function PublicApp() {
+export function PublicApp() {
   // Keep the pre-release reader reachable only for local regression fixtures.
   // Public hosts always receive the approved five-stage experience.
   const localLegacyFixture = (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") && new URLSearchParams(window.location.search).get("legacy") === "1";
