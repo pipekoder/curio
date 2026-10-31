@@ -12,7 +12,7 @@ const metaPlan={
 }
 
 declare global{
-  interface Window{__spatial?:()=>{distance:number;cameraZ:number;cameraY:number;current:number;exhibits:number;nodes:number;source:string;assembly:string}}
+  interface Window{__spatial?:()=>{distance:number;cameraZ:number;cameraY:number;current:number;exhibits:number;nodes:number;source:string;assembly:string;mode:string;orbit:{yaw:number;pitch:number;radius:number};selected:number;staged:string[];nodeIds:string[]}}
 }
 
 async function submitPrompt(page:Page):Promise<void>{
@@ -152,4 +152,132 @@ test('Clear wipes the visit session and says what was removed',async({page})=>{
   await expect(page.getByRole('status').last()).toContainText('No visit data was found in this browser')
   await expect(page.getByLabel('Your curiosity')).toBeVisible()
   await page.screenshot({path:'test-results/spatial-discover-390.png'})
+})
+
+async function stageFallbackEdition(page:Page):Promise<void>{
+  await page.route('**/api/editorial',route=>route.fulfill({status:503,json:{error:'AI disabled'}}))
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await page.getByLabel('Your curiosity').fill('A quiet room with soft light')
+  await page.getByRole('button',{name:'Begin exploration'}).click()
+  await expect(page.getByTestId('spatial-edition-chip')).toBeVisible({timeout:15000})
+}
+
+async function openJourney(page:Page):Promise<void>{
+  await stageFallbackEdition(page)
+  await page.getByRole('button',{name:'Journey',exact:true}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await page.waitForTimeout(1800)
+}
+
+test('journey opens the network of real catalog nodes',async({page})=>{
+  await openJourney(page)
+  const snapshot=await page.evaluate(()=>window.__spatial?.())
+  expect(snapshot?.nodes).toBeGreaterThanOrEqual(6)
+  expect(snapshot?.source).toBe('manifest')
+  await expect(page.getByRole('navigation',{name:'Journey network'})).toBeVisible()
+  await expect(page.locator('.spatial-crumb')).toContainText('Journey')
+  await expect(page.locator('.spatial-rail')).toBeHidden()
+  await page.screenshot({path:'test-results/spatial-network-1440.png'})
+})
+
+test('orbit drag and wheel zoom move the chamber camera',async({page})=>{
+  await openJourney(page)
+  const before=await page.evaluate(()=>window.__spatial?.().orbit)
+  await page.mouse.move(720,450)
+  await page.mouse.down()
+  await page.mouse.move(920,450,{steps:10})
+  await page.mouse.up()
+  await page.mouse.wheel(0,400)
+  await page.waitForTimeout(300)
+  const after=await page.evaluate(()=>window.__spatial?.().orbit)
+  expect(after?.yaw).not.toBeCloseTo(before?.yaw??0,5)
+  expect(after?.radius).toBeGreaterThan(before?.radius??0)
+})
+
+test('surprise highlights a node without diving',async({page})=>{
+  await openJourney(page)
+  const orbitBefore=await page.evaluate(()=>window.__spatial?.().orbit)
+  await page.getByRole('button',{name:'Surprise me'}).click()
+  const snapshot=await page.evaluate(()=>window.__spatial?.())
+  expect(snapshot?.mode).toBe('network')
+  expect(snapshot?.selected).toBeGreaterThanOrEqual(0)
+  const orbitAfter=await page.evaluate(()=>window.__spatial?.().orbit)
+  expect(orbitAfter).toEqual(orbitBefore)
+  await expect(page.locator('.spatial-crumb')).toContainText('Journey · ')
+  await expect(page.getByRole('button',{name:'Close node panel'})).toBeVisible()
+})
+
+test('entering a staged node dives to its exhibit',async({page})=>{
+  await openJourney(page)
+  const target=await page.evaluate(()=>{
+    const snapshot=window.__spatial?.()
+    return snapshot?.nodeIds.findIndex(id=>snapshot.staged.includes(id))??-1
+  })
+  expect(target).toBeGreaterThanOrEqual(0)
+  for(let i=0;i<=target;i++)await page.getByRole('button',{name:'Next node'}).click()
+  const panel=page.getByTestId('spatial-node-panel')
+  await expect(panel.getByRole('button',{name:'Enter exhibit →'})).toBeVisible()
+  await panel.getByRole('button',{name:'Enter exhibit →'}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='promenade',{timeout:10000})
+  await expect(page.locator('.spatial-crumb')).toContainText('Exhibit',{timeout:10000})
+})
+
+test('curating from an unstaged node starts a new edition',async({page})=>{
+  await openJourney(page)
+  const target=await page.evaluate(()=>{
+    const snapshot=window.__spatial?.()
+    return snapshot?.nodeIds.findIndex(id=>!snapshot.staged.includes(id))??-1
+  })
+  expect(target).toBeGreaterThanOrEqual(0)
+  for(let i=0;i<=target;i++)await page.getByRole('button',{name:'Next node'}).click()
+  const panel=page.getByTestId('spatial-node-panel')
+  await expect(panel.getByRole('button',{name:'Curate from this node →'})).toBeVisible()
+  await panel.getByRole('button',{name:'Curate from this node →'}).click()
+  await expect(page.getByRole('status').first()).toContainText('Composing your exhibition')
+  const snapshot=await page.evaluate(()=>window.__spatial?.())
+  expect(snapshot?.mode).toBe('promenade')
+})
+
+test('clear from the network exhales and wipes the visit',async({page})=>{
+  await openJourney(page)
+  expect(await page.evaluate(()=>sessionStorage.getItem('curio.spatial.session.v1'))).not.toBeNull()
+  await page.getByRole('button',{name:'Clear',exact:true}).click()
+  await page.waitForTimeout(1800)
+  expect(await page.evaluate(()=>sessionStorage.getItem('curio.spatial.session.v1'))).toBeNull()
+  const snapshot=await page.evaluate(()=>window.__spatial?.())
+  expect(snapshot?.mode).toBe('promenade')
+  await expect(page.getByLabel('Your curiosity')).toBeVisible()
+})
+
+test('reduced-motion journey uses the index list',async({page})=>{
+  await page.emulateMedia({reducedMotion:'reduce'})
+  await stageFallbackEdition(page)
+  await page.getByRole('button',{name:'Journey',exact:true}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  const actions=page.locator('#spatial-index li button')
+  expect(await actions.count()).toBeGreaterThan(0)
+  await actions.first().click()
+  await page.waitForTimeout(500)
+  const snapshot=await page.evaluate(()=>window.__spatial?.())
+  expect(snapshot?.mode).toBe('promenade')
+})
+
+test('network stays usable at mobile width',async({page})=>{
+  test.setTimeout(60000)
+  await page.route('**/api/editorial',route=>route.fulfill({status:503,json:{error:'AI disabled'}}))
+  await page.setViewportSize({width:390,height:844})
+  await page.goto('/spatial')
+  await page.getByLabel('Your curiosity').fill('Bold garments')
+  await page.getByRole('button',{name:'Begin exploration'}).click()
+  await expect(page.getByTestId('spatial-edition-chip')).toBeVisible({timeout:15000})
+  await page.getByRole('button',{name:'Journey',exact:true}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await page.waitForTimeout(1800)
+  await expect(page.getByRole('navigation',{name:'Journey network'})).toBeVisible()
+  await page.getByRole('button',{name:'Surprise me'}).click()
+  await expect(page.getByTestId('spatial-node-panel')).toBeVisible()
+  await page.screenshot({path:'test-results/spatial-network-390.png'})
+  await page.getByRole('button',{name:'← Promenade'}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='promenade',{timeout:10000})
 })
