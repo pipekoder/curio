@@ -281,3 +281,20 @@ test('network stays usable at mobile width',async({page})=>{
   await page.getByRole('button',{name:'← Promenade'}).click()
   await page.waitForFunction(()=>window.__spatial?.().mode==='promenade',{timeout:10000})
 })
+
+test('/ is the spatial homepage and /legacy keeps the 2D edition',async({page})=>{
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/')
+  await expect(page.locator('.spatial-canvas')).toBeVisible()
+  await expect(page.getByLabel('Your curiosity')).toBeVisible()
+  await page.goto('/legacy')
+  await expect(page.getByLabel('Your discovery prompt')).toBeVisible()
+  await expect(page.getByText('AI not used').first()).toBeHidden()
+})
+
+test('/spatial redirects to / for backward compatibility',async({page})=>{
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await expect(page).toHaveURL('http://127.0.0.1:4173/')
+  await expect(page.locator('.spatial-canvas')).toBeVisible()
+})

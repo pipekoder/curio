@@ -9,7 +9,7 @@ for(const approved of [true,false])test(`persistent catalog record ${approved?'r
  await page.route('**/api/editorial',route=>route.fulfill({json:{plan,items:[item],source:'deterministic',retrieval:'d1',cached:false}}))
  await page.route('**/api/catalog/published?*',route=>route.fulfill({json:{items:approved?[item]:[],nextCursor:null}}))
  await page.route(item.image.externalUrl!,route=>{imageRequests++;return route.fulfill({path:'tests/fixtures/original-home-lamp.png',contentType:'image/png'})})
- await page.goto('/?legacy=1');await page.getByLabel('Your discovery prompt').fill('Quiet rooms and reading lamps');await page.getByRole('button',{name:'Generate magazine'}).click()
+ await page.goto('/legacy?legacy=1');await page.getByLabel('Your discovery prompt').fill('Quiet rooms and reading lamps');await page.getByRole('button',{name:'Generate magazine'}).click()
  if(approved){
   await expect(page.getByRole('heading',{name:'A persisted discovery'})).toBeVisible()
   await expect(page.locator('.personal-feature .image-ready')).toHaveCount(1)
@@ -28,7 +28,7 @@ test('Chief Editor D1 edition remains dynamic through Reader, Story, related dis
  await page.route('**/api/editorial',route=>route.fulfill({json:{plan:chiefPlan,items:[item],editorialSources:[source],source:'meta',retrieval:'d1',cached:false}}))
  await page.route('**/api/catalog/published?*',route=>route.fulfill({json:{items:[item],nextCursor:null}}))
  await page.route(item.image.externalUrl!,route=>route.fulfill({path:'tests/fixtures/original-home-lamp.png',contentType:'image/png'}))
- await page.goto('/');await page.getByLabel('Your discovery prompt').fill('Explore how light frames an object');await page.getByRole('checkbox',{name:/Use Meta AI/}).check();await page.getByRole('button',{name:'Generate magazine'}).click()
+ await page.goto('/legacy');await page.getByLabel('Your discovery prompt').fill('Explore how light frames an object');await page.getByRole('checkbox',{name:/Use Meta AI/}).check();await page.getByRole('button',{name:'Generate magazine'}).click()
  await expect(page.locator('.visual-reader')).toHaveAttribute('data-asset-id',item.image.id)
  await page.getByRole('button',{name:`Open ${item.name} story`}).click()
  await expect(page.locator('.visual-journey')).toBeVisible()

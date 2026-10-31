@@ -18,7 +18,7 @@ for (const width of [1280, 390])
   }) => {
     test.setTimeout(60000);
     await page.setViewportSize({ width, height: 900 });
-    await page.goto("/?legacy=1");
+    await page.goto("/legacy?legacy=1");
     await expect(
       page.getByRole("button", {
         name: /Read sample edition|Generate my magazine/,
@@ -138,7 +138,7 @@ test("reduced motion, keyboard collection controls and unavailable local storage
       throw Error("blocked");
     };
   });
-  await page.goto("/?legacy=1");
+  await page.goto("/legacy?legacy=1");
   await page.getByLabel("Your discovery prompt").fill("A magazine of unexpected connections");
   await page.getByRole("button", { name: "Generate magazine" }).click();
   await expect(page.locator(".personal-feature")).toHaveCount(6);
@@ -198,7 +198,7 @@ for (const profile of ["home", "travel"] as const)
         },
       });
     });
-    await page.goto("/?legacy=1");
+    await page.goto("/legacy?legacy=1");
     await page
       .getByRole("button", {
         name:

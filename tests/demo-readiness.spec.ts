@@ -18,7 +18,7 @@ for(const width of [1440,390])test.describe(`final demo at ${width}px`,()=>{
    return route.continue()
   })
   try{
-   await page.goto('/?legacy=1')
+   await page.goto('/legacy?legacy=1')
    await expect(page.getByLabel('Your discovery prompt')).toBeEditable()
    await expect(page.locator('body')).toBeFocused()
    await page.keyboard.press('Tab');await expect(page.locator('.skip-link')).toBeFocused()
