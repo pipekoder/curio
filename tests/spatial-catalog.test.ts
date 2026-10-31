@@ -6,6 +6,7 @@ import manifest from '../src/spatial/nodes.manifest.json'
 import {catalogNodesResponse} from '../src/spatial/contracts'
 import {loadCatalogNodes} from '../src/spatial/nodes'
 import {demoMedia} from '../src/editorial-demo-media'
+import {editorialDemoCatalog} from '../shared/editorial'
 
 const root=join(dirname(fileURLToPath(import.meta.url)),'..')
 
@@ -23,11 +24,30 @@ describe('spatial catalog contract',()=>{
     for(const hint of node.edgeHints??[])expect(demoMedia.some(m=>m.assetId===hint),hint).toBe(true)
   }
  })
- it('prefers the dynamic endpoint when it serves valid nodes',async()=>{
-  const payload=[{assetId:'live-1',kind:'exhibit',label:'Live record',thumbnail:'/editorial/read/16_read_chair.png'}]
-  const fetchImpl=vi.fn(async()=>new Response(JSON.stringify(payload),{status:200}))
+ it('prefers the published endpoint and follows cursor pagination',async()=>{
+  const [first,second]=editorialDemoCatalog
+  const seen:string[]=[]
+  const fetchImpl=vi.fn(async(url:string)=>{
+    seen.push(url)
+    const page=seen.length===1
+      ?{items:[first],nextCursor:'c2'}
+      :{items:[second],nextCursor:null}
+    return new Response(JSON.stringify(page),{status:200})
+  })
   const result=await loadCatalogNodes(fetchImpl as unknown as typeof fetch)
-  expect(result.source).toBe('endpoint')
+  expect(result.source).toBe('published')
+  expect(result.nodes).toHaveLength(2)
+  expect(result.nodes.map(n=>n.assetId)).toEqual([first.image.id,second.image.id])
+  expect(result.nodes.map(n=>n.label)).toEqual([first.name,second.name])
+  expect(seen[0]).toBe('/api/catalog/published')
+  expect(seen[1]).toBe('/api/catalog/published?cursor=c2')
+ })
+ it('leaves pagination bounded and dedupes repeated items',async()=>{
+  const page={items:[editorialDemoCatalog[0]],nextCursor:'loop'}
+  const fetchImpl=vi.fn(async()=>new Response(JSON.stringify(page),{status:200}))
+  const result=await loadCatalogNodes(fetchImpl as unknown as typeof fetch)
+  expect(fetchImpl).toHaveBeenCalledTimes(10)
+  expect(result.source).toBe('published')
   expect(result.nodes).toHaveLength(1)
  })
  it('falls back to the manifest on endpoint failure or invalid payload',async()=>{
@@ -35,7 +55,7 @@ describe('spatial catalog contract',()=>{
   const fallback=await loadCatalogNodes(failing as unknown as typeof fetch)
   expect(fallback.source).toBe('manifest')
   expect(fallback.nodes.length).toBeGreaterThanOrEqual(6)
-  const invalid=vi.fn(async()=>new Response(JSON.stringify([{assetId:'x'}]),{status:200}))
+  const invalid=vi.fn(async()=>new Response(JSON.stringify({items:[{id:'x'}]}),{status:200}))
   const rejected=await loadCatalogNodes(invalid as unknown as typeof fetch)
   expect(rejected.source).toBe('manifest')
  })

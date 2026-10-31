@@ -1,17 +1,61 @@
+import {z} from 'zod'
 import manifest from './nodes.manifest.json'
+import {catalogItem,type CatalogItem} from '../../shared/catalog'
 import {catalogNodesResponse,type CatalogNode} from './contracts'
 
-export type NodeSource='endpoint'|'manifest'
+export type NodeSource='published'|'manifest'
 
-// R1 target: dynamic Codex endpoint. Until it exists (any failure, including
-// 404), fall back to the validated static manifest. The UI always labels
-// which source served the nodes.
-export async function loadCatalogNodes(fetchImpl:typeof fetch=fetch):Promise<{nodes:CatalogNode[];source:NodeSource}>{
+const publishedPage=z.strictObject({items:z.array(catalogItem),nextCursor:z.string().nullable()})
+
+// Same-origin absolute URLs (notably /api/media/:version) collapse to their
+// pathname; anything else keeps its safe HTTPS form for the image loader.
+function toThumbnail(image:CatalogItem['image']):string{
+  if(image.path)return image.path
+  const absolute=image.externalUrl??image.fallbackPath
+  if(!absolute)return ''
   try{
-    const response=await fetchImpl('/api/catalog/nodes',{signal:AbortSignal.timeout(3000)})
-    if(!response.ok)throw Error(`Catalog endpoint responded ${response.status}`)
-    return {nodes:catalogNodesResponse.parse(await response.json()),source:'endpoint'}
+    if(typeof location!=='undefined'&&new URL(absolute,location.origin).origin===location.origin){
+      return new URL(absolute,location.origin).pathname
+    }
+  }catch{/* fall through to the raw value; the contract validates it */}
+  return absolute
+}
+
+// Display mapping only, no invented relationships: licensed brand records
+// read as exhibits; supporting and synthetic records read as stories.
+function toNode(item:CatalogItem):CatalogNode{
+  return {
+    assetId:item.image.id,
+    kind:item.sourceType==='licensed_brand'?'exhibit':'story',
+    label:item.name.slice(0,60),
+    thumbnail:toThumbnail(item.image),
+  }
+}
+
+// Journey source: the published catalog, paged through its cursor (bounded).
+// Any failure, or an empty listing, falls back to the validated static
+// manifest. The UI always labels which source served the nodes.
+export async function loadCatalogNodes(fetchImpl:typeof fetch=fetch):Promise<{nodes:CatalogNode[];source:NodeSource}>{
+  const fallback=()=>({nodes:catalogNodesResponse.parse(manifest),source:'manifest' as const})
+  try{
+    const items:CatalogItem[]=[]
+    const seen=new Set<string>()
+    let cursor=''
+    for(let page=0;page<10&&items.length<500;page++){
+      const response=await fetchImpl(`/api/catalog/published${cursor?`?cursor=${encodeURIComponent(cursor)}`:''}`,{signal:AbortSignal.timeout(3000)})
+      if(!response.ok)throw Error(`Published catalog responded ${response.status}`)
+      const parsed=publishedPage.parse(await response.json())
+      for(const item of parsed.items){
+        if(seen.has(item.image.id))continue
+        seen.add(item.image.id)
+        items.push(item)
+      }
+      if(!parsed.nextCursor)break
+      cursor=parsed.nextCursor
+    }
+    if(!items.length)return fallback()
+    return {nodes:catalogNodesResponse.parse(items.slice(0,500).map(toNode)),source:'published'}
   }catch{
-    return {nodes:catalogNodesResponse.parse(manifest),source:'manifest'}
+    return fallback()
   }
 }
