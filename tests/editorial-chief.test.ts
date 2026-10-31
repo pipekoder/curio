@@ -32,6 +32,28 @@ it('rejects invented commerce, unsupported observations, source identities in pr
  expect(evaluateChiefEditor({...plan,features:[{...plan.features[0],sourceIds:['missing:source']}]},contexts,sources)).toBe('unsupported_source')
 })
 
+it('rejects unsupported materials, finishes and descriptive material modifiers',()=>{
+ expect(evaluateChiefEditor({...plan,features:[{...plan.features[0],narrative:'A dark-brown leather surface anchors the foreground while light traces its rounded form.'}]},contexts,sources)).toBe('unsupported_material')
+ expect(evaluateChiefEditor({...plan,features:[{...plan.features[0],narrative:'A polished metal surface catches light and separates the form from the background.'}]},contexts,sources)).toBe('unsupported_material')
+ expect(evaluateChiefEditor({...plan,title:'Leather and the Architecture of Attention'},contexts,sources)).toBe('unsupported_material')
+})
+
+it('allows explicitly uncertain material-like observations while rejecting stronger visual claims',()=>{
+ const observed={...plan,features:[{...plan.features[0],narrative:'A fabric-like appearance gives the visible surface a softer rhythm while light defines the seating form.',observationKeys:['subjects.seating','relationships.light-and-shadow','materialAppearance.fabric-like']}]}
+ expect(evaluateChiefEditor(observed,contexts,sources)).toBeNull()
+ expect(evaluateChiefEditor({...observed,features:[{...observed.features[0],narrative:'Fabric gives the visible surface a softer rhythm while light defines the seating form.'}]},contexts,sources)).toBe('unsupported_material')
+ expect(evaluateChiefEditor({...observed,features:[{...observed.features[0],narrative:'A leather-like appearance gives the visible surface a softer rhythm while light defines the seating form.'}]},contexts,sources)).toBe('unsupported_material')
+})
+
+it('allows exact cited owner-supplied material facts without expanding them',()=>{
+ const materialSource:EditorialSource={id:`${asset}:product_materials`,assetId:asset,kind:'product_materials',label:'Product materials',value:'dark brown leather',authority:'owner_supplied_mockup',source:'content_studio'}
+ const groundedSources=[...sources,materialSource],grounded={...plan,features:[{...plan.features[0],narrative:'Dark brown leather meets a band of light, sharpening the relationship between surface and rounded form.',sourceIds:[...plan.features[0].sourceIds,materialSource.id]}]}
+ expect(evaluateChiefEditor(grounded,contexts,groundedSources)).toBeNull()
+ const leatherOnly={...materialSource,value:'leather'},leatherSources=[...sources,leatherOnly]
+ expect(evaluateChiefEditor(grounded,contexts,leatherSources)).toBe('unsupported_material')
+ expect(evaluateChiefEditor({...grounded,features:[{...grounded.features[0],narrative:'Brushed leather meets a band of light, sharpening the relationship between surface and rounded form.'}]},contexts,groundedSources)).toBe('unsupported_material')
+})
+
 it('requires exactly six unique exact-version pilot IDs',()=>{
  const ids=Array.from({length:6},(_,index)=>`version-${String(index).repeat(64)}`)
  expect(parsePilotVersions(ids.join(','))).toEqual(ids)
