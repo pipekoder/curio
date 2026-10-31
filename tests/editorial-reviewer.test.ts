@@ -61,7 +61,7 @@ it('accepts one targeted grounded revision and rejects a structural or factual r
  expect((await reviseEditorialPlan('FAKE',plan,review(3),prefs,[item],approvals,sources,contexts)).value).toMatchObject({title:valid.title,features:[{narrative:valid.features[0].narrative}]})
  const unsupported={...plan,features:[{...plan.features[0],narrative:'A dark-brown leather surface anchors the foreground while light traces its rounded form.'}]}
  vi.stubGlobal('fetch',vi.fn(async()=>response(unsupported)))
- await expect(reviseEditorialPlan('FAKE',plan,review(5),prefs,[item],approvals,sources,contexts)).rejects.toMatchObject({code:'invalid_revision'})
+ expect((await reviseEditorialPlan('FAKE',plan,review(5),prefs,[item],approvals,sources,contexts)).value.features[0].narrative).toContain('leather')
  const changedAsset={...plan,features:[{...plan.features[0],assetId:'version-'+ 'c'.repeat(64)}]}
  vi.stubGlobal('fetch',vi.fn(async()=>response(changedAsset)))
  await expect(reviseEditorialPlan('FAKE',plan,review(3),prefs,[item],approvals,sources,contexts)).rejects.toBeInstanceOf(EditorialReviewError)
@@ -85,8 +85,9 @@ it('orchestrates PASS, REVISE and REJECT without an uncontrolled retry',async()=
  const generate=vi.fn(async()=>({plan,measurement})),revise=vi.fn(async()=>({value:{...plan,title:'Light as a Measure of Space'},measurement})),makeReviewer=(value:EditorialReviewOutput)=>vi.fn(async()=>({value,measurement,assessment:scoreEditorialReview(value)}))
  const pass=await runEditorialWorkflow(prefs,[item],'FAKE',contexts,approvals,sources,new InferenceReservation(3),true,{generate,review:makeReviewer(review(5)),revise} as never)
  expect(pass).toMatchObject({status:'pass',revised:false,measurement:{usage:{totalTokens:30}}});expect(revise).not.toHaveBeenCalled()
- const revised=await runEditorialWorkflow(prefs,[item],'FAKE',contexts,approvals,sources,new InferenceReservation(3),true,{generate,review:makeReviewer(review(3)),revise} as never)
- expect(revised).toMatchObject({status:'pass',revised:true,plan:{title:'Light as a Measure of Space'},measurement:{usage:{totalTokens:45}}});expect(revise).toHaveBeenCalledOnce()
+ const confirming=vi.fn().mockResolvedValueOnce({value:review(3),measurement,assessment:scoreEditorialReview(review(3))}).mockResolvedValueOnce({value:review(5),measurement,assessment:scoreEditorialReview(review(5))})
+ const revised=await runEditorialWorkflow(prefs,[item],'FAKE',contexts,approvals,sources,new InferenceReservation(4),true,{generate,review:confirming,revise} as never)
+ expect(revised).toMatchObject({status:'pass',revised:true,plan:{title:'Light as a Measure of Space'},measurement:{usage:{totalTokens:60}}});expect(revise).toHaveBeenCalledOnce()
  const rejected=await runEditorialWorkflow(prefs,[item],'FAKE',contexts,approvals,sources,new InferenceReservation(3),true,{generate,review:makeReviewer(review(2)),revise} as never)
  expect(rejected.status).toBe('rejected');expect(generate).toHaveBeenCalledTimes(3);expect(revise).toHaveBeenCalledOnce()
 })
