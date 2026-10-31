@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url'
 import {join,dirname} from 'node:path'
 import manifest from '../src/spatial/nodes.manifest.json'
 import {catalogNodesResponse} from '../src/spatial/contracts'
-import {loadCatalogNodes} from '../src/spatial/nodes'
+import {loadCatalogNodes,revalidateVersions} from '../src/spatial/nodes'
 import {demoMedia} from '../src/editorial-demo-media'
 import {editorialDemoCatalog} from '../shared/editorial'
 
@@ -62,5 +62,56 @@ describe('spatial catalog contract',()=>{
  it('reads the manifest from the checked-in file, not a copy',()=>{
   const raw=JSON.parse(readFileSync(join(root,'src/spatial/nodes.manifest.json'),'utf8')) as unknown
   expect(catalogNodesResponse.parse(raw)).toHaveLength(manifest.length)
+ })
+})
+
+describe('publication revalidation',()=>{
+ const vid=(seed:string)=>`version-${seed.repeat(64).slice(0,64)}`
+ const itemWithId=(id:string)=>({...editorialDemoCatalog[0],image:{...editorialDemoCatalog[0].image,id}})
+ it('sends exact version IDs in batches of 60 and returns the eligible set',async()=>{
+  const exact=Array.from({length:61},(_,index)=>`version-${index.toString(16).padStart(64,'0')}`)
+  const seen:string[]=[]
+  const fetchImpl=vi.fn(async(url:string)=>{
+    seen.push(url)
+    const wanted=new URL(url,'http://x').searchParams.get('ids')?.split(',')??[]
+    return new Response(JSON.stringify({items:wanted.map(itemWithId),nextCursor:null}),{status:200})
+  })
+  const result=await revalidateVersions(exact,fetchImpl as unknown as typeof fetch)
+  expect(result.verified).toBe(true)
+  expect(result.eligible).toEqual(new Set(exact))
+  expect(seen).toHaveLength(2)
+  expect(seen[0].split('ids=')[1].split(',')).toHaveLength(60)
+  expect(seen[1].split('ids=')[1].split(',')).toHaveLength(1)
+ })
+ it('drops IDs the server no longer returns',async()=>{
+  const [kept,revoked]=[vid('a'),vid('b')]
+  const seen:string[]=[]
+  const fetchImpl=vi.fn(async(url:string)=>{seen.push(url);return new Response(JSON.stringify({items:[itemWithId(kept)],nextCursor:null}),{status:200})})
+  const result=await revalidateVersions([kept,revoked],fetchImpl as unknown as typeof fetch)
+  expect(result.verified).toBe(true)
+  expect(result.eligible).toEqual(new Set([kept]))
+  expect(seen[0]).toContain(encodeURIComponent(kept))
+ })
+ it('never sends IDs that are not exact version IDs',async()=>{
+  const seen:string[]=[]
+  const fetchImpl=vi.fn(async(url:string)=>{seen.push(url);return new Response(JSON.stringify({items:[],nextCursor:null}),{status:200})})
+  const result=await revalidateVersions(['curio-owner-08-v1','version-too-short',vid('c')],fetchImpl as unknown as typeof fetch)
+  expect(result.verified).toBe(true)
+  expect(result.eligible).toEqual(new Set())
+  expect(seen).toHaveLength(1)
+  expect(seen[0]).not.toContain('curio-owner-08-v1')
+ })
+ it('reports unverified when the check itself fails',async()=>{
+  const failing=vi.fn(async()=>{throw Error('no worker')})
+  expect(await revalidateVersions([vid('d')],failing as unknown as typeof fetch)).toEqual({eligible:new Set(),verified:false})
+  const refused=vi.fn(async()=>new Response('{}',{status:503}))
+  expect(await revalidateVersions([vid('e')],refused as unknown as typeof fetch)).toEqual({eligible:new Set(),verified:false})
+  const invalid=vi.fn(async()=>new Response(JSON.stringify({items:[{id:'x'}]}),{status:200}))
+  expect(await revalidateVersions([vid('f')],invalid as unknown as typeof fetch)).toEqual({eligible:new Set(),verified:false})
+ })
+ it('sends no request for an empty ID list',async()=>{
+  const fetchImpl=vi.fn(async()=>new Response('{}',{status:200}))
+  expect(await revalidateVersions([],fetchImpl as unknown as typeof fetch)).toEqual({eligible:new Set(),verified:true})
+  expect(fetchImpl).not.toHaveBeenCalled()
  })
 })

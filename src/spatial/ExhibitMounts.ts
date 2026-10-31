@@ -7,6 +7,7 @@ export type Pick={assetId:string;hotspotId?:string}
 // hotspot rings. One group per staged exhibit along the promenade.
 export class ExhibitMounts{
   readonly group=new THREE.Group()
+  onArtworkError?:(assetId:string)=>void
   private loader=new THREE.TextureLoader()
   private raycaster=new THREE.Raycaster()
   private pickables:THREE.Object3D[]=[]
@@ -43,11 +44,14 @@ export class ExhibitMounts{
       mount.add(art)
       this.pickables.push(art)
       this.loader.load(exhibit.image,texture=>{
+        // A pruned mount is detached before its texture arrives; dispose the
+        // late arrival instead of resurrecting revoked artwork.
+        if(!art.parent){texture.dispose();return}
         texture.colorSpace=THREE.SRGBColorSpace
         ;(art.material as THREE.MeshBasicMaterial).map=texture
         ;(art.material as THREE.MeshBasicMaterial).color.set(0xffffff)
         ;(art.material as THREE.MeshBasicMaterial).needsUpdate=true
-      },undefined,()=>{/* Placeholder board stays; the rail still shows content. */})
+      },undefined,()=>{this.onArtworkError?.(exhibit.assetId)})
       for(const hotspot of exhibit.hotspots){
         const ring=new THREE.Mesh(
           new THREE.TorusGeometry(0.16,0.028,12,32),

@@ -76,6 +76,9 @@ export class NetworkChamber{
     image.crossOrigin='anonymous'
     image.onerror=()=>{/* Graphite disc stays; the HUD panel carries the label. */}
     image.onload=()=>{
+      // A pruned node is detached before its thumbnail arrives; the graphite
+      // disc stays and nothing revoked is ever drawn.
+      if(!thumb.parent)return
       const size=256,canvas=document.createElement('canvas')
       canvas.width=size;canvas.height=size
       const ctx=canvas.getContext('2d')
