@@ -7,14 +7,14 @@ test('a direct /explore visit has a same-origin, refresh-safe empty state',async
  await page.reload()
  await expect(page.getByRole('button',{name:/Shape your curiosity/})).toBeVisible()
  await page.getByRole('button',{name:/Shape your curiosity/}).click()
- await expect(page).toHaveURL('http://127.0.0.1:4173/')
+ await expect(page).toHaveURL('http://127.0.0.1:4173/legacy')
  await expect(page.locator('.reference-discover')).toBeVisible()
 })
 
 test('generation opens /explore, preserves the validated edition through reload and browser history',async({page})=>{
  await page.emulateMedia({reducedMotion:'reduce'})
  await page.route('**/api/editorial',route=>route.fulfill({status:503,body:'AI disabled'}))
- await page.goto('/')
+ await page.goto('/legacy')
  await page.getByLabel('Your discovery prompt').fill('A rounded lounge chair in a quiet room')
  await page.getByRole('button',{name:'Generate magazine'}).click()
  await expect(page).toHaveURL('http://127.0.0.1:4173/explore')
@@ -35,7 +35,7 @@ test('generation opens /explore, preserves the validated edition through reload 
  await expect(page.locator('.visual-journey')).toBeVisible()
  await page.getByRole('button',{name:'Return to reading'}).click()
  await page.getByRole('button',{name:'Refine with a new prompt'}).click()
- await expect(page).toHaveURL('http://127.0.0.1:4173/')
+ await expect(page).toHaveURL('http://127.0.0.1:4173/legacy')
  await page.goBack()
  await expect(page).toHaveURL(/\/explore\?page=2(?:#reader-sequence)?$/)
  await expect(page.locator('.visual-reader')).toBeVisible()
@@ -44,7 +44,7 @@ test('generation opens /explore, preserves the validated edition through reload 
 })
 
 test('an invalid saved edition cannot be rendered on /explore',async({page})=>{
- await page.goto('/')
+ await page.goto('/legacy')
  await page.evaluate(()=>sessionStorage.setItem('curio.explore.edition.v1',JSON.stringify({version:1,savedAt:Date.now(),source:'meta',retrieval:'d1',plan:{title:'Unapproved',features:[]},prefs:{}})))
  await page.goto('/explore')
  await expect(page.getByRole('heading',{name:'Your next discovery begins with a prompt.'})).toBeVisible()
@@ -54,7 +54,7 @@ test('an invalid saved edition cannot be rendered on /explore',async({page})=>{
 test('reload rechecks asset identity and withholds a changed or unpublished version',async({page})=>{
  await page.emulateMedia({reducedMotion:'reduce'})
  await page.route('**/api/editorial',route=>route.fulfill({status:503,body:'AI disabled'}))
- await page.goto('/')
+ await page.goto('/legacy')
  await page.getByLabel('Your discovery prompt').fill('Rounded lounge chair in a quiet room')
  await page.getByRole('button',{name:'Generate magazine'}).click()
  await expect(page.locator('.visual-reader')).toBeVisible()
@@ -69,7 +69,7 @@ test('mobile Reader scroll rhythm remains usable with reduced motion and touch',
  const page=await context.newPage()
  try{
  await page.route('**/api/editorial',route=>route.fulfill({status:503,body:'AI disabled'}))
- await page.goto('/')
+ await page.goto('/legacy')
  await page.getByLabel('Your discovery prompt').fill('Rounded lounge chair in a quiet room')
  await page.getByRole('button',{name:'Generate magazine'}).click()
  await expect(page.locator('.visual-reader')).toBeVisible()

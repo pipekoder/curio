@@ -8,7 +8,7 @@ test('touch exploration reveals an authored photo hotspot and closes without los
  const page=await context.newPage()
  try{
   await page.route('**/api/editorial',route=>route.fulfill({status:503,body:'AI disabled'}))
-  await page.goto('http://127.0.0.1:4173/')
+  await page.goto('http://127.0.0.1:4173/legacy')
   await page.getByLabel('Your discovery prompt').fill('Rounded lounge chair in a quiet room')
   await page.getByRole('button',{name:'Generate magazine'}).tap()
   await expect(page.locator('.visual-reader')).toBeVisible()
@@ -26,7 +26,7 @@ test('lamp editorial slice preserves the image, object and reading context throu
  await page.setViewportSize({width:390,height:844})
  await page.emulateMedia({reducedMotion:'reduce'})
  await page.route('**/api/editorial',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({source:'meta',retrieval:'fictional',cached:false,plan:liveHome.plan,items:liveHome.plan.features.map(f=>({id:f.catalogId,image:{id:f.assetId}}))})}))
- await page.goto('/')
+ await page.goto('/legacy')
  await page.getByLabel('Your discovery prompt').fill('Create a quiet magazine about paper lamps and calm reading rooms')
  await page.getByRole('checkbox',{name:/Use Meta AI/}).check()
  await page.getByRole('button',{name:'Generate magazine'}).click()
@@ -52,7 +52,7 @@ test('lamp editorial slice preserves the image, object and reading context throu
 test('public root opens Discover without prototype controls, and saving an image opens Collect',async({page})=>{
  await page.setViewportSize({width:390,height:844})
  await page.route('**/api/editorial',route=>route.fulfill({status:503,body:'AI disabled'}))
- await page.goto('/')
+ await page.goto('/legacy')
  await expect(page.locator('.reference-discover')).toBeVisible()
  await expect(page.getByText('Discover frontend review')).toHaveCount(0)
  await page.keyboard.press('Tab')
@@ -78,7 +78,7 @@ for(const width of [390,768,1440])test(`coded visual journey at ${width}px prese
  await page.setViewportSize({width,height:width===390?844:900})
  await page.emulateMedia({reducedMotion:'reduce'})
  await page.route('**/api/editorial',async route=>{await new Promise(resolve=>setTimeout(resolve,2200));await route.fulfill({status:503,body:'Unavailable'})})
- await page.goto('/')
+ await page.goto('/legacy')
  const fillsCanvas=async(selector:string)=>expect((await page.locator(selector).boundingBox())!.width).toBeGreaterThan(width*.94)
  await expect(page.locator('.reference-discover')).toBeVisible()
  await fillsCanvas('.reference-discover')
@@ -140,7 +140,7 @@ for(const width of [390,768,1440])test(`coded visual journey at ${width}px prese
 test('two curiosity prompts change the primary Reader photo, headline and contextual product',async({page})=>{
  await page.setViewportSize({width:768,height:900})
  await page.route('**/api/editorial',route=>route.fulfill({status:503,body:'Unavailable'}))
- await page.goto('/')
+ await page.goto('/legacy')
  await page.getByLabel('Your discovery prompt').fill('Focus on a rounded lounge chair and sculptural seating in quiet rooms')
  await page.getByRole('button',{name:'Generate magazine'}).click()
  await expect(page.locator('.visual-reader')).toBeVisible()
@@ -172,7 +172,7 @@ test('validated Muse-shaped plans control the primary image, headline and editio
   const plan=travel?plans.travel:liveHome.plan
   await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({source:'meta',retrieval:'fictional',cached:false,plan,items:plan.features.map(f=>({id:f.catalogId,image:{id:f.assetId}}))})})
  })
- await page.goto('/')
+ await page.goto('/legacy')
  await page.getByLabel('Your discovery prompt').fill('paper quiet lamp')
  await page.getByRole('checkbox',{name:/Use Meta AI/}).check()
  await page.getByRole('button',{name:'Generate magazine'}).click()
@@ -198,7 +198,7 @@ test('validated Muse-shaped plans control the primary image, headline and editio
 
 test('a disabled Worker fictional response keeps the local approved-photo fallback',async({page})=>{
  await page.route('**/api/editorial',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({source:'deterministic',retrieval:'fictional',cached:false,plan:liveHome.plan,items:liveHome.plan.features.map(f=>({id:f.catalogId,image:{id:f.assetId}}))})}))
- await page.goto('/')
+ await page.goto('/legacy')
  await page.getByLabel('Your discovery prompt').fill('Focus on a rounded lounge chair and sculptural seating in quiet rooms')
  await page.getByRole('button',{name:'Generate magazine'}).click()
  await expect(page.locator('.visual-reader-back-photo img')).toHaveAttribute('src',/\/editorial\/read\/(08_ochre_lounge_chair|16_read_chair)\.png/)
@@ -208,7 +208,7 @@ test('a disabled Worker fictional response keeps the local approved-photo fallba
 test('full-width stages preserve request truth and Journey backtracking',async({page})=>{
  await page.setViewportSize({width:1440,height:900})
  await page.route('**/api/editorial',async route=>{await new Promise(resolve=>setTimeout(resolve,400));await route.fulfill({status:503,body:'AI disabled'})})
- await page.goto('/')
+ await page.goto('/legacy')
  const discover=page.locator('.reference-discover')
  expect((await discover.boundingBox())!.width).toBeGreaterThan(1400)
  const example=page.getByRole('button',{name:'Design language'})
