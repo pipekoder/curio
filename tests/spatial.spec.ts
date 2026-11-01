@@ -388,6 +388,29 @@ test('slow generation holds with honest elapsed time and no simulated progress',
   await expect(page.getByTestId('spatial-edition-chip')).toBeVisible({timeout:15000})
 })
 
+test('ai-length headlines and narratives stay readable without overflow',async({page})=>{
+  const headline='A closer look at the quiet arrangement of objects within soft northern light levels'
+  const sentence='Imagine the visible arrangement inviting a closer look at the space around each form. '
+  const narrative=sentence.repeat(4).trim().slice(0,395)
+  const longPlan={...metaPlan,features:metaPlan.features.map(feature=>({...feature,headline,narrative}))}
+  await page.route('**/api/editorial',route=>route.fulfill({status:200,json:{plan:longPlan,items:groundedItems,source:'meta',retrieval:'d1',cached:false}}))
+  for(const viewport of [{width:1440,height:900},{width:390,height:844}]){
+    await page.setViewportSize(viewport)
+    await page.goto('/')
+    await submitPrompt(page)
+    await expect(page.getByTestId('spatial-edition-chip')).toContainText('Meta AI',{timeout:15000})
+    await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight*0.22))
+    await expect(page.locator('.spatial-rail')).toBeVisible()
+    await expect(page.locator('.spatial-rail-card h2').first()).toContainText('A closer look')
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true)
+    await expect(page.getByRole('button',{name:'Journey',exact:true})).toBeVisible()
+    await page.locator('.spatial-rail-card').first().getByRole('button',{name:'Inspect exhibit'}).click()
+    await expect(page.locator('.spatial-inspect')).toBeVisible()
+    await expect(page.locator('.spatial-inspect p').first()).not.toBeEmpty()
+    await page.keyboard.press('Escape')
+  }
+})
+
 test('a slow full-review workflow still stages meta past the old bound',async({page})=>{
   test.setTimeout(90000)
   await page.route('**/api/editorial',async route=>{

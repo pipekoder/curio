@@ -93,6 +93,33 @@ describe('spatial edition fetch',()=>{
   expect(honest).toBe('authored-fallback')
   expect(timedOut).toBe(false)
  })
+ it('stages reviewed v3 features with grounding fields and varied text length',async()=>{
+  // Mirrors the worker's own reviewed-plan shape (tests/editorial-public):
+  // qualityVersion 3, observation keys, discovery questions, source IDs.
+  // Forward-compatibility constraint: the client parses features with
+  // strictObject and fails closed to the authored fallback on unknown keys.
+  // The Editorial Feature response schema must stay frozen during V2
+  // activation unless a coordinated frontend parser update is approved.
+  const first=pool[0],second=pool[1]
+  const long='Imagine the visible arrangement inviting a closer look at the space around each form. '.repeat(4).trim().slice(0,395)
+  const reviewed={
+    qualityVersion:3,title:'The Architecture of Attention',deck:'Two visual studies invite a closer look.',
+    features:[
+      {catalogId:first.id,assetId:first.image.id,headline:'Where Attention Begins',narrative:long,
+        observationKeys:['subjects.seating'],discoveryQuestion:'How does this arrangement change the surrounding space?',
+        sourceIds:['src:demo-1'],layout:'hero',motion:'still',theme:first.lifestyleTags[0]},
+      {catalogId:second.id,assetId:second.image.id,headline:'A Second View',narrative:'Consider a second composition.',
+        sourceIds:['src:demo-2'],layout:'split',motion:'still',theme:second.lifestyleTags[0]},
+    ],
+  }
+  const body={plan:reviewed,items:pool,source:'meta',retrieval:'d1',cached:false,
+    imageContextAssetIds:[first.image.id],inference:{attempted:true,reservedUnits:4,latencyMs:12000,usage:null}}
+  const {edition,honest,timedOut}=await fetchEdition('quiet rooms',true,ok(body) as unknown as typeof fetch)
+  expect(honest).toBe('meta')
+  expect(timedOut).toBe(false)
+  expect(edition.plan.features).toHaveLength(2)
+  expect(edition.plan.features[0].narrative).toHaveLength(long.length)
+ })
  it('discloses timeouts and skipped features in edition status',()=>{
   expect(editionStatusCopy(true,0)).toContain('90 seconds')
   expect(editionStatusCopy(true,0)).toContain('authored edition')
