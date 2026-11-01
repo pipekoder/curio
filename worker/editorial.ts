@@ -38,6 +38,7 @@ import {EDITORIAL_KNOWLEDGE_VERSION,editorialKnowledgeInstruction,selectEditoria
 import {EditorialReviewError,reviewEditorialPlan,reviewHasHardFailure,reviseEditorialPlan,type EditorialMeasurement} from './editorial-reviewer';
 import type { EditorialSource } from '../shared/editorial-sources';
 import { loadEditorialSources,parsePilotVersions } from './editorial-sources';
+import { resolveR2MediaPermit } from './media-ai-adapter';
 import type { Bindings } from "./index";
 // Index is never public. Only already approved compiled catalog records can be
 // hydrated from D1 hits; no returned URL, name, hint, job or source row is exposed.
@@ -46,6 +47,7 @@ export async function editorialPool(
   p: EditorialPreferences,
   pilotVersions?:readonly string[],
   requireAiReady=false,
+  dynamicCatalog=false,
 ): Promise<{ items: CatalogItem[]; retrieval: "d1" | "fictional"; visualContexts: VisualContext[]; approvals:ExternalAssetApprovals; sources:EditorialSource[] }> {
   if (env.CATALOG_DB)
     try {
@@ -77,10 +79,25 @@ export async function editorialPool(
         if (context) visualContexts.push(context);
         return [item];
       });
+      if(dynamicCatalog){
+        const available=env.MEDIA_BUCKET?await Promise.all(items.filter(item=>{
+          const hit=hits.find(row=>row.version_id===item.image.id)
+          return hit?.editorial_ready===1&&hit.classification_source==='meta'&&visualContexts.some(context=>context.assetId===item.image.id)
+        }).slice(0,12).map(async item=>{
+          try{
+            const hit=hits.find(row=>row.version_id===item.image.id)
+            const permit=await resolveR2MediaPermit(env.CATALOG_DB!,item.image.id)
+            if(!permit||permit.sha256!==hit?.image_sha256)return null
+            const object=await env.MEDIA_BUCKET!.head(permit.r2Key)
+            return object?.size===permit.byteSize&&object.customMetadata?.sha256===permit.sha256&&object.customMetadata?.versionId===item.image.id?item:null
+          }catch{return null}
+        })):[]
+        items=available.filter((item):item is CatalogItem=>Boolean(item)).slice(0,6)
+      }
       const sources=await loadEditorialSources(env.CATALOG_DB,items.map(item=>item.image.id).filter(id=>/^version-/.test(id)))
       // AI editorial candidates must have current exact-version observations
       // and owner-supplied context, whether or not the pilot list is active.
-      if(requireAiReady||pilotVersions)items=items.filter(item=>visualContexts.some(context=>context.assetId===item.image.id)&&sources.some(source=>source.assetId===item.image.id))
+      if(requireAiReady||pilotVersions||dynamicCatalog)items=items.filter(item=>visualContexts.some(context=>context.assetId===item.image.id)&&sources.some(source=>source.assetId===item.image.id))
       if (items.length) return { items, retrieval: "d1", visualContexts:visualContexts.filter(context=>items.some(item=>item.image.id===context.assetId)), approvals, sources:sources.filter(source=>items.some(item=>item.image.id===source.assetId)) };
     } catch {
       /* Missing local schema or unavailable D1 fails closed to approved demos. */
@@ -112,7 +129,9 @@ editorialApi.post("/", async (c) => {
   )
     return c.json({ error: "Origin or content type not allowed." }, 403);
   const pilot=parsePilotVersions(env.EDITORIAL_PILOT_VERSION_IDS)
-  const pool = await editorialPool(env, p,pilot??undefined,env.MAGAZINE_AI_ENABLED==='true');
+  const dynamicCatalog=env.EDITORIAL_PUBLIC_AI_ENABLED==='true'&&env.EDITORIAL_DYNAMIC_CATALOG_ENABLED==='true'
+  const selectedPilot=dynamicCatalog?null:pilot
+  const pool = await editorialPool(env, p,selectedPilot??undefined,env.MAGAZINE_AI_ENABLED==='true',dynamicCatalog);
   let inference = {
     attempted: false,
     reservedUnits: 0,
@@ -165,7 +184,7 @@ editorialApi.post("/", async (c) => {
   if(!pool.items.every(a=>a.permissions.aiAnalysis.status==='approved'&&a.permissions.aiAnalysis.evidence)) {fallbackReason='analysis_permissions';return fallback();}
   const suppliedPilotToken=c.req.header('X-Curio-Editorial-Pilot')??''
   const pilotAuthorized=Boolean(pilot&&pool.retrieval==='d1'&&env.EDITORIAL_REVIEW_PILOT_TOKEN&&env.EDITORIAL_REVIEW_PILOT_TOKEN.length>=32&&suppliedPilotToken.length>=32&&timingSafeEqual(suppliedPilotToken,env.EDITORIAL_REVIEW_PILOT_TOKEN))
-  if(pilot?!pilotAuthorized:env.EDITORIAL_PUBLIC_AI_ENABLED!=='true'){fallbackReason='pilot_authorization';return fallback()}
+  if(selectedPilot?!pilotAuthorized:env.EDITORIAL_PUBLIC_AI_ENABLED!=='true'){fallbackReason='pilot_authorization';return fallback()}
   const reviewEnabled=true
   const knowledgeV2=reviewEnabled&&env.EDITORIAL_KNOWLEDGE_V2_ENABLED==='true'
   const key = await catalogDigest(
@@ -188,7 +207,7 @@ editorialApi.post("/", async (c) => {
       plans.delete(key);
     }
   try {
-    const budget = await reserveInference(env, ip,4,undefined,Boolean(pilot));
+    const budget = await reserveInference(env, ip,4,undefined,Boolean(selectedPilot));
     if (budget.allowed !== true) {
       fallbackReason = "budget";
       return fallback();
