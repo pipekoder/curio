@@ -60,6 +60,16 @@
 /* Static hover tints only; no transitions by design. */
 .spatial-actions button:hover,.spatial-rail-card button:hover,.spatial-journey-bar button:hover,.spatial-inspect-close:hover{background:#f7f8fa}
 .spatial-dock button[type=submit]:hover:not(:disabled),.spatial-node-enter:hover,.spatial-fallback button:hover:not(:disabled){background:#1e2430}
-.spatial-hud a:focus-visible,.spatial-hud button:focus-visible,.spatial-dock button:focus-visible,.spatial-dock textarea:focus-visible,.spatial-consent input:focus-visible,.spatial-skip:focus-visible,.spatial-rail-card button:focus-visible,.spatial-inspect-close:focus-visible,.spatial-journey-bar button:focus-visible,.spatial-node-enter:focus-visible{outline:2px solid #385fa8;outline-offset:3px}
+.spatial-hud a:focus-visible,.spatial-hud button:focus-visible,.spatial-dock button:focus-visible,.spatial-dock textarea:focus-visible,.spatial-consent input:focus-visible,.spatial-skip:focus-visible,.spatial-rail-card button:focus-visible,.spatial-inspect-close:focus-visible,.spatial-journey-bar button:focus-visible,.spatial-node-enter:focus-visible,.object-region:focus-visible{outline:2px solid #385fa8;outline-offset:3px}
 @media(max-width:640px){.spatial-hud{gap:10px;padding:10px 14px}.spatial-crumb{display:none}.spatial-dock{padding:20px}.spatial-node-panel{top:auto;bottom:84px;left:12px;right:12px;width:auto;max-height:42vh}.spatial-journey-bar{bottom:12px;gap:8px;padding:6px 10px;flex-wrap:nowrap;overflow-x:auto;max-width:calc(100vw - 24px)}.spatial-journey-bar button{flex:none;min-height:36px;padding:6px 12px}.spatial-journey-bar .spatial-fine{display:none}}
 @media(prefers-reduced-motion:reduce){.spatial-dock{animation:none}.spatial-root{scroll-behavior:auto}}
+/* Verified-object discovery: approved SAM regions on the exhibit image. */
+.object-discovery{margin:0 0 18px}
+.object-figure{position:relative;margin:0;border:1px solid #e0e5ed;border-radius:12px;overflow:hidden;background:#e8ecf1}
+.object-figure img{display:block;width:100%;height:auto}
+.object-region{position:absolute;padding:0;border:2px solid #ffffffee;border-radius:8px;background:#10121914;cursor:pointer;box-shadow:0 0 0 1px #10121966,inset 0 0 0 1px #10121955}
+.object-region::after{content:'';position:absolute;inset:-8px}
+.object-region:hover{background:#1012192e}
+.object-region.is-selected{border-color:#a9c5ff;background:#a9c5ff33;box-shadow:0 0 0 2px #385fa8}
+.object-detail{margin-top:12px;border-top:1px solid #e0e5ed;padding-top:12px}
+.object-detail h3{margin:0 0 8px;font:400 20px/1.25 Georgia,serif;color:#101219;overflow-wrap:anywhere}
