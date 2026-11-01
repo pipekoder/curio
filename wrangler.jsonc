@@ -16,6 +16,9 @@
   },
   "vars": {
     "MAGAZINE_AI_ENABLED": "false",
+    "LEGACY_MAGAZINE_AI_ENABLED": "false",
+    "EDITORIAL_REVIEW_ENABLED": "false",
+    "EDITORIAL_PUBLIC_AI_ENABLED": "false",
     "ASSET_AI_ENABLED": "false",
     "SAM_DECODER_ENABLED": "false",
     "META_SPARK_MODEL": "muse-spark-1.3",

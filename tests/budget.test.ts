@@ -86,7 +86,7 @@ it('allows two authorized four-unit pilot reservations per UTC hour and keeps or
   const {state,db}=storage(),budget=new InferenceBudget(state)
   const attempt=(ip:string,units:number,editorialPilot=false)=>budget.fetch(new Request('https://budget',{method:'POST',body:JSON.stringify({ip,ceiling:20,units,...(editorialPilot?{editorialPilot:true}:{})})}))
   try{
-    expect(await (await attempt('a'.repeat(64),4)).json()).toMatchObject({allowed:false})
+    expect(await (await attempt('c'.repeat(64),4)).json()).toMatchObject({allowed:true})
     expect(await (await attempt('a'.repeat(64),4,true)).json()).toMatchObject({allowed:true})
     vi.advanceTimersByTime(61000)
     expect(await (await attempt('a'.repeat(64),4,true)).json()).toMatchObject({allowed:true})
@@ -95,6 +95,24 @@ it('allows two authorized four-unit pilot reservations per UTC hour and keeps or
     expect(await (await attempt('a'.repeat(64),1)).json()).toMatchObject({allowed:false})
     expect(await (await attempt('b'.repeat(64),1)).json()).toMatchObject({allowed:true})
     expect((await attempt('c'.repeat(64),1,true)).status).toBe(400)
+  }finally{db.close()}
+})
+
+it('admits one public reviewed four-unit workflow per IP without raising shared ceilings',async()=>{
+  vi.useFakeTimers();vi.setSystemTime(new Date('2026-10-31T09:00:00Z'))
+  const {state,db}=storage(),budget=new InferenceBudget(state)
+  const attempt=(ip:string,units:number,ceiling=20)=>budget.fetch(new Request('https://budget',{method:'POST',body:JSON.stringify({ip,ceiling,units})}))
+  try{
+    expect(await (await attempt('a'.repeat(64),4)).json()).toMatchObject({allowed:true})
+    vi.advanceTimersByTime(61000)
+    expect(await (await attempt('a'.repeat(64),4)).json()).toMatchObject({allowed:false})
+    expect(await (await attempt('a'.repeat(64),1)).json()).toMatchObject({allowed:false})
+    expect(await (await attempt('b'.repeat(64),4)).json()).toMatchObject({allowed:true})
+    expect(await (await attempt('c'.repeat(64),4,8)).json()).toMatchObject({allowed:false})
+    expect(await (await attempt('c'.repeat(64),4)).json()).toMatchObject({allowed:true})
+    expect(await (await attempt('d'.repeat(64),4)).json()).toMatchObject({allowed:true})
+    expect(await (await attempt('e'.repeat(64),4)).json()).toMatchObject({allowed:true})
+    expect(await (await attempt('f'.repeat(64),4)).json()).toMatchObject({allowed:false})
   }finally{db.close()}
 })
 
