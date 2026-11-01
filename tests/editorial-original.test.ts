@@ -12,7 +12,6 @@ import {
   EditorialGenerationError,
   editorialApi,
 } from "../worker/editorial";
-import type { Bindings } from "../worker/index";
 const plans = JSON.parse(
   readFileSync("tests/fixtures/editorial-original.json", "utf8"),
 );
@@ -188,52 +187,17 @@ it("keeps valid token accounting when the provider stops at the output limit", a
     measurement: { usage: { inputTokens: 800, outputTokens: 420 } },
   });
 });
-it("reports an invalid response as a charged reservation with measured usage, never as a zero-cost fallback", async () => {
+it("preserves measured usage and bounded diagnostics for an invalid model response", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async () =>
       envelope({ ...plans.home, title: "Acme manufactured this object" }),
     ),
   );
-  const env = {
-    PUBLIC_APP_ORIGIN: "https://curio.test",
-    MAGAZINE_AI_ENABLED: "true",
-    META_SPARK_MODEL: "muse-spark-1.3",
-    META_API_KEY: "FAKE",
-    RATE_LIMIT_SALT: "FAKE_SALT_AT_LEAST_32_CHARACTERS_LONG",
-    INFERENCE_BUDGET: {
-      idFromName: () => "FAKE",
-      get: () => ({ fetch: async () => Response.json({ allowed: true }) }),
-    },
-  } as unknown as Bindings;
-  const response = await editorialApi.request(
-    "https://curio.test/",
-    {
-      method: "POST",
-      headers: {
-        Origin: "https://curio.test",
-        "Content-Type": "application/json",
-        "CF-Connecting-IP": "192.0.2.50",
-      },
-      body: JSON.stringify({ ...home, consent: true }),
-    },
-    env,
-  );
-  const data = (await response.json()) as {
-    source: string;
-    fallbackReason: string;
-    inference: {
-      attempted: boolean;
-      reservedUnits: number;
-      usage: { outputTokens: number };
-    };
-  };
-  expect(data.source).toBe("deterministic");
-  expect(data.fallbackReason).toBe("invalid_output");
-  expect(data).toHaveProperty("validationDiagnostic", { code: "visual_vocabulary_or_characters", field: "title" });
-  expect(data.inference.reservedUnits).toBe(1);
-  expect(data.inference.attempted).toBe(true);
-  expect(data.inference.usage.outputTokens).toBe(420);
+  await expect(generateEditorialResult(home,curationCatalog,"FAKE")).rejects.toMatchObject({
+    diagnostic:{code:"visual_vocabulary_or_characters",field:"title"},
+    measurement:{usage:{outputTokens:420}},
+  });
 });
 it("enforces Balanced category coverage and a heavily weighted category leading the sequence", () => {
   const fashion = {

@@ -12,7 +12,7 @@ const options = {
   name: 'curio-test', modules: true, telemetry: { enabled: false }, scriptPath: '.wrangler/dry-run/index.js', compatibilityDate: '2026-10-26',
   durableObjects: { INFERENCE_BUDGET: { className: 'InferenceBudget', useSQLite: true } },
   resourcePersistencePath: state,
-  bindings: { MAGAZINE_AI_ENABLED: 'true', META_SPARK_MODEL: 'muse-spark-1.3', META_API_KEY: 'FAKE_TEST_KEY', PUBLIC_APP_ORIGIN: 'https://curio.test', RATE_LIMIT_SALT: 'test-only-high-entropy-salt-placeholder-32', MAGAZINE_MAX_CALLS: '2' },
+  bindings: { LEGACY_MAGAZINE_AI_ENABLED: 'true', META_SPARK_MODEL: 'muse-spark-1.3', META_API_KEY: 'FAKE_TEST_KEY', PUBLIC_APP_ORIGIN: 'https://curio.test', RATE_LIMIT_SALT: 'test-only-high-entropy-salt-placeholder-32', MAGAZINE_MAX_CALLS: '2' },
   outboundService: async request => {
     assert.equal(request.url, 'https://api.meta.ai/v1/chat/completions')
     const body = await request.json()
