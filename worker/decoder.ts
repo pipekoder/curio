@@ -6,6 +6,7 @@ import { reserveInference } from './inference-budget'
 import { samAssetPermits, type SamAssetPermit } from './sam-assets'
 import { segmentWithMeta, type SamInput } from './sam-client'
 import { regionCommentary } from './decoder-commentary'
+import {SamObjectStore} from './sam-object-store'
 
 export class DecoderError extends Error {
   constructor(public code: string, public status: 400 | 403 | 404 | 409 | 415 | 429 | 502 | 503 | 504, message: string, public retryAfter?: number) { super(message) }
@@ -49,10 +50,13 @@ export async function runDecoder(request: DecoderRequest, env: Bindings, ip: str
   const timeout = setTimeout(() => controller.abort(), 10000)
   try {
     if(r2Permit){
+      const store=new SamObjectStore(env.CATALOG_DB!)
+      const saved=await store.reusable(ad.id,request.assetId,r2Permit.sha256,detail.label,detail.id)
+      if(saved)return {segmentation:bindSegmentation(saved.segmentation,ad),commentary:null,captureId:saved.captureId,reused:true}
       const imageDataUrl=await (await import('./media-ai-adapter')).readR2MediaData(env.MEDIA_BUCKET!,r2Permit,controller.signal)
       let budget;try{budget=await deps.reserve(env,ip,withCommentary?2:1,ad.image.id)}catch{throw new DecoderError('protection_unavailable',503,'The safety budget is unavailable.')}
       if(!budget.allowed)throw new DecoderError('throttled',429,'The shared inference limit has been reached.',budget.retryAfter)
-      const input:SamInput={ad,detailId:detail.id,concept:detail.label,imageDataUrl};const regions=bindSegmentation(await deps.sam(input,env.META_API_KEY,controller.signal),ad);const commentary=withCommentary&&regions.regions.length?decoderCommentary.parse(await deps.commentary(input,env.META_API_KEY,controller.signal)):null;return{segmentation:regions,commentary}
+      const input:SamInput={ad,detailId:detail.id,concept:detail.label,imageDataUrl};const regions=bindSegmentation(await deps.sam(input,env.META_API_KEY,controller.signal),ad);const capture=await store.capture({versionId:request.assetId,imageSha256:r2Permit.sha256,concept:detail.label,segmentation:regions});const commentary=withCommentary&&regions.regions.length?decoderCommentary.parse(await deps.commentary(input,env.META_API_KEY,controller.signal)):null;return{segmentation:regions,commentary,captureId:capture.captureId,reused:false}
     }
     const media = await env.ASSETS!.fetch(new Request(`https://local-assets.invalid${permit.path}`, { signal: controller.signal, redirect: 'manual' }))
     // Bound bytes without decoding or modifying the image. Never use req URLs.

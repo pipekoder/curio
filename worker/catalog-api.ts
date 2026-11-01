@@ -6,6 +6,7 @@ import { queryRequest } from './catalog-contracts'
 import { CatalogConflict, D1Catalog } from './catalog-store'
 import { assetApi } from './asset-api'
 import { allowedOperatorOrigin } from './operator-origin'
+import {SamObjectStore} from './sam-object-store'
 
 export type CatalogBindings = { CATALOG_DB?: D1Database; CATALOG_OPERATOR_ENABLED?: string; CATALOG_OPERATOR_TOKEN?: string; PUBLIC_APP_ORIGIN?: string; ASSET_AI_ENABLED?: string }
 export const catalogApi = new Hono<{ Bindings: CatalogBindings }>()
@@ -51,3 +52,7 @@ catalogApi.patch('/assets/:id', async c => {
   return c.json({ archived: input.archived })
 })
 catalogApi.post('/annotations', async c => { await new D1Catalog(c.env.CATALOG_DB!).annotate(await body(c.req.raw)); return c.json({ stored: true }, 201) })
+catalogApi.patch('/object-regions/:captureId/review',async c=>{
+  try{return c.json(await new SamObjectStore(c.env.CATALOG_DB!).review(c.req.param('captureId'),await body(c.req.raw)))}
+  catch(error){if(error instanceof z.ZodError||error instanceof SyntaxError)return c.json({error:'Invalid object review.'},400);return c.json({error:'Object review unavailable or stale.'},409)}
+})
