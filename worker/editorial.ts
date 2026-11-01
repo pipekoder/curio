@@ -29,7 +29,8 @@ import {
   type EditorialPreferences,
 } from "../shared/editorial";
 import { D1AssetRetriever } from "./asset-retrieval";
-import { InferenceReservation,reserveInference } from "./inference-budget";
+import { InferenceReservation,reserveInference,finishInference } from "./inference-budget";
+import { demoIdentity } from './demo-access';
 import { boundedText } from "./meta";
 import { catalogDigest } from "./catalog-store";
 import { chiefEditorInstruction } from '../shared/editorial-chief';
@@ -182,8 +183,9 @@ editorialApi.post("/", async (c) => {
   )
     return fallback();
   if(!pool.items.every(a=>a.permissions.aiAnalysis.status==='approved'&&a.permissions.aiAnalysis.evidence)) {fallbackReason='analysis_permissions';return fallback();}
+  const tester=await demoIdentity(c.req.raw,env,ip)
   const suppliedPilotToken=c.req.header('X-Curio-Editorial-Pilot')??''
-  const pilotAuthorized=Boolean(pilot&&pool.retrieval==='d1'&&env.EDITORIAL_REVIEW_PILOT_TOKEN&&env.EDITORIAL_REVIEW_PILOT_TOKEN.length>=32&&suppliedPilotToken.length>=32&&timingSafeEqual(suppliedPilotToken,env.EDITORIAL_REVIEW_PILOT_TOKEN))
+  const pilotAuthorized=Boolean(selectedPilot&&pool.retrieval==='d1'&&(tester||env.EDITORIAL_REVIEW_PILOT_TOKEN&&env.EDITORIAL_REVIEW_PILOT_TOKEN.length>=32&&suppliedPilotToken.length>=32&&timingSafeEqual(suppliedPilotToken,env.EDITORIAL_REVIEW_PILOT_TOKEN)))
   if(selectedPilot?!pilotAuthorized:env.EDITORIAL_PUBLIC_AI_ENABLED!=='true'){fallbackReason='pilot_authorization';return fallback()}
   const reviewEnabled=true
   const knowledgeV2=reviewEnabled&&env.EDITORIAL_KNOWLEDGE_V2_ENABLED==='true'
@@ -206,22 +208,25 @@ editorialApi.post("/", async (c) => {
     } catch {
       plans.delete(key);
     }
+  let reservationId:string|undefined,outcome:'completed'|'fallback'|'error'='error'
   try {
-    const budget = await reserveInference(env, ip,4,undefined,Boolean(selectedPilot));
+    const budget = await reserveInference(env, ip,4,undefined,Boolean(selectedPilot),tester);
     if (budget.allowed !== true) {
       fallbackReason = "budget";
       return fallback();
     }
+    reservationId=budget.reservationId
     const reservation=new InferenceReservation(4)
     inference = { ...inference, attempted: true, reservedUnits: reservation.reservedUnits };
     fallbackReason = "provider_or_validation";
     callStarted = performance.now();
     const workflow=await runEditorialWorkflow(p,pool.items,env.META_API_KEY,pool.visualContexts,pool.approvals,pool.sources,reservation,reviewEnabled,undefined,knowledgeV2)
     inference={...inference,...workflow.measurement}
-    if(workflow.status==='rejected'){fallbackReason='editorial_rejected';return fallback()}
+    if(workflow.status==='rejected'){outcome='fallback';fallbackReason='editorial_rejected';return fallback()}
     const plan=workflow.plan
     if (plans.size >= 30) plans.delete(plans.keys().next().value!);
     plans.set(key, { expires: Date.now() + 300000, plan });
+    outcome='completed'
     return c.json({
       plan,
       items: pool.items,
@@ -246,6 +251,8 @@ editorialApi.post("/", async (c) => {
     if(error instanceof EditorialReviewError){inference={...inference,...combineMeasurements({latencyMs:inference.latencyMs??0,usage:inference.usage},error.measurement)};fallbackReason='invalid_output'}
     if(error instanceof EditorialWorkflowBudgetError){inference={...inference,...error.measurement};fallbackReason='budget'}
     return fallback();
+  } finally {
+    if(reservationId)await finishInference(env,reservationId,outcome).catch(()=>{/* Lease expires after 90 seconds if release is unavailable. */})
   }
 });
 export async function generateEditorialPlan(

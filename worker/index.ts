@@ -8,6 +8,7 @@ import { magazineRequest } from '../shared/magazine'
 import { curationCatalog as catalog } from '../shared/catalog'
 import { boundedText, generateMagazine, GenerationError } from './meta'
 import { editorialApi } from './editorial'
+import { issueDemoSession,clearDemoSession } from './demo-access'
 import { catalogApi, type CatalogBindings } from './catalog-api'
 import { mediaApi, mediaOperatorAuth, mediaRoot, publicMedia } from './media-api'
 export { InferenceBudget } from './budget'
@@ -25,6 +26,10 @@ export type Bindings = CatalogBindings & {
   LEGACY_MAGAZINE_AI_ENABLED?: string
   EDITORIAL_REVIEW_ENABLED?: string
   EDITORIAL_PUBLIC_AI_ENABLED?: string
+  EDITORIAL_DEMO_BUDGET_ENABLED?: string
+  EDITORIAL_DEMO_DAILY_UNITS?: string
+  EDITORIAL_DEMO_LIFETIME_UNITS?: string
+  EDITORIAL_TESTER_TOKEN_HASHES?: string
   EDITORIAL_DYNAMIC_CATALOG_ENABLED?: string
   EDITORIAL_KNOWLEDGE_V2_ENABLED?: string
   EDITORIAL_REVIEW_PILOT_TOKEN?: string
@@ -41,6 +46,8 @@ app.use('/api/*', async (c, next) => { c.header('Cache-Control', 'no-store'); aw
 app.route('/api/operator/catalog', catalogApi)
 app.get('/api/operator/media/',mediaOperatorAuth,mediaRoot)
 app.route('/api/operator/media', mediaApi)
+app.post('/api/editorial/demo-session',c=>issueDemoSession(c.req.raw,c.env))
+app.delete('/api/editorial/demo-session',c=>clearDemoSession(c.req.raw,c.env))
 app.route('/api/editorial', editorialApi)
 app.get('/api/media/:version', c => publicMedia(c.req.raw,c.env,c.req.param('version')))
 app.get('/api/catalog/published',async c=>{
