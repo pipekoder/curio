@@ -6,8 +6,9 @@ import { queryRequest } from './catalog-contracts'
 import { CatalogConflict, D1Catalog } from './catalog-store'
 import { assetApi } from './asset-api'
 import { allowedOperatorOrigin } from './operator-origin'
+import {researchPublicSources} from './cultural-research'
 
-export type CatalogBindings = { CATALOG_DB?: D1Database; CATALOG_OPERATOR_ENABLED?: string; CATALOG_OPERATOR_TOKEN?: string; PUBLIC_APP_ORIGIN?: string; ASSET_AI_ENABLED?: string }
+export type CatalogBindings = { CATALOG_DB?: D1Database; CATALOG_OPERATOR_ENABLED?: string; CATALOG_OPERATOR_TOKEN?: string; PUBLIC_APP_ORIGIN?: string; ASSET_AI_ENABLED?: string; CULTURAL_RESEARCH_ENABLED?: string; RESEARCH_SOURCE_ORIGINS?: string }
 export const catalogApi = new Hono<{ Bindings: CatalogBindings }>()
 catalogApi.use('*', async (c, next) => {
   c.header('Cache-Control', 'no-store')
@@ -51,3 +52,8 @@ catalogApi.patch('/assets/:id', async c => {
   return c.json({ archived: input.archived })
 })
 catalogApi.post('/annotations', async c => { await new D1Catalog(c.env.CATALOG_DB!).annotate(await body(c.req.raw)); return c.json({ stored: true }, 201) })
+catalogApi.post('/research',async c=>{
+  if(c.env.CULTURAL_RESEARCH_ENABLED!=='true')return c.json({status:'research_disabled'},503)
+  try{return c.json(await researchPublicSources(await body(c.req.raw),c.env.RESEARCH_SOURCE_ORIGINS??'',{cache:typeof caches==='undefined'?undefined:await caches.open('curio-cultural-research-v1')}))}
+  catch{return c.json({error:'Research source unavailable or invalid.'},400)}
+})
