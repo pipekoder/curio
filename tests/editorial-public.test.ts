@@ -9,7 +9,7 @@ import {editorialDimensions,EDITORIAL_STANDARD_VERSION} from '../shared/editoria
 
 vi.setConfig({testTimeout:20000,hookTimeout:20000})
 const origin='https://curio.example.com'
-let mf:Miniflare,db:D1Database,store:MediaStore,ids:string[]
+let mf:Miniflare,db:D1Database,bucket:R2Bucket,store:MediaStore,ids:string[]
 const reserve=vi.fn(async(_url:string,_init:RequestInit)=>{void _url;void _init;return Response.json({allowed:true,retryAfter:0})})
 const budget={idFromName:vi.fn(()=>({})),get:vi.fn(()=>({fetch:reserve}))} as unknown as DurableObjectNamespace
 const prefs={interests:'Explore the relationship between seating and light',aesthetics:['Scandinavian'],allocations:{home:100,fashion:0,travel:0},mode:'Focused',consent:true}
@@ -19,7 +19,7 @@ const post=(overrides:Record<string,unknown>={},headers:Record<string,string>={}
 beforeEach(async()=>{
   mf=new Miniflare(convertV4MiniflareOptions({modules:true,script:'export default {fetch(){return new Response("test")}}',compatibilityDate:'2026-10-26',d1Databases:['CATALOG_DB'],r2Buckets:['MEDIA_BUCKET'],telemetry:{enabled:false}}))
   db=await mf.getD1Database('CATALOG_DB') as unknown as D1Database
-  const bucket=await mf.getR2Bucket('MEDIA_BUCKET') as unknown as R2Bucket
+  bucket=await mf.getR2Bucket('MEDIA_BUCKET') as unknown as R2Bucket
   for(const file of ['0001_catalog.sql','0002_asset_intelligence.sql','0003_discovery_content.sql','0004_media_studio.sql'])await db.exec(readFileSync(`migrations/${file}`,'utf8').replace(/^--.*$/gm,'').replace(/\s+/g,' '))
   store=new MediaStore(db,bucket,origin)
   const files=['01_boucle_lounge_chair.png','02_ceramic_vase.png']
@@ -85,5 +85,27 @@ it('does not infer from metadata-free or observation-free versions',async()=>{
   expect(send).not.toHaveBeenCalled();expect(reserve).not.toHaveBeenCalled()
   await db.prepare('DELETE FROM asset_analysis_jobs WHERE version_id=?').bind(ids[1]).run()
   expect(await (await post()).json()).toMatchObject({source:'deterministic',fallbackReason:'pilot_not_ready'})
+  expect(send).not.toHaveBeenCalled();expect(reserve).not.toHaveBeenCalled()
+})
+
+it('selects exact-version published R2 media outside the pinned pilot only when dynamic public mode is enabled',async()=>{
+  const send=provider('PASS');vi.stubGlobal('fetch',send)
+  const pinned=Array.from({length:6},(_,i)=>`version-${String(i+1).repeat(64)}`).join(',')
+  expect(await (await post({EDITORIAL_PILOT_VERSION_IDS:pinned})).json()).toMatchObject({source:'deterministic',fallbackReason:'pilot_not_ready'})
+  const result=await (await post({EDITORIAL_PILOT_VERSION_IDS:pinned,EDITORIAL_DYNAMIC_CATALOG_ENABLED:'true',MEDIA_BUCKET:bucket},{},'Study the visual relationship between seating and the quiet rituals of a room')).json() as {source:string;retrieval:string;plan:{features:{assetId:string}[]}}
+  expect(result).toMatchObject({source:'meta',retrieval:'d1'})
+  expect(result.plan.features.map(feature=>feature.assetId)).toEqual(expect.arrayContaining(ids))
+  expect(send).toHaveBeenCalledTimes(2)
+})
+
+it('excludes missing R2 objects, revoked analysis and metadata-free images in dynamic mode',async()=>{
+  const send=provider('PASS');vi.stubGlobal('fetch',send)
+  const options={EDITORIAL_DYNAMIC_CATALOG_ENABLED:'true',MEDIA_BUCKET:bucket}
+  const key=await db.prepare('SELECT r2_key FROM media_objects WHERE version_id=?').bind(ids[0]).first<{r2_key:string}>()
+  await bucket.delete(key!.r2_key)
+  expect(await (await post(options)).json()).toMatchObject({source:'deterministic',fallbackReason:'pilot_not_ready'})
+  expect(send).not.toHaveBeenCalled();expect(reserve).not.toHaveBeenCalled()
+  await db.prepare('DELETE FROM asset_analysis_jobs WHERE version_id=?').bind(ids[1]).run()
+  expect(await (await post(options)).json()).toMatchObject({source:'deterministic',fallbackReason:'pilot_not_ready'})
   expect(send).not.toHaveBeenCalled();expect(reserve).not.toHaveBeenCalled()
 })
