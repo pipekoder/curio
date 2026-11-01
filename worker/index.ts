@@ -4,6 +4,7 @@ import { timingSafeEqual } from 'hono/utils/buffer'
 import { reserveInference } from './inference-budget'
 import { decoderRequest } from '../shared/decoder'
 import { runDecoder, DecoderError, decoderAvailable } from './decoder'
+import {SamObjectStore} from './sam-object-store'
 import { magazineRequest } from '../shared/magazine'
 import { curationCatalog as catalog } from '../shared/catalog'
 import { boundedText, generateMagazine, GenerationError } from './meta'
@@ -56,6 +57,12 @@ app.get('/api/catalog/published',async c=>{
   const cursor=c.req.query('cursor')??'',ids=c.req.query('ids')?.split(',')??null
   if(cursor.length>80||ids&&(ids.length>60||ids.some(id=>!/^version-[a-f0-9]{64}$/.test(id))))return c.json({error:'Invalid catalog query.'},400)
   try{return c.json(await new CatalogPublications(c.env.CATALOG_DB!).list(cursor,ids?60:50,ids))}catch{return c.json({items:[],nextCursor:null})}
+})
+app.get('/api/catalog/object-regions/:version',async c=>{
+  if(c.env?.CATALOG_PUBLIC_ENABLED!=='true'||!c.env.CATALOG_DB)return c.json({status:'catalog_unavailable'},503)
+  const versionId=c.req.param('version')
+  if(!/^version-[a-f0-9]{64}$/.test(versionId))return c.json({error:'Invalid asset version.'},400)
+  try{const published=await new SamObjectStore(c.env.CATALOG_DB).published(versionId);return published?c.json(published):c.json({error:'Object regions unavailable.'},404)}catch{return c.json({error:'Object regions unavailable.'},503)}
 })
 const configured = (env: Bindings) => Boolean(env.META_API_KEY && env.META_SPARK_MODEL === 'muse-spark-1.3' && env.INFERENCE_BUDGET && env.RATE_LIMIT_SALT && env.RATE_LIMIT_SALT.length >= 32 && env.PUBLIC_APP_ORIGIN)
 app.get('/api/health', c => c.json({ ok: true, app: 'curio', metaConfigured: Boolean(c.env?.META_API_KEY && c.env?.META_SPARK_MODEL) }))
