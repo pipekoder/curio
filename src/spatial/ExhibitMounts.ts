@@ -38,13 +38,13 @@ export class ExhibitMounts{
       mount.add(board)
       const frame=new THREE.LineSegments(
         new THREE.EdgesGeometry(board.geometry),
-        new THREE.LineBasicMaterial({color:0x3a4048}),
+        new THREE.LineBasicMaterial({color:0x101219}),
       )
       frame.position.copy(board.position)
       mount.add(frame)
       const art=new THREE.Mesh(
         new THREE.PlaneGeometry(7.8,5.2),
-        new THREE.MeshBasicMaterial({color:0xe3e7ec}),
+        new THREE.MeshBasicMaterial({color:0xe8ecf1}),
       )
       art.position.set(0,2.6,0.06)
       art.userData={assetId:exhibit.assetId} as Pick
