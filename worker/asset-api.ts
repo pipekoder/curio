@@ -14,6 +14,7 @@ import { AssetAnalysisError, mediaReadiness, runClassification } from './asset-c
 import { versionId } from './asset-contracts'
 import type { Bindings } from './index'
 import {loadEditorialSources,parsePilotVersions} from './editorial-sources'
+import {inferenceBudgetStatus} from './inference-budget'
 
 // Mounted only behind the existing catalog operator authentication middleware.
 export const assetApi = new Hono<{ Bindings: Bindings }>()
@@ -30,6 +31,7 @@ assetApi.onError((error,c) => {
   return c.json({ error: 'Asset intelligence operation unavailable. Check local schema/configuration.' },503)
 })
 assetApi.get('/stages', async c => c.json(await new AssetStore(c.env.CATALOG_DB!).stages()))
+assetApi.get('/budget/status',async c=>c.json(await inferenceBudgetStatus(c.env)))
 assetApi.get('/pilot/readiness',async c=>{
   const ids=parsePilotVersions(c.env.EDITORIAL_PILOT_VERSION_IDS)
   if(!ids)return c.json({configured:false,ready:false,reason:'exactly_six_version_ids_required',assets:[]})

@@ -59,6 +59,19 @@ it('allows a consenting visitor to receive only independently reviewed published
   expect((result.plan as {features:{assetId:string}[]}).features.map(f=>f.assetId)).toEqual(expect.arrayContaining(ids))
 })
 
+it('uses a secure demo session for the higher reviewed-Editorial budget without changing the response contract',async()=>{
+  const send=provider('PASS');vi.stubGlobal('fetch',send)
+  const operator='operator-test-token-at-least-32-bytes'
+  const overrides={EDITORIAL_DEMO_BUDGET_ENABLED:'true',EDITORIAL_DEMO_DAILY_UNITS:'160',EDITORIAL_DEMO_LIFETIME_UNITS:'500',CATALOG_OPERATOR_ENABLED:'true',CATALOG_OPERATOR_TOKEN:operator}
+  const session=await app.request(`${origin}/api/editorial/demo-session`,{method:'POST',headers:{Origin:origin,'CF-Connecting-IP':'192.0.2.1',Authorization:`Bearer ${operator}`}},{...env(),...overrides})
+  expect(session.status).toBe(200)
+  const cookie=session.headers.get('Set-Cookie')!.split(';')[0]
+  const response=await post(overrides,{Cookie:cookie},'Trace a distinct relationship between seating and everyday rituals')
+  expect(await response.json()).toMatchObject({source:'meta',retrieval:'d1',inference:{attempted:true,reservedUnits:4}})
+  expect(JSON.parse(String(reserve.mock.calls[0][1].body))).toMatchObject({units:4,demo:true,ceiling:500,daily:160,demoTester:expect.stringMatching(/^[a-f0-9]{64}$/)})
+  expect(send).toHaveBeenCalledTimes(2)
+})
+
 it('returns a disclosed fallback for rejected reviews and exhausted budgets',async()=>{
   const send=provider('REJECT');vi.stubGlobal('fetch',send)
   expect(await (await post({}, {},'Explore the seating in an independent editorial review')).json()).toMatchObject({source:'deterministic',retrieval:'d1',fallbackReason:'editorial_rejected',inference:{attempted:true,reservedUnits:4}})
