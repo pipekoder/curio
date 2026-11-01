@@ -5,6 +5,7 @@ import { boundedText } from './meta'
 import { queryRequest } from './catalog-contracts'
 import { CatalogConflict, D1Catalog } from './catalog-store'
 import { assetApi } from './asset-api'
+import { allowedOperatorOrigin } from './operator-origin'
 
 export type CatalogBindings = { CATALOG_DB?: D1Database; CATALOG_OPERATOR_ENABLED?: string; CATALOG_OPERATOR_TOKEN?: string; PUBLIC_APP_ORIGIN?: string; ASSET_AI_ENABLED?: string }
 export const catalogApi = new Hono<{ Bindings: CatalogBindings }>()
@@ -12,7 +13,7 @@ catalogApi.use('*', async (c, next) => {
   c.header('Cache-Control', 'no-store')
   const env = c.env ?? {}, token = env.CATALOG_OPERATOR_TOKEN, auth = c.req.header('Authorization') ?? ''
   if (env.CATALOG_OPERATOR_ENABLED !== 'true' || !env.CATALOG_DB || !token || token.length < 32 || !env.PUBLIC_APP_ORIGIN) return c.json({ status: 'catalog_unavailable' }, 503)
-  if (auth.length > 512 || !await timingSafeEqual(auth, `Bearer ${token}`) || c.req.header('Origin') !== env.PUBLIC_APP_ORIGIN || !c.req.header('CF-Connecting-IP') || c.req.header('CF-Connecting-IP')!.length > 64) return c.json({ error: 'Operator access required.' }, 403)
+  if (auth.length > 512 || !await timingSafeEqual(auth, `Bearer ${token}`) || !allowedOperatorOrigin(c.req.raw,env.PUBLIC_APP_ORIGIN) || !c.req.header('CF-Connecting-IP') || c.req.header('CF-Connecting-IP')!.length > 64) return c.json({ error: 'Operator access required.' }, 403)
   if (c.req.method !== 'GET' && c.req.header('Content-Type')?.split(';')[0].toLowerCase() !== 'application/json') return c.json({ error: 'JSON required.' }, 415)
   await next()
 })

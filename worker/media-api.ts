@@ -5,19 +5,11 @@ import { boundedText } from './meta'
 import { CatalogConflict } from './catalog-store'
 import { MediaStore, MEDIA_MAX_BYTES } from './media-store'
 import { mediaMetadataUpdate, parseStudioText } from './media-contracts'
+import { allowedOperatorOrigin } from './operator-origin'
 import type { Bindings } from './index'
 
 const versionId = z.string().regex(/^version-[a-f0-9]{64}$/)
 export const mediaApi = new Hono<{ Bindings: Bindings }>()
-
-function allowedOperatorOrigin(request:Request,publicOrigin:string){
-  const origin=request.headers.get('Origin')
-  if(origin!==null)return origin===publicOrigin
-  if(request.method!=='GET'||request.headers.get('Sec-Fetch-Site')?.toLowerCase()!=='same-origin')return false
-  const referer=request.headers.get('Referer')
-  if(!referer)return false
-  try{return new URL(referer).origin===new URL(publicOrigin).origin}catch{return false}
-}
 
 export const mediaOperatorAuth:MiddlewareHandler<{Bindings:Bindings}>=async (c,next) => {
   c.header('Cache-Control','no-store')

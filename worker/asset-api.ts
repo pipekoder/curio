@@ -1,5 +1,5 @@
 import { DiscoveryStore } from './discovery-store'
-import { CatalogPublications } from './catalog-publications'
+import { CatalogPublications,publicationApprovals } from './catalog-publications'
 import { curationCatalog } from "../shared/catalog"
 import { retrievedVisualContext } from "./editorial-visual-context"
 import { Hono } from 'hono'
@@ -34,8 +34,10 @@ assetApi.get('/pilot/readiness',async c=>{
   const ids=parsePilotVersions(c.env.EDITORIAL_PILOT_VERSION_IDS)
   if(!ids)return c.json({configured:false,ready:false,reason:'exactly_six_version_ids_required',assets:[]})
   const retrieval=await new D1AssetRetriever(c.env.CATALOG_DB!).retrieve({allocations:{home:34,fashion:33,travel:33},aesthetics:[],tags:[],scope:'reader',publishedOnly:true,limit:50})
+  const publication=await new CatalogPublications(c.env.CATALOG_DB!).list('',50,ids)
+  const approvals=publicationApprovals(publication.items)
   const sources=await loadEditorialSources(c.env.CATALOG_DB!,ids)
-  const assets=ids.map(versionId=>{const hit=retrieval.items.find(item=>item.version_id===versionId);return{versionId,published:Boolean(hit),editorialMetadata:sources.some(source=>source.assetId===versionId),imageAnalysis:hit?.classification_source==='meta'&&typeof hit.intelligence_json==='string',editorialReady:hit?.editorial_ready===1}})
+  const assets=ids.map(versionId=>{const hit=retrieval.items.find(item=>item.version_id===versionId),item=publication.items.find(item=>item.image.id===versionId);return{versionId,published:Boolean(item),editorialMetadata:sources.some(source=>source.assetId===versionId),imageAnalysis:Boolean(hit&&item&&retrievedVisualContext(hit,item,approvals)),editorialReady:hit?.editorial_ready===1}})
   return c.json({configured:true,ready:assets.every(asset=>asset.published&&asset.editorialMetadata&&asset.imageAnalysis&&asset.editorialReady),assets})
 })
 assetApi.post('/imports', async c => c.json(await new AssetStore(c.env.CATALOG_DB!).import(await body(c.req.raw)),201))
