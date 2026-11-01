@@ -12,7 +12,19 @@ import {readerDemoCatalog} from '../editorial-demo-media'
 // stay server-authoritative: the client verifies response shape and the ID
 // join, and never substitutes local pool records for returned items.
 export type HonestState='meta'|'meta-cached'|'deterministic-d1'|'deterministic-fictional'|'authored-fallback'
-export type EditionFetch={edition:EditorialEdition;honest:HonestState;fallbackReason?:string}
+export type EditionFetch={edition:EditorialEdition;honest:HonestState;fallbackReason?:string;timedOut:boolean}
+
+// Bounded wait for the full Editor → Reviewer → Revision → Confirmation
+// workflow: up to four sequential provider calls against the backend's 15s
+// single-call budget, plus validation and proxy margin. Expiry fails closed
+// to the disclosed authored fallback (timedOut), never to a hang.
+export const EDITORIAL_TIMEOUT_MS=90000
+
+export function editionStatusCopy(timedOut:boolean,skipped:number):string{
+  if(timedOut)return `The full review was still running after ${EDITORIAL_TIMEOUT_MS/1000} seconds, so this visit uses the authored edition.`
+  if(skipped)return `${skipped} feature${skipped===1?'':'s'} referenced unavailable imagery and ${skipped===1?'was':'were'} left out.`
+  return ''
+}
 
 // Non-strict: the Worker also sends inference usage and source records the
 // spatial client does not render; attribution travels on the items.
@@ -27,16 +39,20 @@ const envelope=z.object({
 
 const pool=()=>[...readerDemoCatalog,...editorialDemoCatalog]
 
-export async function fetchEdition(prompt:string,consent:boolean,fetchImpl:typeof fetch=fetch,events:{onResponse?:()=>void}={}):Promise<EditionFetch>{
+export async function fetchEdition(prompt:string,consent:boolean,fetchImpl:typeof fetch=fetch,events:{onResponse?:()=>void;signal?:AbortSignal;timeoutMs?:number}={}):Promise<EditionFetch>{
   const prefs:EditorialPreferences={...defaultPreferences,interests:prompt}
-  const fallback=():EditionFetch=>({
+  const fallback=(timedOut=false):EditionFetch=>({
     edition:{plan:fallbackPlan(prefs,pool()),items:pool(),source:'deterministic',retrieval:'fictional',cached:false},
-    honest:'authored-fallback',
+    honest:'authored-fallback',timedOut,
   })
+  // The bound always applies; a caller signal (new submit, Clear) can only
+  // shorten the wait, and only the bound itself reports a timeout.
+  const bound=AbortSignal.timeout(events.timeoutMs??EDITORIAL_TIMEOUT_MS)
+  const signal=events.signal?AbortSignal.any([bound,events.signal]):bound
   try{
     const response=await fetchImpl('/api/editorial',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({prompt,consent}),signal:AbortSignal.timeout(20000),
+      body:JSON.stringify({prompt,consent}),signal,
     })
     events.onResponse?.()
     if(!response.ok)return fallback()
@@ -48,9 +64,9 @@ export async function fetchEdition(prompt:string,consent:boolean,fetchImpl:typeo
       :data.retrieval==='d1'?'deterministic-d1':'deterministic-fictional'
     return {
       edition:{plan:{...data.plan,features:staged},items:data.items,source:data.source,retrieval:data.retrieval,cached:data.cached},
-      honest,fallbackReason:data.fallbackReason,
+      honest,fallbackReason:data.fallbackReason,timedOut:false,
     }
   }catch{
-    return fallback()
+    return fallback(bound.aborted)
   }
 }
