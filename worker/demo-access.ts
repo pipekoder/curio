@@ -26,6 +26,7 @@ export async function issueDemoSession(request:Request,env:Bindings){
   if(!demoPolicyEnabled(env)||!origin||request.headers.get('Origin')!==origin||!ip||ip.length>64||!auth.startsWith('Bearer ')||auth.length>512)
     return new Response(JSON.stringify({error:'Demo access unavailable.'}),{status:403,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}})
   const token=auth.slice(7)
+  if(token.length<32)return new Response(JSON.stringify({error:'Demo access unavailable.'}),{status:403,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}})
   let identity:string|null=null
   let credentialMarker:string|null=null
   if(env.CATALOG_OPERATOR_ENABLED==='true'&&env.CATALOG_OPERATOR_TOKEN&&env.CATALOG_OPERATOR_TOKEN.length>=32&&await timingSafeEqual(token,env.CATALOG_OPERATOR_TOKEN)){
