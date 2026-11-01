@@ -17,7 +17,7 @@ export class InferenceBudget {
         ...(samAssetId ? [{ key: `sam-once:${samAssetId}`, limit: 1, expires: 0 }] : []),
         { key: 'lifetime', limit: ceiling, expires: 0 },
         { key: `day:${Math.floor(now / day)}`, limit: 20, expires: (Math.floor(now / day) + 1) * day },
-        { key: `hour:${ip}:${Math.floor(now / hour)}`, limit: editorialPilot?8:3, expires: (Math.floor(now / hour) + 1) * hour },
+        { key: `hour:${ip}:${Math.floor(now / hour)}`, limit: editorialPilot?8:units===4?4:3, expires: (Math.floor(now / hour) + 1) * hour },
         // Rolling cooldown avoids minute-boundary bursts.
         { key: `cooldown:${ip}`, limit: 1, expires: now + minute },
       ]
