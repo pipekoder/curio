@@ -144,3 +144,22 @@ it('mounts authenticated Media Studio root GETs with and without a trailing slas
   expect(await denied.json()).toEqual({error:'Operator access required.'})
  }
 })
+
+it('reports exact-version pilot readiness and loses publication on display revocation',async()=>{
+ const filename='02_ceramic_vase.png',bytes=readFileSync(`public/editorial/discover/${filename}`)
+ const uploaded=await store.upload(new File([bytes],filename,{type:'image/png'}))
+ await store.import({sourceText:'Owner fixture',brands:[{name:'Northline Studio',story:'Fictional owner mockup brand.'}],products:[{brand:'Northline Studio',name:'Vase Study',description:'A fictional owner-created interior study.',category:'home',materials:[],imageFilenames:[filename],lifestyleTags:['Scandinavian']}],campaigns:[]})
+ await runClassification({versionId:uploaded.versionId,mode:'meta',retryFailed:false,consent:true},{CATALOG_DB:db,MEDIA_BUCKET:bucket,ASSET_AI_ENABLED:'true',META_SPARK_MODEL:'muse-spark-1.3',META_API_KEY:'FAKE'} as never,'192.0.2.1',{reserve:vi.fn(async()=>({allowed:true,retryAfter:0})),classify:vi.fn(async()=>({...mockUnderstanding(uploaded.versionId),imageSha256:uploaded.sha256,observations:{subjects:['seating' as const],materialAppearance:[],environments:[],relationships:['curve-and-space' as const]}}))})
+ const ids=[uploaded.versionId,...Array.from({length:5},(_,i)=>`version-${String(i).repeat(64)}`)]
+ const token='test-only-private-token-more-than-32-characters'
+ const env={CATALOG_OPERATOR_ENABLED:'true',CATALOG_OPERATOR_TOKEN:token,PUBLIC_APP_ORIGIN:origin,CATALOG_DB:db,EDITORIAL_PILOT_VERSION_IDS:ids.join(',')}
+ const request=()=>app.request(`${origin}/api/operator/catalog/intelligence/pilot/readiness`,{headers:{Authorization:`Bearer ${token}`,'CF-Connecting-IP':'192.0.2.1','Sec-Fetch-Site':'same-origin',Referer:`${origin}/internal/media`}},env)
+ const initial=await (await request()).json() as {ready:boolean;assets:{versionId:string;published:boolean;editorialMetadata:boolean;imageAnalysis:boolean;editorialReady:boolean}[]}
+ expect(initial.ready).toBe(false)
+ expect(initial.assets).toHaveLength(6)
+ expect(initial.assets[0]).toMatchObject({versionId:uploaded.versionId,published:true,editorialMetadata:true,imageAnalysis:true,editorialReady:true})
+ expect(initial.assets.slice(1).every(row=>!row.published&&!row.imageAnalysis)).toBe(true)
+ await db.prepare(`UPDATE content_reviews SET status='blocked' WHERE version_id=(SELECT content_version FROM content_catalog_links WHERE asset_version=?) AND purpose='display'`).bind(uploaded.versionId).run()
+ const revoked=await (await request()).json() as typeof initial
+ expect(revoked.assets[0]).toMatchObject({published:false,imageAnalysis:false})
+})
