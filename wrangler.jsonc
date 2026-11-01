@@ -19,6 +19,8 @@
     "LEGACY_MAGAZINE_AI_ENABLED": "false",
     "EDITORIAL_REVIEW_ENABLED": "false",
     "EDITORIAL_PUBLIC_AI_ENABLED": "false",
+    "EDITORIAL_KNOWLEDGE_V2_ENABLED": "false",
+    "EDITORIAL_PILOT_VERSION_IDS": "",
     "ASSET_AI_ENABLED": "false",
     "SAM_DECODER_ENABLED": "false",
     "META_SPARK_MODEL": "muse-spark-1.3",

@@ -67,9 +67,8 @@ The checked-in 20-unit lifetime ceiling can fund at most five fully reserved
 reviewed workflows across all users, fewer when other inference uses the same
 budget. Do not raise it without a reviewed spending plan and explicit approval.
 Monitor aggregate usage and fallback rates during the beta. Silver Field's
-current 20-second request timeout can expire before a multi-call workflow
-finishes; coordinate a bounded frontend timeout adjustment with its owner
-before treating browser acceptance as complete.
+90-second Editorial request timeout is implemented, but browser acceptance of
+the full reviewed workflow still requires an authorized live test.
 
 Cloudflare deployments apply `wrangler.jsonc` vars. Configure the approved
 release manifest and Worker secrets together; do not rely on dashboard-only
