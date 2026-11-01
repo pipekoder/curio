@@ -1,0 +1,35 @@
+/* Discover-only decorative composition: orbital lines, glass planes,
+   floor rings, corner ticks and caption markers. Static, non-interactive,
+   hidden from assistive tech at the component level. No animation. */
+.discover-decor{position:fixed;inset:0;z-index:5;pointer-events:none;overflow:hidden}
+.discover-decor svg{position:absolute;display:block}
+.decor-orbits{inset:0;width:100%;height:100%;fill:none;stroke:#8fa3c4;stroke-width:1;opacity:.42}
+.decor-orbits circle{fill:#8fa3c4;stroke:none;opacity:.8}
+.decor-floor{inset:0;width:100%;height:100%;fill:none;stroke:#a9c5ff;stroke-width:1;opacity:.55}
+.decor-plane{position:absolute;top:50%;width:130px;height:min(46vh,420px);margin-top:min(-23vh,-210px);border:1px solid #ffffffd9;border-radius:18px;background:linear-gradient(165deg,#ffffffd9 0%,#e9f0fcc4 34%,#d7e4f8cc 55%,#f5e4efcc 80%,#ffffffd4 100%);box-shadow:inset 2px 0 3px #ffffff,inset -3px 0 6px #c9d8f280,0 18px 44px #8fa3c433}
+.plane-l1{right:50%;margin-right:370px;transform:perspective(900px) rotateY(21deg)}
+.plane-l2{right:50%;margin-right:460px;width:110px;height:min(38vh,340px);margin-top:min(-19vh,-170px);transform:perspective(900px) rotateY(21deg);opacity:.75}
+.plane-r1{left:50%;margin-left:370px;transform:perspective(900px) rotateY(-21deg)}
+.plane-r2{left:50%;margin-left:460px;width:110px;height:min(38vh,340px);margin-top:min(-19vh,-170px);transform:perspective(900px) rotateY(-21deg);opacity:.75}
+.decor-corner{position:absolute;width:20px;height:20px;border:0 solid #8b98ad}
+.decor-corner.tl{left:26px;top:86px;border-left-width:1px;border-top-width:1px}
+.decor-corner.tr{right:26px;top:86px;border-right-width:1px;border-top-width:1px}
+.decor-corner.bl{left:26px;bottom:26px;border-left-width:1px;border-bottom-width:1px}
+.decor-corner.br{right:26px;bottom:26px;border-right-width:1px;border-bottom-width:1px}
+.decor-tag{position:absolute;font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:#626b7a;white-space:nowrap}
+.decor-tag::before{content:'';display:inline-block;width:4px;height:4px;border-radius:50%;background:#8fa3c4;margin-right:8px;vertical-align:1px}
+.decor-tag::after{content:'';display:block;width:26px;height:1px;background:#9fb0c8;margin-top:7px}
+.tag-orbit{left:4%;top:29%}
+.tag-culture{left:4%;top:62%}
+.tag-objects{right:4%;top:37%;text-align:right}
+.tag-ideas{right:4%;top:65%;text-align:right}
+.tag-objects::before,.tag-ideas::before{display:none}
+.tag-objects::after,.tag-ideas::after{margin-left:auto}
+.decor-reticle{position:absolute;left:50%;bottom:26px;width:40px;height:40px;margin-left:-20px;border:1px solid #9fb0c880;border-radius:50%}
+.decor-reticle::before,.decor-reticle::after{content:'';position:absolute;background:#9fb0c8}
+.decor-reticle::before{left:50%;top:12px;bottom:12px;width:1px;margin-left:-.5px}
+.decor-reticle::after{top:50%;left:12px;right:12px;height:1px;margin-top:-.5px}
+@media(max-width:1200px){.plane-l2,.plane-r2{display:none}}
+@media(max-width:1100px){.decor-tag{display:none}}
+@media(max-width:760px){.decor-plane{display:none}.decor-reticle{display:none}}
+@media(max-width:640px){.decor-orbits{opacity:.25}}
