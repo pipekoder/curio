@@ -35,6 +35,10 @@ it('keeps V1 Chief prompt unchanged when V2 is off and includes selected knowled
  expect(prompts[0]).not.toContain(EDITORIAL_KNOWLEDGE_VERSION)
  expect(prompts[1]).toContain(EDITORIAL_KNOWLEDGE_VERSION)
  expect(prompts[1]).toContain('Selected voice Poetic')
+ expect(prompts[0]).toContain('Do not quote, restate or paraphrase brand histories')
+ expect(prompts[1]).not.toContain('Do not quote, restate or paraphrase brand histories')
+ expect(prompts[1]).toContain('a faithful, bounded paraphrase is welcome')
+ expect(prompts[1]).toContain('internal citations, never reader-facing phrasing')
 })
 
 it('passes the same selected voice to independent Review and Revision without an extra classifier call',async()=>{
@@ -45,4 +49,7 @@ it('passes the same selected voice to independent Review and Revision without an
  await reviseEditorialPlan('FAKE',plan,review as never,prefs,[item],approvals,sources,contexts,true)
  expect(prompts).toHaveLength(2)
  expect(prompts.every(prompt=>prompt.includes('Selected voice Poetic')&&prompt.includes(EDITORIAL_KNOWLEDGE_VERSION))).toBe(true)
+ expect(prompts[0]).toContain('An elegant but generic image description is not sufficient discovery')
+ expect(prompts[0]).toContain('high-severity hard failures regardless of score')
+ expect(prompts[1]).toContain('Preserve citations and all structural identities')
 })
