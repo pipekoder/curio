@@ -1,7 +1,7 @@
 import {describe,expect,it,vi} from 'vitest'
 import {defaultPreferences,editorialDemoCatalog,fallbackPlan} from '../shared/editorial'
 import {readerDemoCatalog} from '../src/editorial-demo-media'
-import {fetchEdition} from '../src/spatial/edition'
+import {EDITORIAL_TIMEOUT_MS,editionStatusCopy,fetchEdition} from '../src/spatial/edition'
 
 const pool=[...readerDemoCatalog,...editorialDemoCatalog]
 const prefs={...defaultPreferences,interests:'quiet rooms'}
@@ -61,5 +61,43 @@ describe('spatial edition fetch',()=>{
   const failing=vi.fn(async()=>{throw Error('offline')})
   await fetchEdition('quiet rooms',false,failing as unknown as typeof fetch,{onResponse:()=>seen.push('response')})
   expect(seen).toEqual(['response'])
+ })
+ it('waits out the full-review bound for a slow meta workflow',async()=>{
+  expect(EDITORIAL_TIMEOUT_MS).toBe(90000)
+  const body={plan:plan(),items:pool,source:'meta',retrieval:'d1',cached:false}
+  const slow=vi.fn(async()=>{
+    await new Promise(resolve=>setTimeout(resolve,25))
+    return new Response(JSON.stringify(body),{status:200})
+  })
+  const {honest,timedOut}=await fetchEdition('quiet rooms',true,slow as unknown as typeof fetch,{timeoutMs:1000})
+  expect(honest).toBe('meta')
+  expect(timedOut).toBe(false)
+ })
+ it('fails closed with a timeout flag when the bound expires',async()=>{
+  const hanging=vi.fn(async(_url:unknown,init:{signal?:AbortSignal})=>new Promise<never>((_,reject)=>{
+    init.signal?.addEventListener('abort',()=>reject(Error('aborted')))
+  }))
+  const {edition,honest,timedOut}=await fetchEdition('quiet rooms',true,hanging as unknown as typeof fetch,{timeoutMs:30})
+  expect(honest).toBe('authored-fallback')
+  expect(timedOut).toBe(true)
+  expect(edition.plan.features.length).toBeGreaterThan(0)
+ })
+ it('treats caller cancellation as stale, not as a timeout',async()=>{
+  const hanging=vi.fn(async(_url:unknown,init:{signal?:AbortSignal})=>new Promise<never>((_,reject)=>{
+    init.signal?.addEventListener('abort',()=>reject(Error('aborted')))
+  }))
+  const controller=new AbortController()
+  const pending=fetchEdition('quiet rooms',true,hanging as unknown as typeof fetch,{signal:controller.signal,timeoutMs:5000})
+  controller.abort()
+  const {honest,timedOut}=await pending
+  expect(honest).toBe('authored-fallback')
+  expect(timedOut).toBe(false)
+ })
+ it('discloses timeouts and skipped features in edition status',()=>{
+  expect(editionStatusCopy(true,0)).toContain('90 seconds')
+  expect(editionStatusCopy(true,0)).toContain('authored edition')
+  expect(editionStatusCopy(true,2)).toContain('90 seconds')
+  expect(editionStatusCopy(false,2)).toBe('2 features referenced unavailable imagery and were left out.')
+  expect(editionStatusCopy(false,0)).toBe('')
  })
 })

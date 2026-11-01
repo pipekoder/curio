@@ -388,6 +388,20 @@ test('slow generation holds with honest elapsed time and no simulated progress',
   await expect(page.getByTestId('spatial-edition-chip')).toBeVisible({timeout:15000})
 })
 
+test('a slow full-review workflow still stages meta past the old bound',async({page})=>{
+  test.setTimeout(90000)
+  await page.route('**/api/editorial',async route=>{
+    await new Promise(resolve=>setTimeout(resolve,25000))
+    await route.fulfill({status:200,json:{plan:metaPlan,items:groundedItems,source:'meta',retrieval:'d1',cached:false}})
+  })
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/')
+  await page.getByLabel('Your curiosity').fill('A quiet room with soft light')
+  await page.getByRole('button',{name:'Begin exploration'}).click()
+  await expect(page.getByRole('status').first()).toContainText(/\(\ds\)/,{timeout:10000})
+  await expect(page.getByTestId('spatial-edition-chip')).toContainText('AI-curated edition · Meta AI',{timeout:45000})
+})
+
 test('Clear wipes the visit session and says what was removed',async({page})=>{
   test.setTimeout(90000)
   await page.setViewportSize({width:390,height:844})

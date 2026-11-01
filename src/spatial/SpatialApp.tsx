@@ -7,7 +7,7 @@ import {ExhibitMounts} from './ExhibitMounts'
 import {HudBridge} from './HudBridge'
 import {loadCatalogNodes,revalidateVersions} from './nodes'
 import type {CatalogNode} from './contracts'
-import {fetchEdition,type HonestState} from './edition'
+import {editionStatusCopy,fetchEdition,type HonestState} from './edition'
 import {stageEdition,type StagedExhibit} from './staging'
 import {AssemblyDirector} from './assembly'
 import {AssemblyField} from './AssemblyField'
@@ -73,7 +73,11 @@ export default function SpatialApp(){
   const fieldRef=useRef<SilverField|null>(null)
   const directorRef=useRef(new AssemblyDirector())
   const assemblyRef=useRef<AssemblyField|null>(null)
-  const stagedRef=useRef<{exhibits:StagedExhibit[];label:HonestState;skipped:number;reason?:string}|null>(null)
+  const stagedRef=useRef<{exhibits:StagedExhibit[];label:HonestState;skipped:number;reason?:string;timedOut:boolean}|null>(null)
+  // True cancellation for the edition request: a new submit or Clear aborts
+  // the in-flight fetch instead of leaving it to run out the 90s bound. The
+  // submit-ID guard still ignores any response that slips through the race.
+  const fetchAbortRef=useRef<AbortController|null>(null)
   const resolveFiredRef=useRef(false)
   const lastPhaseRef=useRef('idle')
   const tickerRef=useRef(0)
@@ -254,7 +258,7 @@ export default function SpatialApp(){
                 setExhibits(staged.exhibits)
                 setEditionLabel(staged.label)
                 setFallbackReason(staged.reason??null)
-                setStatus(staged.skipped?`${staged.skipped} feature${staged.skipped===1?'':'s'} referenced unavailable imagery and ${staged.skipped===1?'was':'were'} left out.`:'')
+                setStatus(editionStatusCopy(staged.timedOut,staged.skipped))
                 setShowDock(false)
               }
             }
@@ -417,7 +421,10 @@ export default function SpatialApp(){
       const begun=Date.now()
       tickerRef.current=window.setInterval(()=>setElapsed(Math.floor((Date.now()-begun)/1000)),500)
     }
-    const {edition,honest,fallbackReason:reason}=await fetchEdition(trimmed,consent,fetch,{onResponse:()=>directorRef.current.onResponse()})
+    fetchAbortRef.current?.abort()
+    const controller=new AbortController()
+    fetchAbortRef.current=controller
+    const {edition,honest,fallbackReason:reason,timedOut}=await fetchEdition(trimmed,consent,fetch,{onResponse:()=>directorRef.current.onResponse(),signal:controller.signal})
     if(submitId!==submitIdRef.current)return
     const {exhibits:staged,skipped}=stageEdition(edition)
     if(!staged.length){
@@ -427,7 +434,7 @@ export default function SpatialApp(){
       directorRef.current.reset()
       const assembly=assemblyRef.current
       if(assembly&&field){assembly.dispose(field.scene);assemblyRef.current=null}
-      setStatus('No stageable exhibits right now. Refine your curiosity and try again.')
+      setStatus(timedOut?editionStatusCopy(true,0):'No stageable exhibits right now. Refine your curiosity and try again.')
       return
     }
     if(reduced.current||!assemblyRef.current){
@@ -436,7 +443,7 @@ export default function SpatialApp(){
       setFallbackReason(reason??null)
       setShowDock(false)
       setComposing(false)
-      setStatus(skipped?`${skipped} feature${skipped===1?'':'s'} referenced unavailable imagery and ${skipped===1?'was':'were'} left out.`:'')
+      setStatus(editionStatusCopy(timedOut,skipped))
       requestAnimationFrame(()=>requestAnimationFrame(()=>{
         const layout=exhibitLayout(staged.length)
         const maxScroll=document.documentElement.scrollHeight-window.innerHeight
@@ -444,7 +451,7 @@ export default function SpatialApp(){
       }))
       return
     }
-    stagedRef.current={exhibits:staged,label:honest,skipped,reason}
+    stagedRef.current={exhibits:staged,label:honest,skipped,reason,timedOut}
     directorRef.current.onSettled()
   }
 
@@ -464,6 +471,7 @@ export default function SpatialApp(){
 
   const finishClear=()=>{
     submitIdRef.current++
+    fetchAbortRef.current?.abort()
     rigRef.current?.setCinematic(null)
     setComposing(false)
     const {removed}=clearSpatialSession({localStorage,sessionStorage})
