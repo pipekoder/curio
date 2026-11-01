@@ -22,7 +22,9 @@ export type Bindings = CatalogBindings & {
   META_API_KEY?: string
   META_SPARK_MODEL?: string
   MAGAZINE_AI_ENABLED?: string
+  LEGACY_MAGAZINE_AI_ENABLED?: string
   EDITORIAL_REVIEW_ENABLED?: string
+  EDITORIAL_PUBLIC_AI_ENABLED?: string
   EDITORIAL_KNOWLEDGE_V2_ENABLED?: string
   EDITORIAL_REVIEW_PILOT_TOKEN?: string
   MAGAZINE_MAX_CALLS?: string
@@ -49,7 +51,7 @@ app.get('/api/catalog/published',async c=>{
 })
 const configured = (env: Bindings) => Boolean(env.META_API_KEY && env.META_SPARK_MODEL === 'muse-spark-1.3' && env.INFERENCE_BUDGET && env.RATE_LIMIT_SALT && env.RATE_LIMIT_SALT.length >= 32 && env.PUBLIC_APP_ORIGIN)
 app.get('/api/health', c => c.json({ ok: true, app: 'curio', metaConfigured: Boolean(c.env?.META_API_KEY && c.env?.META_SPARK_MODEL) }))
-app.get('/api/magazine/config', c => c.json({ enabled: c.env?.MAGAZINE_AI_ENABLED === 'true' && configured(c.env), catalogSize: catalog.length }))
+app.get('/api/magazine/config', c => c.json({ enabled: c.env?.LEGACY_MAGAZINE_AI_ENABLED === 'true' && configured(c.env), catalogSize: catalog.length }))
 app.post('/api/magazine', async c => {
   let body: unknown
   try { body = JSON.parse(await boundedText(c.req.raw.body, 4096)) }
@@ -57,7 +59,7 @@ app.post('/api/magazine', async c => {
   const parsed = magazineRequest.safeParse(body)
   if (!parsed.success) return c.json({ error: 'Invalid magazine preferences or missing consent.' }, 400)
   const env = c.env ?? {}
-  if (env.MAGAZINE_AI_ENABLED !== 'true') return c.json({ status: 'disabled', message: 'Magazine generation is disabled. No preferences were sent to Meta.' }, 503)
+  if (env.LEGACY_MAGAZINE_AI_ENABLED !== 'true') return c.json({ status: 'disabled', message: 'Magazine generation is disabled. No preferences were sent to Meta.' }, 503)
   if (!configured(env)) return c.json({ status: 'not_configured', message: 'Generation is unavailable until the operator configures Meta and abuse protection.' }, 503)
   if (c.req.header('Origin') !== env.PUBLIC_APP_ORIGIN || !c.req.header('Content-Type')?.toLowerCase().startsWith('application/json')) return c.json({ error: 'Request origin or content type is not allowed.' }, 403)
   // Trust only Cloudflare's edge-set header, never client-provided X-Forwarded-For.
