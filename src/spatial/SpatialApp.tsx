@@ -16,6 +16,7 @@ import {NETWORK_CENTER,ORBIT_DEFAULT,pickSurprise,orbitCamera} from './network-m
 import {NetworkChamber} from './NetworkChamber'
 import {SPATIAL_SESSION_KEY,clearSpatialSession} from './clear'
 import type {NodeSource} from './nodes'
+import ObjectDiscovery from './ObjectDiscovery'
 import './spatial.css'
 
 type DebugSnapshot={distance:number;cameraZ:number;cameraY:number;current:number;exhibits:number;nodes:number;source:NodeSource|'pending';assembly:string;mode:string;orbit:{yaw:number;pitch:number;radius:number};selected:number;staged:string[];nodeIds:string[];honest:HonestState|null}
@@ -788,6 +789,7 @@ export default function SpatialApp(){
     </section>}
     {inspected&&<aside className="spatial-inspect" aria-label={`Inspecting ${inspected.title}`}>
       <button type="button" className="spatial-inspect-close" onClick={()=>setInspect(null)} aria-label="Close inspection">×</button>
+      <ObjectDiscovery key={inspected.assetId} assetId={inspected.assetId} image={inspected.image} alt={`Artwork for ${inspected.title}`}/>
       <p className="spatial-eyebrow">Inspection</p>
       <h2>{inspectedHotspot?.productName??inspected.title}</h2>
       {inspectedHotspot
