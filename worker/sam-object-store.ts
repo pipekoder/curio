@@ -1,11 +1,12 @@
 import {z} from 'zod'
 import {segmentation,type Segmentation} from '../shared/decoder'
 import {CatalogPublications} from './catalog-publications'
+import {isSafeHttpsUrl} from '../shared/url-policy'
 
 const version=z.string().regex(/^version-[a-f0-9]{64}$/)
 const captureId=z.string().regex(/^sam-capture-[a-f0-9]{64}$/)
 const regionId=z.string().regex(/^[a-z0-9-]{1,80}$/)
-const reviewInput=z.strictObject({regionId,expectedRevision:z.number().int().min(0),status:z.enum(['approved','blocked']),editorialDetail:z.string().trim().min(10).max(500).refine(value=>!/(<[^>]*>|https?:\/\/|www\.)/i.test(value)).optional(),productId:z.string().regex(/^product-[a-z0-9-]{1,70}$/).nullable().default(null),identityEvidence:z.string().trim().min(8).max(300).nullable().default(null)})
+const reviewInput=z.strictObject({regionId,expectedRevision:z.number().int().min(0),status:z.enum(['approved','blocked']),editorialDetail:z.string().trim().min(10).max(500).refine(value=>!/(<[^>]*>|https?:\/\/|www\.)/i.test(value)).optional(),productId:z.string().regex(/^product-[a-z0-9-]{1,70}$/).nullable().default(null),identityEvidence:z.string().trim().max(300).refine(value=>!value||isSafeHttpsUrl(value)||/^docs\/[a-zA-Z0-9/_#.-]+$/.test(value)).nullable().default(null)})
 type StoredCapture={imageSha256:string;concept:string;regions:{id:string;detailId:string;box:{x:number;y:number;width:number;height:number};confidence:number|null}[]}
 
 const digest=async(value:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),n=>n.toString(16).padStart(2,'0')).join('')
