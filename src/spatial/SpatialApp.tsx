@@ -16,6 +16,7 @@ import {NETWORK_CENTER,ORBIT_DEFAULT,pickSurprise,orbitCamera} from './network-m
 import {NetworkChamber} from './NetworkChamber'
 import {SPATIAL_SESSION_KEY,clearSpatialSession} from './clear'
 import type {NodeSource} from './nodes'
+import DiscoverDecor from './DiscoverDecor'
 import ObjectDiscovery from './ObjectDiscovery'
 import './spatial.css'
 
@@ -730,7 +731,8 @@ export default function SpatialApp(){
     </a>
     <canvas ref={canvasRef} className="spatial-canvas" aria-hidden="true"/>
     <div className="spatial-vignette" aria-hidden="true"/>
-    <header className="spatial-hud">
+    {showDock&&!composing&&<DiscoverDecor/>}
+    <header className={showDock?'spatial-hud is-discover':'spatial-hud'}>
       <a className="spatial-brand" href="/" aria-label="Curio home">curio<span>.</span></a>
       <nav className="spatial-crumb" aria-label="Journey" aria-live="polite">
         {crumb}
