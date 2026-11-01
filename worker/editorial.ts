@@ -29,7 +29,8 @@ import {
   type EditorialPreferences,
 } from "../shared/editorial";
 import { D1AssetRetriever } from "./asset-retrieval";
-import { InferenceReservation,reserveInference } from "./inference-budget";
+import { InferenceReservation,reserveInference,finishInference } from "./inference-budget";
+import { demoIdentity } from './demo-access';
 import { boundedText } from "./meta";
 import { catalogDigest } from "./catalog-store";
 import { chiefEditorInstruction } from '../shared/editorial-chief';
@@ -38,6 +39,7 @@ import {EDITORIAL_KNOWLEDGE_VERSION,editorialKnowledgeInstruction,selectEditoria
 import {EditorialReviewError,reviewEditorialPlan,reviewHasHardFailure,reviseEditorialPlan,type EditorialMeasurement} from './editorial-reviewer';
 import type { EditorialSource } from '../shared/editorial-sources';
 import { loadEditorialSources,parsePilotVersions } from './editorial-sources';
+import { resolveR2MediaPermit } from './media-ai-adapter';
 import type { Bindings } from "./index";
 // Index is never public. Only already approved compiled catalog records can be
 // hydrated from D1 hits; no returned URL, name, hint, job or source row is exposed.
@@ -45,6 +47,8 @@ export async function editorialPool(
   env: Bindings,
   p: EditorialPreferences,
   pilotVersions?:readonly string[],
+  requireAiReady=false,
+  dynamicCatalog=false,
 ): Promise<{ items: CatalogItem[]; retrieval: "d1" | "fictional"; visualContexts: VisualContext[]; approvals:ExternalAssetApprovals; sources:EditorialSource[] }> {
   if (env.CATALOG_DB)
     try {
@@ -55,7 +59,9 @@ export async function editorialPool(
         brandDiversity: p.mode !== "Focused",
         serendipity:
           p.mode === "Surprise Me" ? 0.25 : p.mode === "Balanced" ? 0.1 : 0,
-        seed: p.interests,
+        // Retrieval accepts a bounded seed while prompts may be 1,000 chars.
+        // Hash the full prompt so long, valid prompts retain stable variety.
+        seed: (await catalogDigest(p.interests)).slice(0, 40),
         scope: "reader",
         publishedOnly:env.CATALOG_PUBLIC_ENABLED === "true",
         limit: 50,
@@ -74,8 +80,25 @@ export async function editorialPool(
         if (context) visualContexts.push(context);
         return [item];
       });
+      if(dynamicCatalog){
+        const available=env.MEDIA_BUCKET?await Promise.all(items.filter(item=>{
+          const hit=hits.find(row=>row.version_id===item.image.id)
+          return hit?.editorial_ready===1&&hit.classification_source==='meta'&&visualContexts.some(context=>context.assetId===item.image.id)
+        }).slice(0,12).map(async item=>{
+          try{
+            const hit=hits.find(row=>row.version_id===item.image.id)
+            const permit=await resolveR2MediaPermit(env.CATALOG_DB!,item.image.id)
+            if(!permit||permit.sha256!==hit?.image_sha256)return null
+            const object=await env.MEDIA_BUCKET!.head(permit.r2Key)
+            return object?.size===permit.byteSize&&object.customMetadata?.sha256===permit.sha256&&object.customMetadata?.versionId===item.image.id?item:null
+          }catch{return null}
+        })):[]
+        items=available.filter((item):item is CatalogItem=>Boolean(item)).slice(0,6)
+      }
       const sources=await loadEditorialSources(env.CATALOG_DB,items.map(item=>item.image.id).filter(id=>/^version-/.test(id)))
-      if(pilotVersions)items=items.filter(item=>visualContexts.some(context=>context.assetId===item.image.id)&&sources.some(source=>source.assetId===item.image.id))
+      // AI editorial candidates must have current exact-version observations
+      // and owner-supplied context, whether or not the pilot list is active.
+      if(requireAiReady||pilotVersions||dynamicCatalog)items=items.filter(item=>visualContexts.some(context=>context.assetId===item.image.id)&&sources.some(source=>source.assetId===item.image.id))
       if (items.length) return { items, retrieval: "d1", visualContexts:visualContexts.filter(context=>items.some(item=>item.image.id===context.assetId)), approvals, sources:sources.filter(source=>items.some(item=>item.image.id===source.assetId)) };
     } catch {
       /* Missing local schema or unavailable D1 fails closed to approved demos. */
@@ -107,7 +130,9 @@ editorialApi.post("/", async (c) => {
   )
     return c.json({ error: "Origin or content type not allowed." }, 403);
   const pilot=parsePilotVersions(env.EDITORIAL_PILOT_VERSION_IDS)
-  const pool = await editorialPool(env, p,pilot??undefined);
+  const dynamicCatalog=env.EDITORIAL_PUBLIC_AI_ENABLED==='true'&&env.EDITORIAL_DYNAMIC_CATALOG_ENABLED==='true'
+  const selectedPilot=dynamicCatalog?null:pilot
+  const pool = await editorialPool(env, p,selectedPilot??undefined,env.MAGAZINE_AI_ENABLED==='true',dynamicCatalog);
   let inference = {
     attempted: false,
     reservedUnits: 0,
@@ -136,8 +161,11 @@ editorialApi.post("/", async (c) => {
     });
   if (!pool.items.length) return c.json({ error: "No approved catalog." }, 503);
   if (env.MAGAZINE_AI_ENABLED !== "true") return fallback();
-  if(pool.retrieval==='d1'&&!pilot){fallbackReason='pilot_allowlist';return fallback()}
-  if(pilot&&(pool.retrieval!=='d1'||pool.items.length<2)){fallbackReason='pilot_not_ready';return fallback()}
+  if(env.CATALOG_PUBLIC_ENABLED!=='true'){fallbackReason='pilot_not_ready';return fallback()}
+  // An invalid configured pilot list must not silently become public mode.
+  if(env.EDITORIAL_PILOT_VERSION_IDS&&!pilot){fallbackReason='pilot_allowlist';return fallback()}
+  if(pool.retrieval!=='d1'||pool.items.length<2){fallbackReason='pilot_not_ready';return fallback()}
+  if(env.EDITORIAL_REVIEW_ENABLED!=='true'){fallbackReason='pilot_authorization';return fallback()}
   if (!p.consent) {
     fallbackReason = "consent_missing";
     return fallback();
@@ -154,11 +182,12 @@ editorialApi.post("/", async (c) => {
     env.RATE_LIMIT_SALT.length < 32
   )
     return fallback();
-  if(!pool.items.some(a=>a.provenance.origin==='authored_geometry'||a.permissions.aiAnalysis.status==='approved'&&a.permissions.aiAnalysis.evidence)) {fallbackReason='analysis_permissions';return fallback();}
+  if(!pool.items.every(a=>a.permissions.aiAnalysis.status==='approved'&&a.permissions.aiAnalysis.evidence)) {fallbackReason='analysis_permissions';return fallback();}
+  const tester=await demoIdentity(c.req.raw,env,ip)
   const suppliedPilotToken=c.req.header('X-Curio-Editorial-Pilot')??''
-  const pilotAuthorized=Boolean(pilot&&pool.retrieval==='d1'&&env.EDITORIAL_REVIEW_PILOT_TOKEN&&env.EDITORIAL_REVIEW_PILOT_TOKEN.length>=32&&suppliedPilotToken.length>=32&&timingSafeEqual(suppliedPilotToken,env.EDITORIAL_REVIEW_PILOT_TOKEN))
-  const reviewEnabled=env.EDITORIAL_REVIEW_ENABLED==='true'&&pool.sources.length>0&&pilotAuthorized
-  if(env.EDITORIAL_REVIEW_ENABLED==='true'&&pool.sources.length>0&&!pilotAuthorized){fallbackReason='pilot_authorization';return fallback()}
+  const pilotAuthorized=Boolean(selectedPilot&&pool.retrieval==='d1'&&(tester||env.EDITORIAL_REVIEW_PILOT_TOKEN&&env.EDITORIAL_REVIEW_PILOT_TOKEN.length>=32&&suppliedPilotToken.length>=32&&timingSafeEqual(suppliedPilotToken,env.EDITORIAL_REVIEW_PILOT_TOKEN)))
+  if(selectedPilot?!pilotAuthorized:env.EDITORIAL_PUBLIC_AI_ENABLED!=='true'){fallbackReason='pilot_authorization';return fallback()}
+  const reviewEnabled=true
   const knowledgeV2=reviewEnabled&&env.EDITORIAL_KNOWLEDGE_V2_ENABLED==='true'
   const key = await catalogDigest(
     JSON.stringify(["editorial-v4-prompt", EDITORIAL_QUALITY_VERSION, PROMPT_INTENT_VERSION, VISUAL_LANGUAGE_VERSION,reviewEnabled?EDITORIAL_STANDARD_VERSION:null,knowledgeV2?EDITORIAL_KNOWLEDGE_VERSION:null, p, pool.items, pool.visualContexts,pool.sources]),
@@ -179,22 +208,25 @@ editorialApi.post("/", async (c) => {
     } catch {
       plans.delete(key);
     }
+  let reservationId:string|undefined,outcome:'completed'|'fallback'|'error'='error'
   try {
-    const budget = await reserveInference(env, ip,reviewEnabled?4:1,undefined,reviewEnabled);
+    const budget = await reserveInference(env, ip,4,undefined,Boolean(selectedPilot),tester);
     if (budget.allowed !== true) {
       fallbackReason = "budget";
       return fallback();
     }
-    const reservation=new InferenceReservation(reviewEnabled?4:1)
+    reservationId=budget.reservationId
+    const reservation=new InferenceReservation(4)
     inference = { ...inference, attempted: true, reservedUnits: reservation.reservedUnits };
     fallbackReason = "provider_or_validation";
     callStarted = performance.now();
     const workflow=await runEditorialWorkflow(p,pool.items,env.META_API_KEY,pool.visualContexts,pool.approvals,pool.sources,reservation,reviewEnabled,undefined,knowledgeV2)
     inference={...inference,...workflow.measurement}
-    if(workflow.status==='rejected'){fallbackReason='editorial_rejected';return fallback()}
+    if(workflow.status==='rejected'){outcome='fallback';fallbackReason='editorial_rejected';return fallback()}
     const plan=workflow.plan
     if (plans.size >= 30) plans.delete(plans.keys().next().value!);
     plans.set(key, { expires: Date.now() + 300000, plan });
+    outcome='completed'
     return c.json({
       plan,
       items: pool.items,
@@ -219,6 +251,8 @@ editorialApi.post("/", async (c) => {
     if(error instanceof EditorialReviewError){inference={...inference,...combineMeasurements({latencyMs:inference.latencyMs??0,usage:inference.usage},error.measurement)};fallbackReason='invalid_output'}
     if(error instanceof EditorialWorkflowBudgetError){inference={...inference,...error.measurement};fallbackReason='budget'}
     return fallback();
+  } finally {
+    if(reservationId)await finishInference(env,reservationId,outcome).catch(()=>{/* Lease expires after 90 seconds if release is unavailable. */})
   }
 });
 export async function generateEditorialPlan(

@@ -11,6 +11,9 @@ import {runDecoder} from '../worker/decoder'
 import {D1AssetRetriever} from '../worker/asset-retrieval'
 import app from '../worker/index'
 import {loadEditorialSources} from '../worker/editorial-sources'
+import {catalogItem} from '../shared/catalog'
+import {editorialPlan} from '../shared/editorial'
+import {editorialSources} from '../shared/editorial-sources'
 
 vi.setConfig({testTimeout:20000,hookTimeout:20000})
 let mf:Miniflare,db:D1Database,bucket:R2Bucket,store:MediaStore
@@ -44,6 +47,9 @@ it('persists exact R2 bytes, relationships and a permission-gated Reader publica
  await expect(store.link(uploaded.versionId,{imageType:'product',productId:'product-does-not-exist'})).rejects.toThrow('Unknown product assignment.')
  listing=await store.list();expect(listing.media[0]).toMatchObject({product_ids:imported.products[0].id,brand_ids:brandId,campaign_ids:campaignId,editorial_ready:1})
  const published=await new CatalogPublications(db).list('',10,[uploaded.versionId]);expect(published.items).toHaveLength(1);expect(published.items[0]).toMatchObject({name:'Fold Chair',sourceType:'synthetic_concept',permissions:{display:{status:'approved'},aiAnalysis:{status:'approved'}}})
+ const publicList=await app.request(`${origin}/api/catalog/published?ids=${uploaded.versionId}`,undefined,{CATALOG_DB:db,CATALOG_PUBLIC_ENABLED:'true'})
+ expect(publicList.status).toBe(200)
+ expect(await publicList.json()).toMatchObject({items:[expect.objectContaining({id:published.items[0].id,image:expect.objectContaining({id:uploaded.versionId,externalUrl:`${origin}/api/media/${uploaded.versionId}`})})],nextCursor:null})
  expect((await db.prepare('SELECT COUNT(*) AS n FROM asset_analysis_jobs').first<{n:number}>())!.n).toBe(0)
  const permit=await resolveR2MediaPermit(db,uploaded.versionId);expect(permit).toMatchObject({sha256:uploaded.sha256,mime:'image/png'})
  const data=await readR2MediaData(bucket,permit!,new AbortController().signal);expect(data.startsWith('data:image/png;base64,')).toBe(true)
@@ -52,10 +58,31 @@ it('persists exact R2 bytes, relationships and a permission-gated Reader publica
  const classified=await runClassification({versionId:uploaded.versionId,mode:'meta',retryFailed:false,consent:true},{CATALOG_DB:db,MEDIA_BUCKET:bucket,ASSET_AI_ENABLED:'true',META_SPARK_MODEL:'muse-spark-1.3',META_API_KEY:'test-key'} as never,'192.0.2.1',{reserve:vi.fn().mockResolvedValue({allowed:true,retryAfter:0}),classify})
  expect(classified).toMatchObject({origin:'meta',cached:false,inference:{attempted:true,reservedUnits:1}});expect(classify.mock.calls[0][2]).toMatch(/^data:image\/png;base64,/)
  const discovered=await new D1AssetRetriever(db).retrieve({allocations:{home:100,fashion:0,travel:0},aesthetics:['Scandinavian'],tags:['chair'],brandDiversity:true,serendipity:0,seed:'fold chair',scope:'reader',publishedOnly:true,limit:10});expect(discovered.items.map(item=>item.version_id)).toContain(uploaded.versionId)
+ const editionResponse=await app.request(`${origin}/api/editorial`,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({prompt:'Explore Scandinavian chairs and quiet interiors',consent:false})},{CATALOG_DB:db,CATALOG_PUBLIC_ENABLED:'true',MAGAZINE_AI_ENABLED:'false',PUBLIC_APP_ORIGIN:origin})
+ expect(editionResponse.status).toBe(200)
+ const edition=await editionResponse.json() as Record<string,unknown>
+ expect(edition).toMatchObject({source:'deterministic',retrieval:'d1',cached:false,fallbackReason:'disabled',inference:{attempted:false,reservedUnits:0,latencyMs:null,usage:null}})
+ const editionItems=catalogItem.array().parse(edition.items),editionPlan=editorialPlan.parse(edition.plan)
+ expect(editionItems).toContainEqual(expect.objectContaining({id:published.items[0].id,image:expect.objectContaining({id:uploaded.versionId,externalUrl:`${origin}/api/media/${uploaded.versionId}`}),provenance:expect.objectContaining({attribution:'Curio owner-created mockup'})}))
+ expect(editionPlan.features).toEqual(expect.arrayContaining([expect.objectContaining({catalogId:published.items[0].id,assetId:uploaded.versionId})]))
+ expect(editorialSources.parse(edition.editorialSources)).toEqual(expect.arrayContaining([expect.objectContaining({assetId:uploaded.versionId,kind:'brand_story'})]))
  const ad=published.items[0],sam=vi.fn().mockResolvedValue({adId:ad.id,assetId:ad.image.id,width:ad.image.width,height:ad.image.height,model:'sam-3.1',source:'sam_detection',regions:[]})
  const decoded=await runDecoder({adId:ad.id,assetId:ad.image.id,detailId:'detail-0',consent:true},{CATALOG_DB:db,MEDIA_BUCKET:bucket,SAM_DECODER_ENABLED:'true',META_SAM_MODEL:'sam-3.1',META_API_KEY:'test-key'} as never,'192.0.2.1',{catalog:[],permits:{},reserve:vi.fn().mockResolvedValue({allowed:true,retryAfter:0}),sam,commentary:vi.fn()})
  expect(decoded.segmentation).toMatchObject({assetId:uploaded.versionId,source:'sam_detection'});expect(sam.mock.calls[0][0].imageDataUrl).toMatch(/^data:image\/png;base64,/)
  await store.remove(uploaded.versionId);expect(await bucket.get(uploaded.r2Key)).toBeNull();expect((await new CatalogPublications(db).list('',10,[uploaded.versionId])).items).toHaveLength(0);expect((await publicMedia(new Request(`${origin}/api/media/${uploaded.versionId}`),{CATALOG_DB:db,MEDIA_BUCKET:bucket,PUBLIC_APP_ORIGIN:origin},uploaded.versionId)).status).toBe(404)
+})
+
+it('does not deliver R2 bytes when a stale publication loses content display approval',async()=>{
+ const bytes=readFileSync('public/editorial/discover/02_ceramic_vase.png')
+ const uploaded=await store.upload(new File([bytes],'reviewed-study.png',{type:'image/png'}))
+ const request=new Request(`${origin}/api/media/${uploaded.versionId}`)
+ const env={CATALOG_DB:db,MEDIA_BUCKET:bucket,PUBLIC_APP_ORIGIN:origin}
+ expect((await new CatalogPublications(db).list('',10,[uploaded.versionId])).items).toHaveLength(1)
+ expect((await publicMedia(request,env,uploaded.versionId)).status).toBe(200)
+ await db.prepare(`UPDATE content_reviews SET status='blocked' WHERE version_id=(SELECT content_version FROM content_catalog_links WHERE asset_version=?) AND purpose='display'`).bind(uploaded.versionId).run()
+ expect((await new CatalogPublications(db).list('',10,[uploaded.versionId])).items).toHaveLength(0)
+ expect((await publicMedia(request,env,uploaded.versionId)).status).toBe(404)
+ expect(await bucket.get(uploaded.r2Key)).not.toBeNull()
 })
 
 it('fails closed before storage for invalid operator access and image content',async()=>{
@@ -116,4 +143,23 @@ it('mounts authenticated Media Studio root GETs with and without a trailing slas
   expect(denied.status,path).toBe(403)
   expect(await denied.json()).toEqual({error:'Operator access required.'})
  }
+})
+
+it('reports exact-version pilot readiness and loses publication on display revocation',async()=>{
+ const filename='02_ceramic_vase.png',bytes=readFileSync(`public/editorial/discover/${filename}`)
+ const uploaded=await store.upload(new File([bytes],filename,{type:'image/png'}))
+ await store.import({sourceText:'Owner fixture',brands:[{name:'Northline Studio',story:'Fictional owner mockup brand.'}],products:[{brand:'Northline Studio',name:'Vase Study',description:'A fictional owner-created interior study.',category:'home',materials:[],imageFilenames:[filename],lifestyleTags:['Scandinavian']}],campaigns:[]})
+ await runClassification({versionId:uploaded.versionId,mode:'meta',retryFailed:false,consent:true},{CATALOG_DB:db,MEDIA_BUCKET:bucket,ASSET_AI_ENABLED:'true',META_SPARK_MODEL:'muse-spark-1.3',META_API_KEY:'FAKE'} as never,'192.0.2.1',{reserve:vi.fn(async()=>({allowed:true,retryAfter:0})),classify:vi.fn(async()=>({...mockUnderstanding(uploaded.versionId),imageSha256:uploaded.sha256,observations:{subjects:['seating' as const],materialAppearance:[],environments:[],relationships:['curve-and-space' as const]}}))})
+ const ids=[uploaded.versionId,...Array.from({length:5},(_,i)=>`version-${String(i).repeat(64)}`)]
+ const token='test-only-private-token-more-than-32-characters'
+ const env={CATALOG_OPERATOR_ENABLED:'true',CATALOG_OPERATOR_TOKEN:token,PUBLIC_APP_ORIGIN:origin,CATALOG_DB:db,EDITORIAL_PILOT_VERSION_IDS:ids.join(',')}
+ const request=()=>app.request(`${origin}/api/operator/catalog/intelligence/pilot/readiness`,{headers:{Authorization:`Bearer ${token}`,'CF-Connecting-IP':'192.0.2.1','Sec-Fetch-Site':'same-origin',Referer:`${origin}/internal/media`}},env)
+ const initial=await (await request()).json() as {ready:boolean;assets:{versionId:string;published:boolean;editorialMetadata:boolean;imageAnalysis:boolean;editorialReady:boolean}[]}
+ expect(initial.ready).toBe(false)
+ expect(initial.assets).toHaveLength(6)
+ expect(initial.assets[0]).toMatchObject({versionId:uploaded.versionId,published:true,editorialMetadata:true,imageAnalysis:true,editorialReady:true})
+ expect(initial.assets.slice(1).every(row=>!row.published&&!row.imageAnalysis)).toBe(true)
+ await db.prepare(`UPDATE content_reviews SET status='blocked' WHERE version_id=(SELECT content_version FROM content_catalog_links WHERE asset_version=?) AND purpose='display'`).bind(uploaded.versionId).run()
+ const revoked=await (await request()).json() as typeof initial
+ expect(revoked.assets[0]).toMatchObject({published:false,imageAnalysis:false})
 })

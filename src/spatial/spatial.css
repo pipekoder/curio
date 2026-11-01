@@ -20,6 +20,8 @@
 .spatial-dock textarea{width:100%;box-sizing:border-box;min-height:76px;resize:vertical;border:1px solid #c6ceda;border-radius:12px;background:#fff;padding:12px 14px;font:16px/1.5 Georgia,serif;color:#101219}
 .spatial-dock button[type=submit]{margin-top:14px;min-height:48px;padding:12px 26px;border:0;border-radius:9999px;background:#101219;color:#fff;font:inherit;font-size:14px;cursor:pointer}
 .spatial-dock button[type=submit]:disabled{opacity:.45;cursor:not-allowed}
+.spatial-consent{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:12px;font-size:12px;color:#626b7a;cursor:pointer}
+.spatial-consent input{width:16px;height:16px;accent-color:#101219}
 .spatial-status{margin:14px 0 0;font-size:13px;line-height:1.6;color:#626b7a}
 .spatial-sr{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
 .spatial-scroll-proxy{height:300vh}
@@ -40,10 +42,20 @@
 .spatial-journey-bar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:15;display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:94vw;background:#fffffff0;border:1px solid #e0e5ed;border-radius:9999px;padding:8px 14px;box-shadow:0 1px 2px #5f6f8021,0 8px 24px #5f6f8026,0 20px 48px #5f6f8029}
 .spatial-journey-bar button{min-height:40px;padding:8px 14px;border:1px solid #c6ceda;border-radius:9999px;background:#fff;color:#101219;cursor:pointer;font:inherit;font-size:12px}
 .spatial-node-enter{min-height:44px;padding:10px 20px;border:0;border-radius:9999px;background:#101219;color:#fff;font:inherit;font-size:13px;cursor:pointer;margin-top:8px}
-.spatial-fallback{padding:30px;font:15px/1.6 Arial,sans-serif;color:#101219;background:#f4f5f7}
+.spatial-fallback{padding:30px;font:15px/1.6 Arial,sans-serif;color:#101219;background:#f4f5f7;max-width:760px;margin:0 auto}
+.spatial-fallback h1{font:400 34px/1.15 Georgia,serif;margin:6px 0 12px}
+.spatial-fallback h2{font:400 24px/1.25 Georgia,serif;margin:26px 0 8px}
+.spatial-fallback form{display:grid;gap:10px;margin:16px 0}
+.spatial-fallback textarea{width:100%;box-sizing:border-box;min-height:70px;border:1px solid #c6ceda;border-radius:12px;background:#fff;padding:12px 14px;font:16px/1.5 Georgia,serif;color:#101219}
+.spatial-fallback button{justify-self:start;min-height:44px;padding:10px 22px;border:0;border-radius:9999px;background:#101219;color:#fff;font:inherit;font-size:13px;cursor:pointer}
+.spatial-fallback button:disabled{opacity:.45;cursor:not-allowed}
+.spatial-fallback article{border-top:1px solid #e0e5ed;padding-bottom:8px}
+.spatial-fallback article img{max-width:100%;height:auto;border-radius:12px;background:#e8ecf1}
+.spatial-fallback ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.spatial-fallback li{background:#fff;border:1px solid #e0e5ed;border-radius:10px;padding:8px 12px}
 /* Static hover tints only; no transitions by design. */
 .spatial-actions button:hover,.spatial-rail-card button:hover,.spatial-journey-bar button:hover,.spatial-inspect-close:hover{background:#f7f8fa}
-.spatial-dock button[type=submit]:hover:not(:disabled),.spatial-node-enter:hover{background:#1e2430}
-.spatial-hud a:focus-visible,.spatial-hud button:focus-visible,.spatial-dock button:focus-visible,.spatial-dock textarea:focus-visible,.spatial-skip:focus-visible,.spatial-rail-card button:focus-visible,.spatial-inspect-close:focus-visible,.spatial-journey-bar button:focus-visible,.spatial-node-enter:focus-visible{outline:2px solid #385fa8;outline-offset:3px}
+.spatial-dock button[type=submit]:hover:not(:disabled),.spatial-node-enter:hover,.spatial-fallback button:hover:not(:disabled){background:#1e2430}
+.spatial-hud a:focus-visible,.spatial-hud button:focus-visible,.spatial-dock button:focus-visible,.spatial-dock textarea:focus-visible,.spatial-consent input:focus-visible,.spatial-skip:focus-visible,.spatial-rail-card button:focus-visible,.spatial-inspect-close:focus-visible,.spatial-journey-bar button:focus-visible,.spatial-node-enter:focus-visible{outline:2px solid #385fa8;outline-offset:3px}
 @media(max-width:640px){.spatial-hud{gap:10px;padding:10px 14px}.spatial-crumb{display:none}.spatial-dock{padding:20px}.spatial-node-panel{top:auto;bottom:84px;left:12px;right:12px;width:auto;max-height:42vh}.spatial-journey-bar{bottom:12px;gap:8px;padding:6px 10px;flex-wrap:nowrap;overflow-x:auto;max-width:calc(100vw - 24px)}.spatial-journey-bar button{flex:none;min-height:36px;padding:6px 12px}.spatial-journey-bar .spatial-fine{display:none}}
 @media(prefers-reduced-motion:reduce){.spatial-dock{animation:none}.spatial-root{scroll-behavior:auto}}
