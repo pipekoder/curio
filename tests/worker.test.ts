@@ -8,7 +8,7 @@ export const preferences: MagazineRequest = { interests: 'Quiet spaces', lifesty
 const draft = () => ({ title: 'A quieter day', sections: ['home', 'fashion', 'travel'].map(category => ({ category, catalogId: catalog.find(item => item.category === category)!.id, assetId: catalog.find(item => item.category === category)!.image.id, commentary: 'A gentle visual rhythm.' })) })
 const envelope = (content = draft(), finish_reason = 'stop') => Response.json({ choices: [{ finish_reason, message: { content: JSON.stringify(content) } }] })
 const reserve = vi.fn()
-const env: Bindings = { MAGAZINE_AI_ENABLED: 'true', META_API_KEY: 'test-server-key', META_SPARK_MODEL: 'muse-spark-1.3', PUBLIC_APP_ORIGIN: 'https://curio.test', RATE_LIMIT_SALT: 'test-only-high-entropy-salt-placeholder-32',
+const env: Bindings = { LEGACY_MAGAZINE_AI_ENABLED: 'true', META_API_KEY: 'test-server-key', META_SPARK_MODEL: 'muse-spark-1.3', PUBLIC_APP_ORIGIN: 'https://curio.test', RATE_LIMIT_SALT: 'test-only-high-entropy-salt-placeholder-32',
   INFERENCE_BUDGET: { idFromName: vi.fn(), get: () => ({ fetch: reserve }) } as unknown as DurableObjectNamespace }
 const post = (body: unknown = preferences, bindings: Bindings = {}, headers: Record<string, string> = {}) => app.request('/api/magazine', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'https://curio.test', 'CF-Connecting-IP': '192.0.2.1', ...headers }, body: JSON.stringify(body) }, bindings)
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); reserve.mockReset() })
@@ -20,7 +20,12 @@ describe('protected magazine API', () => {
   })
   it('never calls Meta when disabled even with credentials', async () => {
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
-    expect((await post(preferences, { ...env, MAGAZINE_AI_ENABLED: 'false' })).status).toBe(503)
+    expect((await post(preferences, { ...env, LEGACY_MAGAZINE_AI_ENABLED: 'false' })).status).toBe(503)
+    expect(fetch).not.toHaveBeenCalled(); expect(reserve).not.toHaveBeenCalled()
+  })
+  it('keeps the obsolete route disabled when editorial AI is enabled', async () => {
+    const fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
+    expect((await post(preferences, { ...env, LEGACY_MAGAZINE_AI_ENABLED: undefined, MAGAZINE_AI_ENABLED: 'true', EDITORIAL_PUBLIC_AI_ENABLED: 'true' })).status).toBe(503)
     expect(fetch).not.toHaveBeenCalled(); expect(reserve).not.toHaveBeenCalled()
   })
   it.each(['META_API_KEY', 'META_SPARK_MODEL', 'PUBLIC_APP_ORIGIN', 'RATE_LIMIT_SALT', 'INFERENCE_BUDGET'] as const)('fails closed without %s', async key => {
