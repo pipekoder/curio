@@ -1,7 +1,7 @@
 import {z} from 'zod'
 import {editorialPlan,type EditorialPlan,type EditorialPreferences,validateOriginalPlan} from '../shared/editorial'
 import {editorialReviewOutput,editorialStandardInstruction,scoreEditorialReview,type EditorialReviewOutput} from '../shared/editorial-standard'
-import {editorialKnowledgeInstruction,selectEditorialVoice} from '../shared/editorial-knowledge-v2'
+import {editorialKnowledgeInstruction,editorialV21Guidance,selectEditorialVoice} from '../shared/editorial-knowledge-v2'
 import type {EditorialSource} from '../shared/editorial-sources'
 import type {VisualContext} from '../shared/visual-observations'
 import type {CatalogItem} from '../shared/catalog'
@@ -33,7 +33,7 @@ function evidenceReferences(plan:EditorialPlan,sources:readonly EditorialSource[
 }
 
 export async function reviewEditorialPlan(key:string,plan:EditorialPlan,sources:readonly EditorialSource[],contexts:readonly VisualContext[],interests='',knowledgeV2=false){
-  const refs=evidenceReferences(plan,sources,contexts),result=await structuredMuse(key,knowledgeV2?`${reviewerInstruction} ${editorialKnowledgeInstruction(selectEditorialVoice(interests))}`:reviewerInstruction,{rubricVersion:'curio-editorial-standard-v1',plan,factualSources:sources,visualContexts:contexts,evidenceReferenceIds:[...refs]},editorialReviewOutput,'curio_editorial_review_v1')
+  const refs=evidenceReferences(plan,sources,contexts),result=await structuredMuse(key,knowledgeV2?`${reviewerInstruction} ${editorialKnowledgeInstruction(selectEditorialVoice(interests))} ${editorialV21Guidance.reviewer}`:reviewerInstruction,{rubricVersion:'curio-editorial-standard-v1',plan,factualSources:sources,visualContexts:contexts,evidenceReferenceIds:[...refs]},editorialReviewOutput,'curio_editorial_review_v1')
   const feedbackIds=result.value.featureFeedback.map(feature=>feature.assetId),assessment=scoreEditorialReview(result.value)
   if(feedbackIds.length!==plan.features.length||new Set(feedbackIds).size!==feedbackIds.length||feedbackIds.some(id=>!plan.features.some(item=>item.assetId===id))||Object.values(result.value.dimensions).some(dimension=>dimension.evidenceRefs.some(ref=>!refs.has(ref)))||result.value.featureFeedback.some(feature=>feature.issues.some(issue=>issue.evidenceRefs.some(ref=>!refs.has(ref))))||assessment.decision==='REVISE'&&(!result.value.revisionInstructions.length||!result.value.featureFeedback.some(feature=>feature.issues.length)))throw new EditorialReviewError('invalid_evidence',result.measurement)
   return {...result,assessment}
@@ -46,7 +46,7 @@ function sameStructure(original:EditorialPlan,revised:EditorialPlan){
 }
 
 export async function reviseEditorialPlan(key:string,original:EditorialPlan,review:EditorialReviewOutput,p:EditorialPreferences,pool:readonly CatalogItem[],approvals:ExternalAssetApprovals,sources:readonly EditorialSource[],contexts:readonly VisualContext[],knowledgeV2=false){
-  const result=await structuredMuse(key,knowledgeV2?`${revisionInstruction} ${editorialKnowledgeInstruction(selectEditorialVoice(p.interests))}`:revisionInstruction,{originalPlan:original,review,factualSources:sources,visualContexts:contexts},editorialPlan,'curio_editorial_revision_v1')
+  const result=await structuredMuse(key,knowledgeV2?`${revisionInstruction} ${editorialKnowledgeInstruction(selectEditorialVoice(p.interests))} ${editorialV21Guidance.revision}`:revisionInstruction,{originalPlan:original,review,factualSources:sources,visualContexts:contexts},editorialPlan,'curio_editorial_revision_v1')
   try{
     if(!sameStructure(original,result.value))throw Error('Structure changed')
     return {...result,value:validateOriginalPlan(result.value,pool,p,approvals,sources,contexts,true)}
