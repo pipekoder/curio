@@ -1,4 +1,5 @@
 import {z} from 'zod'
+import {isSafeHttpsUrl} from '../shared/url-policy'
 
 const researchInput=z.strictObject({query:z.string().trim().min(3).max(160),urls:z.array(z.url().max(2048)).min(1).max(3),quote:z.string().trim().min(3).max(200).optional()})
 export type ResearchInput=z.infer<typeof researchInput>
@@ -7,7 +8,7 @@ type Cache={match(request:Request):Promise<Response|undefined>;put(request:Reque
 const normalize=(value:string)=>value.replace(/\s+/g,' ').trim()
 const safeUrl=(raw:string,allowlist:ReadonlySet<string>)=>{
  const url=new URL(raw)
- if(url.protocol!=='https:'||url.username||url.password||url.port||url.hash||url.hostname==='localhost'||/^(?:\d{1,3}\.){3}\d{1,3}$/.test(url.hostname)||url.hostname.includes(':')||!allowlist.has(url.origin))throw Error('Research source is not allowlisted')
+ if(!isSafeHttpsUrl(raw)||!allowlist.has(url.origin))throw Error('Research source is not allowlisted')
  return url
 }
 const textFromHtml=(html:string)=>normalize(html.replace(/<(?:script|style|noscript|svg|template)\b[^>]*>[\s\S]*?<\/\s*(?:script|style|noscript|svg|template)\s*>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&(?:nbsp|#160);/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>'))
