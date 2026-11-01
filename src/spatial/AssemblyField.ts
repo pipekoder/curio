@@ -23,7 +23,7 @@ export class AssemblyField{
     this.seed=new Float32Array(COUNT)
     const positions=new Float32Array(COUNT*3)
     const colors=new Float32Array(COUNT*3)
-    const silver=new THREE.Color(0xdde3e9),brass=new THREE.Color(0xb98a3e)
+    const silver=new THREE.Color(0xdce4ee),brass=new THREE.Color(0xb98a3e)
     for(let i=0;i<COUNT;i++){
       const theta=Math.random()*Math.PI*2,phi=Math.acos(2*Math.random()-1),radius=40+Math.random()*50
       this.start[i*3]=target.x+radius*Math.sin(phi)*Math.cos(theta)

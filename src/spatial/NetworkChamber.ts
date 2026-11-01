@@ -7,8 +7,9 @@ import {NETWORK_CENTER,NETWORK_RADIUS,buildEdges,layoutNetwork,nodeScale,relevan
 // no decorative filler nodes; the chamber scales with the catalog.
 const NODE_SIZE=3.4
 const RING_SIZE=4.4
-const GRAPHITE=0x8b94a0
+const DETAIL=0x7a8ca8
 const BRASS=0xb98a3e
+const ACCENT=0xa9c5ff
 
 export class NetworkChamber{
   readonly group=new THREE.Group()
@@ -38,7 +39,7 @@ export class NetworkChamber{
     nodes.forEach((node,index)=>{
       const [x,y,z]=positions[index]
       const scale=nodeScale(weights[index])
-      const thumb=new THREE.Sprite(new THREE.SpriteMaterial({color:0xdde3e9,transparent:true,fog:false}))
+      const thumb=new THREE.Sprite(new THREE.SpriteMaterial({color:0xe8ecf1,transparent:true,fog:false}))
       thumb.scale.set(NODE_SIZE*scale,NODE_SIZE*scale,1)
       thumb.position.set(x,y,z)
       thumb.userData={index,assetId:node.assetId}
@@ -60,7 +61,7 @@ export class NetworkChamber{
       })
       const geometry=new THREE.BufferGeometry()
       geometry.setAttribute('position',new THREE.BufferAttribute(array,3))
-      this.edges=new THREE.LineSegments(geometry,new THREE.LineBasicMaterial({color:0xb9c1cb,transparent:true,opacity:0.5,fog:false}))
+      this.edges=new THREE.LineSegments(geometry,new THREE.LineBasicMaterial({color:0x7a8ca8,transparent:true,opacity:0.45,fog:false}))
       this.group.add(this.edges)
     }
   }
@@ -118,7 +119,7 @@ export class NetworkChamber{
     if(!ring)return
     const thumb=this.thumbs[index]
     const stagedNode=thumb!==undefined&&this.staged.has((thumb.userData as {assetId?:string}).assetId??'')
-    ;(ring.material as THREE.SpriteMaterial).color.set(index===this.selected||stagedNode?BRASS:GRAPHITE)
+    ;(ring.material as THREE.SpriteMaterial).color.set(index===this.selected?ACCENT:stagedNode?BRASS:DETAIL)
   }
 
   // Slow constellation drift; pauses while the visitor orbits, resumes idle.
@@ -145,7 +146,7 @@ export class NetworkChamber{
       ring.position.copy(thumb.position)
       ;(ring.material as THREE.SpriteMaterial).opacity=1-eased
     })
-    if(this.edges)(this.edges.material as THREE.LineBasicMaterial).opacity=0.5*(1-eased)
+    if(this.edges)(this.edges.material as THREE.LineBasicMaterial).opacity=0.45*(1-eased)
   }
 
   pick(clientX:number,clientY:number,camera:THREE.Camera,rect:{left:number;top:number;width:number;height:number}):number{
