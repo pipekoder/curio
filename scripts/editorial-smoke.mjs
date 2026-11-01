@@ -1,9 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  Miniflare,
-  convertV4MiniflareOptions,
-  Response as MFResponse,
-} from "miniflare";
+import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -12,8 +8,6 @@ import { importAssetManifest } from "./asset-intelligence-import.mjs";
 const token = "FAKE_OPERATOR_TOKEN_32_CHARACTERS_ONLY",
   origin = "https://curio.test";
 let calls = 0;
-const attemptedDestinations = [];
-let redirectNext = false;
 const state = await mkdtemp(join(tmpdir(), "curio-editorial-"));
 const mf = new Miniflare(
   convertV4MiniflareOptions({
@@ -37,41 +31,7 @@ const mf = new Miniflare(
       RATE_LIMIT_SALT: "FAKE_TEST_SALT_AT_LEAST_32_CHARACTERS",
       MAGAZINE_MAX_CALLS: "2",
     },
-    outboundService: async (request) => {
-      attemptedDestinations.push(request.url);
-      assert.equal(request.url, "https://api.meta.ai/v1/chat/completions");
-      const body = await request.json();
-      assert.equal(body.model, "muse-spark-1.3");
-      calls++;
-      if (redirectNext)
-        return new MFResponse(null, {
-          status: 302,
-          headers: { Location: "https://untrusted.example/steal-key" },
-        });
-      return MFResponse.json({
-        usage: {
-          prompt_tokens: 800,
-          completion_tokens: 420,
-          total_tokens: 1220,
-          prompt_tokens_details: { cached_tokens: 0 },
-        },
-        choices: [
-          {
-            finish_reason: "stop",
-            message: {
-              content: JSON.stringify(
-                JSON.parse(
-                  await readFile(
-                    "tests/fixtures/editorial-original.json",
-                    "utf8",
-                  ),
-                ).home,
-              ),
-            },
-          },
-        ],
-      });
-    },
+    outboundService: async () => { calls++; throw Error('Unapproved editorial inference'); },
   }),
 );
 const preferences = {
@@ -116,29 +76,10 @@ try {
   const live = { ...preferences, consent: true };
   const a = await post(live);
   const generated = await a.json();
-  assert.equal(generated.source, "meta", `mocked provider calls=${calls}`);
-  assert.equal(generated.inference.reservedUnits, 1);
-  assert.equal(generated.inference.usage.outputTokens, 420);
-  assert.ok(generated.inference.latencyMs >= 0);
-  assert.equal(calls, 1);
-  const cached = await (await post(live)).json();
-  assert.equal(cached.cached, true);
-  assert.equal(cached.inference.reservedUnits, 0);
-  assert.equal(cached.inference.attempted, false);
-  assert.equal(calls, 1);
-  assert.equal(
-    (
-      await (
-        await post({ ...live, interests: "another uncached request" })
-      ).json()
-    ).source,
-    "deterministic",
-  );
-  assert.equal(
-    calls,
-    1,
-    "shared budget blocks a second uncached call during cooldown",
-  );
+  assert.equal(generated.source, "deterministic");
+  assert.equal(generated.fallbackReason, "pilot_not_ready");
+  assert.equal(generated.inference.reservedUnits, 0);
+  assert.equal(calls, 0, "pending D1 assets and fictional fallback cannot reach Meta");
   assert.equal(
     (
       await mf.dispatchFetch(
@@ -151,27 +92,8 @@ try {
     (await db.prepare("SELECT COUNT(*) AS n FROM catalog_assets").first()).n,
     33,
   );
-  redirectNext = true;
-  assert.equal(
-    (
-      await (
-        await post({ ...live, interests: "redirect fixture" }, "192.0.2.2")
-      ).json()
-    ).source,
-    "deterministic",
-  );
-  assert.equal(
-    calls,
-    2,
-    "redirects are rejected without forwarding API credentials",
-  );
-  assert.deepEqual(
-    [...new Set(attemptedDestinations)],
-    ["https://api.meta.ai/v1/chat/completions"],
-    "no redirect destination may receive a request",
-  );
   console.log(
-    "PASS: editorial Worker + D1 retrieval excludes 33 pending assets; consent, mocked Meta plan/cache and shared DO cooldown; no editorial D1 writes, no real model calls",
+    "PASS: editorial Worker + D1 retrieval excludes 33 pending assets; consent and missing reviewer prerequisites fail closed with no outbound call or editorial D1 write",
   );
 } finally {
   await mf.dispose();
