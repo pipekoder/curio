@@ -44,6 +44,8 @@ import {loadApprovedCulturalEvidence,culturalSourcesForEditorial} from './cultur
 import {publicCitationsForPlan} from './editorial-citations';
 import type { Bindings } from "./index";
 import {chiefModel, editorialModeSchema, generationMetadata, hybridAvailable, hybridConfigured, EDITORIAL_MODEL_ROUTING_VERSION, type EditorialMode} from './editorial-model-routing';
+import {articleEditorialResponse} from './editorial-articles';
+import {ARTICLE_CONTRACT_VERSION} from '../shared/editorial-articles';
 // Index is never public. Only already approved compiled catalog records can be
 // hydrated from D1 hits; no returned URL, name, hint, job or source row is exposed.
 export async function editorialPool(
@@ -134,10 +136,12 @@ editorialApi.post("/", async (c) => {
   }
   let p: EditorialPreferences;
   let editorialMode:EditorialMode='lite';
+  let articleFormat=false;
   try {
-    if(input && typeof input==='object' && !Array.isArray(input) && 'editorialMode' in input){
-      const {editorialMode:requested,...preferences}=input as Record<string,unknown>;
-      editorialMode=editorialModeSchema.parse(requested);
+    if(input && typeof input==='object' && !Array.isArray(input) && ('editorialMode' in input||'editionFormat' in input)){
+      const {editorialMode:requested,editionFormat,...preferences}=input as Record<string,unknown>;
+      if(requested!==undefined)editorialMode=editorialModeSchema.parse(requested);
+      if(editionFormat!==undefined){if(editionFormat!==ARTICLE_CONTRACT_VERSION)throw Error('Unknown edition format');articleFormat=true}
       p=resolveEditorialInput(preferences);
     }else p=resolveEditorialInput(input);
   }
@@ -150,6 +154,7 @@ editorialApi.post("/", async (c) => {
   )
     return c.json({ error: "Origin or content type not allowed." }, 403);
   if(editorialMode==='hybrid'&&!hybridConfigured(env))return c.json({error:'Hybrid editorial mode is currently unavailable.',code:'hybrid_unavailable'},503);
+  if(articleFormat)return articleEditorialResponse(c.req.raw,env,p,editorialMode);
   const pilot=parsePilotVersions(env.EDITORIAL_PILOT_VERSION_IDS)
   const dynamicCatalog=env.EDITORIAL_PUBLIC_AI_ENABLED==='true'&&env.EDITORIAL_DYNAMIC_CATALOG_ENABLED==='true'
   const selectedPilot=dynamicCatalog?null:pilot
