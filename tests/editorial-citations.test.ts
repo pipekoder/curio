@@ -9,6 +9,8 @@ import {CatalogPublications} from '../worker/catalog-publications'
 import {culturalEvidenceKey,passageProofKey} from '../worker/cultural-evidence-store'
 import {CULTURAL_EVIDENCE_VERSION} from '../shared/cultural-evidence'
 import type {EditorialPlan} from '../shared/editorial'
+import {parseStagedPlan} from '../src/spatial/edition'
+import {citationsForFeature,fetchCitations} from '../src/spatial/citations'
 
 vi.setConfig({testTimeout:20000,hookTimeout:20000})
 const origin='https://curio.test',sha='a'.repeat(64),passageId=`passage:${'b'.repeat(32)}`
@@ -41,6 +43,10 @@ it('returns a bounded, rights-aware public citation without private pack metadat
  const response=await post();expect(response.status).toBe(200)
  expect(response.headers.get('Cache-Control')).toBe('no-store')
  const body=await response.json() as {version:string;features:{citations:{sources:{support:{kind:string;text:string}}[]}[]}[]}
+ const staged=parseStagedPlan(plan)
+ const client=await fetchCitations(staged,(async()=>Response.json(body)) as typeof fetch)
+ expect(client).not.toBeNull()
+ expect(citationsForFeature(client!,{featureIndex:0,catalogId:plan.features[0].catalogId,assetId:versionId})).toHaveLength(1)
  expect(body).toMatchObject({version:'curio-public-citations-v1',features:[{catalogId:plan.features[0].catalogId,assetId:versionId,citations:[{claimId:'claim:ritual',evidenceStatus:'operator_reviewed',reviewStatus:'approved',sources:[{canonicalUrl:'https://example.org/ritual',publication:'Example Review',support:{kind:'reviewed_paraphrase',text:'A reviewed cultural comparison connects this vessel to everyday rituals.'}}]}]}]})
  expect(JSON.stringify(body)).not.toContain('reviewHistory')
  expect(JSON.stringify(body)).not.toContain('A test passage describing')
