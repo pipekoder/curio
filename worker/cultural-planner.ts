@@ -39,6 +39,7 @@ export async function planCulturalResearch(raw:unknown,metaKey:string,reserve:()
 
 export function assessCulturalSufficiency(plan:CulturalResearchPlan, passages:readonly {relevance:number;sourceId:string}[], maxIterations:number){
   if(plan.decision!=='research')return {action:plan.decision==='stop_existing_evidence'?'proceed':'narrow',reason:plan.reason}
+  if(plan.reason==='conflict'||plan.reason==='weak_evidence')return {action:'narrow' as const,reason:plan.reason}
   const independent=new Set(passages.filter(p=>p.relevance>=0.35).map(p=>p.sourceId)).size
   if(independent>=2)return {action:'review_evidence' as const,reason:'multiple_relevant_sources' as const}
   if(maxIterations<=0)return {action:'narrow' as const,reason:'retrieval_limit' as const}
