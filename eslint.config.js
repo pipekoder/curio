@@ -10,6 +10,7 @@ export default ts.config(
     files: [
       "shared/editorial*.ts",
       "shared/cultural-evidence.ts",
+      "shared/public-citations.ts",
       "worker/cultural-*.ts",
       "worker/longform*.ts",
       "worker/catalog-api.ts",
