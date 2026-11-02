@@ -11,7 +11,7 @@ import {editionStatusCopy,fetchEdition,type HonestState} from './edition'
 import {stageEdition,type StagedExhibit} from './staging'
 import {AssemblyDirector} from './assembly'
 import {AssemblyField} from './AssemblyField'
-import {exhibitLayout,splinePosition,type Waypoint} from './camera-math'
+import {exhibitLayout,lateralBias,splinePosition,type Waypoint} from './camera-math'
 import {NETWORK_CENTER,ORBIT_DEFAULT,pickSurprise,orbitCamera} from './network-math'
 import {NetworkChamber} from './NetworkChamber'
 import {SPATIAL_SESSION_KEY,clearSpatialSession} from './clear'
@@ -336,7 +336,7 @@ export default function SpatialApp(){
     mounts.onArtworkError=(assetId:string)=>{pruneExhibits(id=>id!==assetId,'revoked')}
     const layout=exhibitLayout(exhibits.length)
     layoutRef.current=layout
-    rig.setPath(layout.waypoints,layout.docks)
+    rig.setPath(layout.waypoints,layout.docks,d=>lateralBias(d,layout.docks,exhibits.length))
     mounts.setExhibits(exhibits,layout.mounts)
   },[exhibits])
 
@@ -767,18 +767,12 @@ export default function SpatialApp(){
         Visit cleared from this browser{cleared.length?`: ${cleared.join(', ')}`:'. No visit data was found in this browser.'} Server data handling: pending confirmation.
       </p>}
     </section>}
-    {active&&!inspect&&mode==='promenade'&&<section id="spatial-rail" tabIndex={-1} className={`spatial-rail ${current%2===0?'story-right':'story-left'}`} aria-label={`Contents of ${active.title}`}>
+    {active&&!inspect&&mode==='promenade'&&<section id="spatial-rail" tabIndex={-1} className="spatial-rail" aria-label={`Contents of ${active.title}`}>
       <article className="spatial-rail-card rail-story">
         <p className="spatial-eyebrow">Story</p>
         <h2>{active.title}</h2>
         <p>{active.narrative}</p>
         <button type="button" onClick={()=>setInspect({assetId:active.assetId})}>Inspect exhibit →</button>
-      </article>
-      <article className="spatial-rail-card rail-detail">
-        <p className="spatial-eyebrow">Visual detail</p>
-        {active.hotspots.length
-          ?<ul>{active.hotspots.map(h=><li key={h.id}><button type="button" onClick={()=>setInspect({assetId:active.assetId,hotspotId:h.id})}>{h.label} →</button></li>)}</ul>
-          :<p>No annotated details on this study.</p>}
       </article>
     </section>}
     {inspected&&<aside className="spatial-inspect" aria-label={`Inspecting ${inspected.title}`}>

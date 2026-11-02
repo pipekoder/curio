@@ -43,6 +43,24 @@ export function magnetEscape(velocity:number,threshold:number):boolean{
   return Math.abs(velocity)>threshold
 }
 
+// Promenade composition: mounts march rightward at a fixed step while the
+// camera carries an equal lateral bias, so every active mount frames at the
+// same left-of-center apparent position with its neighbor peeking past it.
+export const MOUNT_X0=-3.4
+export const MOUNT_STEP=3.6
+export function mountX(index:number):number{
+  return MOUNT_X0+index*MOUNT_STEP
+}
+// Rigid lateral camera offset for distance d: 0 at the first dock,
+// (count-1)*MOUNT_STEP at the last, linear between, clamped outside.
+export function lateralBias(d:number,docks:readonly number[],count:number):number{
+  if(docks.length<2||count<2)return 0
+  const span=docks[docks.length-1]-docks[0]
+  if(span<=0)return 0
+  const t=Math.min(1,Math.max(0,(d-docks[0])/span))
+  return t*(count-1)*MOUNT_STEP
+}
+
 // Promenade layout: origin rest, one dock per exhibit down-axis, an overlook
 // past the last mount. Pure so the camera path is unit-tested.
 export function exhibitLayout(count:number,spacing=40,startZ=-40):{waypoints:Waypoint[];docks:number[];mounts:{x:number;z:number}[];pathLength:number}{
@@ -53,8 +71,7 @@ export function exhibitLayout(count:number,spacing=40,startZ=-40):{waypoints:Way
     const d=60+i*spacing
     docks.push(d)
     waypoints.push({d,p:[0,2.2,startZ-i*spacing]})
-    const side=i%2?1:-1
-    mounts.push({x:side*(3.4+Math.min(Math.floor(i/2),1)*0.3),z:startZ-i*spacing-12})
+    mounts.push({x:mountX(i),z:startZ-i*spacing-12})
   }
   const pathLength=60+Math.max(0,count-1)*spacing+50
   waypoints.push({d:pathLength,p:[0,6,startZ-Math.max(0,count-1)*spacing-50]})

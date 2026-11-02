@@ -67,7 +67,7 @@ export class ExhibitMounts{
       mount.add(art)
       this.pickables.push(art)
       const band=new THREE.Shape(roundedRect(FRAME_W,FRAME_H,FRAME_R).getPoints(12))
-      band.holes.push(new THREE.Path(roundedRect(FRAME_W-0.34,FRAME_H-0.34,FRAME_R-0.17).getPoints(12)))
+      band.holes.push(new THREE.Path(roundedRect(FRAME_W-0.5,FRAME_H-0.5,FRAME_R-0.22).getPoints(12)))
       const bandGeo=new THREE.ShapeGeometry(band,12)
       {
         const positions=bandGeo.getAttribute('position')
@@ -79,9 +79,15 @@ export class ExhibitMounts{
         }
         bandGeo.setAttribute('color',new THREE.BufferAttribute(colors,3))
       }
-      const glass=new THREE.Mesh(bandGeo,new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,opacity:0.9}))
+      const glass=new THREE.Mesh(bandGeo,new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,opacity:1}))
       glass.position.set(0,2.6,RING_Z)
       mount.add(glass)
+      for(const [fx,fy] of [[-1,-1],[1,-1],[-1,1],[1,1]] as const){
+        const flare=new THREE.Sprite(new THREE.SpriteMaterial({map:ExhibitMounts.flare(),transparent:true,opacity:0.85,depthWrite:false}))
+        flare.scale.setScalar(1.6)
+        flare.position.set(fx*(FRAME_W/2-0.25),2.6+fy*(FRAME_H/2-0.25),RING_Z+0.003)
+        mount.add(flare)
+      }
       const frame=new THREE.LineLoop(
         new THREE.BufferGeometry().setFromPoints(roundedRect(FRAME_W-0.05,FRAME_H-0.05,FRAME_R-0.02).getPoints(24)),
         new THREE.LineBasicMaterial({color:0x101219}),
@@ -130,6 +136,23 @@ export class ExhibitMounts{
     })
   }
 
+  private static flareTexture:THREE.Texture|null=null
+  private static flare():THREE.Texture{
+    if(!ExhibitMounts.flareTexture){
+      const canvas=document.createElement('canvas')
+      canvas.width=64;canvas.height=64
+      const ctx=canvas.getContext('2d')!
+      const gradient=ctx.createRadialGradient(32,32,1,32,32,30)
+      gradient.addColorStop(0,'rgba(255,255,255,1)')
+      gradient.addColorStop(0.3,'rgba(205,222,250,.75)')
+      gradient.addColorStop(0.6,'rgba(244,224,240,.42)')
+      gradient.addColorStop(1,'rgba(244,224,240,0)')
+      ctx.fillStyle=gradient
+      ctx.fillRect(0,0,64,64)
+      ExhibitMounts.flareTexture=new THREE.CanvasTexture(canvas)
+    }
+    return ExhibitMounts.flareTexture
+  }
   private static blobTexture:THREE.Texture|null=null
   private static blob():THREE.Texture{
     if(!ExhibitMounts.blobTexture){
@@ -178,7 +201,7 @@ export class ExhibitMounts{
       const material=mesh.material as THREE.Material|undefined
       if(material){
         const mapped=(material as THREE.MeshBasicMaterial).map
-        if(mapped&&mapped!==ExhibitMounts.blobTexture)mapped.dispose()
+        if(mapped&&mapped!==ExhibitMounts.blobTexture&&mapped!==ExhibitMounts.flareTexture)mapped.dispose()
         material.dispose()
       }
     })

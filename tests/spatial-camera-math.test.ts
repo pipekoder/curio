@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest'
-import {clamp,dampedStep,dockMagnet,exhibitLayout,lerp,magnetEscape,scrollToDistance,splinePosition} from '../src/spatial/camera-math'
+import {clamp,dampedStep,dockMagnet,exhibitLayout,lateralBias,lerp,magnetEscape,scrollToDistance,splinePosition} from '../src/spatial/camera-math'
 
 describe('spatial camera math',()=>{
  it('damps toward the target without overshoot and snaps on degenerate input',()=>{
@@ -47,12 +47,22 @@ describe('spatial camera math',()=>{
   expect(three.waypoints[1].p[2]).toBe(-40)
   expect(three.waypoints[3].p[2]).toBe(-120)
   expect(three.mounts.map(m=>m.z)).toEqual([-52,-92,-132])
-  expect(three.mounts.map(m=>Math.round(m.x*100)/100)).toEqual([-3.4,3.4,-3.7])
+  expect(three.mounts.map(m=>Math.round(m.x*100)/100)).toEqual([-3.4,0.2,3.8])
   const none=exhibitLayout(0)
   expect(none.docks).toEqual([])
   expect(none.mounts).toEqual([])
   expect(none.pathLength).toBe(110)
  })
+ it('biases the camera laterally per dock without touching the path',()=>{
+  const three=exhibitLayout(3)
+  expect(three.docks).toEqual([60,100,140])
+  expect(lateralBias(three.docks[0],three.docks,3)).toBe(0)
+  expect(lateralBias(three.docks[1],three.docks,3)).toBeCloseTo(3.6)
+  expect(lateralBias(three.docks[2],three.docks,3)).toBeCloseTo(7.2)
+  expect(lateralBias(0,three.docks,3)).toBe(0)
+  expect(lateralBias(999,three.docks,3)).toBeCloseTo(7.2)
+  expect(lateralBias(60,[],1)).toBe(0)
+})
  it('keeps helpers total',()=>{
   expect(lerp(0,10,0.25)).toBe(2.5)
   expect(clamp(9,0,5)).toBe(5)
