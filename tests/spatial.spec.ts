@@ -206,13 +206,16 @@ test('V3 sources open on demand with reviewed claims only',async({page})=>{
   await expect(sources).toHaveCount(1)
   // No lookup happens before the visitor opens Sources.
   expect(citationsBody).toBe('unset')
-  await sources.getByRole('button',{name:/Sources/}).click()
+  await sources.getByRole('button',{name:'Sources & References ▸'}).click()
   await expect(sources).toContainText('An approved editorial comparison about an everyday ritual.')
   await expect(sources).toContainText('Comparison · Operator reviewed · Approved')
   await expect(sources).toContainText('Reviewed paraphrase · Example Review')
   await expect(sources.getByRole('link',{name:'Open source ↗'})).toHaveAttribute('href','https://example.org/article')
   // The lookup POSTs the plan alone: no prompt, preferences, or token.
   expect(Object.keys(citationsBody as Record<string,unknown>)).toEqual(['plan'])
+  // Sources & References is the separated bottom section of the story frame.
+  const order=await page.locator('.spatial-story').evaluate(el=>[...el.children].map(child=>child.className))
+  expect(order[order.length-1]).toContain('spatial-sources')
 })
 
 test('unavailable citations hide gracefully without blocking the story',async({page})=>{
@@ -226,8 +229,8 @@ test('unavailable citations hide gracefully without blocking the story',async({p
   await page.getByRole('button',{name:'Read story'}).click()
   const sources=page.locator('.spatial-sources')
   await sources.getByRole('button',{name:/Sources/}).click()
-  await expect(sources).toContainText('No approved sources available for this story right now.')
-  await expect(sources.locator('.spatial-sources-list')).toHaveCount(0)
+  // An empty lookup hides the section instead of leaving a placeholder.
+  await expect(sources).toHaveCount(0)
   await expect(page.locator('.spatial-story')).toContainText('A closer look: Ochre Arc Chair')
 })
 
@@ -411,8 +414,11 @@ test('a refused hybrid stages nothing and retries explicitly in lite',async({pag
   expect((bodies[1] as Record<string,unknown>).editorialMode).toBe('lite')
   await expect(page.getByTestId('spatial-edition-chip')).toContainText('AI-curated edition · Meta AI')
   await expect(page.getByTestId('spatial-edition-chip')).not.toContainText('Hybrid')
-  await page.getByRole('button',{name:'New prompt'}).click()
+  await page.getByRole('button',{name:'New Discovery'}).click()
   await expect(page.locator('input[name=editorial-mode][value=lite]')).toBeChecked()
+  // A new discovery reopens the prompt without wiping staged journey records.
+  expect(await page.evaluate(()=>window.__spatial?.().exhibits??0)).toBeGreaterThan(0)
+  expect(await page.evaluate(()=>window.__spatial?.().nodeIds.length??0)).toBeGreaterThan(0)
 })
 
 test('journey node panel shows the node artwork',async({page})=>{
