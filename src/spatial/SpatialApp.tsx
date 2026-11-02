@@ -11,7 +11,8 @@ import {editionStatusCopy,fetchEdition,type HonestState,type StagedPlan} from '.
 import {fetchCapabilities,type EditorialCapabilities,type EditorialMode,type GenerationMetadata} from './editorial-mode'
 import {INTEREST_SEEDS,SEED_DISPLAY,drawSurprise,pickSuggestions,type InterestSeed} from './prompt-library'
 import StoryReader from './StoryReader'
-import {stageEdition,type StagedExhibit} from './staging'
+import {stageArticleEdition,stageEdition,type StagedExhibit} from './staging'
+import {articleStatusCopy,fetchArticleEdition} from './articles'
 import {AssemblyDirector} from './assembly'
 import {AssemblyField} from './AssemblyField'
 import {exhibitLayout,lateralBias,splinePosition,type Waypoint} from './camera-math'
@@ -65,6 +66,11 @@ export default function SpatialApp(){
   const [editorialMode,setEditorialMode]=useState<EditorialMode>('lite')
   const [capabilities,setCapabilities]=useState<EditorialCapabilities|null>(null)
   const [modeError,setModeError]=useState<'hybrid_unavailable'|null>(null)
+  // Opt-in multi-article edition: default off keeps the ordinary editorial
+  // path as the disclosed baseline. Failures name their state and offer the
+  // baseline retry; nothing silently swaps formats.
+  const [articleFormat,setArticleFormat]=useState(false)
+  const [articleError,setArticleError]=useState<{title:string;detail:string}|null>(null)
   const [generationMode,setGenerationMode]=useState<EditorialMode|null>(null)
   const [suggestion,setSuggestion]=useState<InterestSeed>(()=>pickSuggestions()[0])
   const surpriseCursor=useRef(Math.floor(Math.random()*INTEREST_SEEDS.length))
@@ -89,7 +95,7 @@ export default function SpatialApp(){
   const fieldRef=useRef<SilverField|null>(null)
   const directorRef=useRef(new AssemblyDirector())
   const assemblyRef=useRef<AssemblyField|null>(null)
-  const stagedRef=useRef<{exhibits:StagedExhibit[];label:HonestState;skipped:number;reason?:string;timedOut:boolean;fullPlan:StagedPlan;generation:GenerationMetadata|null}|null>(null)
+  const stagedRef=useRef<{exhibits:StagedExhibit[];label:HonestState;skipped:number;reason?:string;timedOut:boolean;fullPlan:StagedPlan|null;generation:GenerationMetadata|null}|null>(null)
   // True cancellation for the edition request: a new submit or Clear aborts
   // the in-flight fetch instead of leaving it to run out the 90s bound. The
   // submit-ID guard still ignores any response that slips through the race.
@@ -276,7 +282,7 @@ export default function SpatialApp(){
                 setExhibits(staged.exhibits)
                 setEditionLabel(staged.label)
                 setFallbackReason(staged.reason??null)
-                setStatus(editionStatusCopy(staged.timedOut,staged.skipped))
+                setStatus(editionStatusCopy(staged.timedOut,staged.skipped,staged.exhibits.some(exhibit=>exhibit.article)?'article':'feature'))
                 setShowDock(false)
               }
             }
@@ -425,7 +431,7 @@ export default function SpatialApp(){
     return <SpatialFallback/>
   }
 
-  const submit=async(event?:React.FormEvent,promptOverride?:string,modeOverride?:EditorialMode)=>{
+  const submit=async(event?:React.FormEvent,promptOverride?:string,modeOverride?:EditorialMode,formatOverride?:'articles'|'standard')=>{
     event?.preventDefault()
     const trimmed=(promptOverride??prompt).trim()
     if(!trimmed||composing)return
@@ -434,6 +440,7 @@ export default function SpatialApp(){
     setCleared(null)
     setElapsed(0)
     setModeError(null)
+    setArticleError(null)
     setStatus('Composing your exhibition…')
     const submitId=++submitIdRef.current
     window.scrollTo(0,0)
@@ -462,44 +469,73 @@ export default function SpatialApp(){
     const controller=new AbortController()
     fetchAbortRef.current=controller
     const selectedMode=modeOverride??editorialMode
-    // The mode propagates only to a contract backend: the current strict
-    // prompt shape would 400 an extra field, so omission means Lite there.
-    const {edition,honest,fallbackReason:reason,timedOut,modeError:refused,generation}=await fetchEdition(trimmed,consent,fetch,{onResponse:()=>directorRef.current.onResponse(),signal:controller.signal,editorialMode:capabilities?selectedMode:undefined})
-    if(submitId!==submitIdRef.current)return
-    if(refused||!edition){
-      setComposing(false)
-      window.clearInterval(tickerRef.current)
-      rigRef.current?.setPath(exhibitLayout(0).waypoints,[])
-      directorRef.current.reset()
-      const failed=assemblyRef.current
-      if(failed&&field){failed.dispose(field.scene);assemblyRef.current=null}
-      setModeError('hybrid_unavailable')
-      setStatus('Hybrid editorial mode is currently unavailable, so nothing was generated.')
-      // Availability may have changed since the capabilities read; re-check
-      // (adopting only successful reads, so a blip never un-proves Hybrid).
-      void fetchCapabilities().then(caps=>{if(caps)setCapabilities(caps)})
-      return
-    }
-    const {exhibits:staged,skipped}=stageEdition(edition)
-    if(!staged.length){
+    const wantArticles=formatOverride?formatOverride==='articles':articleFormat
+    const tearDownAssembly=()=>{
       setComposing(false)
       window.clearInterval(tickerRef.current)
       rigRef.current?.setPath(exhibitLayout(0).waypoints,[])
       directorRef.current.reset()
       const assembly=assemblyRef.current
       if(assembly&&field){assembly.dispose(field.scene);assemblyRef.current=null}
-      setStatus(timedOut?editionStatusCopy(true,0):'No stageable exhibits right now. Refine your curiosity and try again.')
-      return
     }
+    // Either format settles through the same promenade staging. Article
+    // editions carry no EditorialPlan, so Sources stays hidden for them.
+    let fullPlan:StagedPlan|null=null
+    let honest:HonestState,reason:string|undefined,timedOut:boolean,generation:GenerationMetadata|null
+    let staged:StagedExhibit[],skipped:number
+    if(wantArticles){
+      const result=await fetchArticleEdition(trimmed,consent,fetch,{onResponse:()=>directorRef.current.onResponse(),signal:controller.signal,editorialMode:capabilities?selectedMode:undefined})
+      if(submitId!==submitIdRef.current)return
+      if(!result.edition){
+        tearDownAssembly()
+        const copy=articleStatusCopy(result)
+        setArticleError(copy)
+        setStatus(copy.title)
+        return
+      }
+      const articleStaged=stageArticleEdition(result.edition)
+      if(articleStaged.exhibits.length<5){
+        tearDownAssembly()
+        setArticleError({title:'The article edition arrived incomplete.',detail:'Fewer than five articles could be verified against the catalog. The standard edition below remains available.'})
+        setStatus('The article edition arrived incomplete.')
+        return
+      }
+      honest=result.honest;reason=result.fallbackReason;timedOut=result.timedOut;generation=result.generation
+      staged=articleStaged.exhibits;skipped=articleStaged.skipped
+    }else{
+      // The mode propagates only to a contract backend: the current strict
+      // prompt shape would 400 an extra field, so omission means Lite there.
+      const {edition,honest:baseHonest,fallbackReason:baseReason,timedOut:baseTimedOut,modeError:refused,generation:baseGeneration}=await fetchEdition(trimmed,consent,fetch,{onResponse:()=>directorRef.current.onResponse(),signal:controller.signal,editorialMode:capabilities?selectedMode:undefined})
+      if(submitId!==submitIdRef.current)return
+      if(refused||!edition){
+        tearDownAssembly()
+        setModeError('hybrid_unavailable')
+        setStatus('Hybrid editorial mode is currently unavailable, so nothing was generated.')
+        // Availability may have changed since the capabilities read; re-check
+        // (adopting only successful reads, so a blip never un-proves Hybrid).
+        void fetchCapabilities().then(caps=>{if(caps)setCapabilities(caps)})
+        return
+      }
+      const {exhibits:baseStaged,skipped:baseSkipped}=stageEdition(edition)
+      if(!baseStaged.length){
+        tearDownAssembly()
+        setStatus(baseTimedOut?editionStatusCopy(true,0):'No stageable exhibits right now. Refine your curiosity and try again.')
+        return
+      }
+      fullPlan=edition.fullPlan
+      honest=baseHonest;reason=baseReason;timedOut=baseTimedOut;generation=baseGeneration
+      staged=baseStaged;skipped=baseSkipped
+    }
+    const articleNoun=staged.some(exhibit=>exhibit.article)?'article' as const:'feature' as const
     if(reduced.current||!assemblyRef.current){
-      planRef.current=edition.fullPlan
+      planRef.current=fullPlan
       setGenerationMode(generation?.editorialMode??null)
       setExhibits(staged)
       setEditionLabel(honest)
       setFallbackReason(reason??null)
       setShowDock(false)
       setComposing(false)
-      setStatus(editionStatusCopy(timedOut,skipped))
+      setStatus(editionStatusCopy(timedOut,skipped,articleNoun))
       requestAnimationFrame(()=>requestAnimationFrame(()=>{
         const layout=exhibitLayout(staged.length)
         const maxScroll=document.documentElement.scrollHeight-window.innerHeight
@@ -507,7 +543,7 @@ export default function SpatialApp(){
       }))
       return
     }
-    stagedRef.current={exhibits:staged,label:honest,skipped,reason,timedOut,fullPlan:edition.fullPlan,generation}
+    stagedRef.current={exhibits:staged,label:honest,skipped,reason,timedOut,fullPlan,generation}
     directorRef.current.onSettled()
   }
 
@@ -547,6 +583,7 @@ export default function SpatialApp(){
     setInspect(null)
     setStory(null)
     setModeError(null)
+    setArticleError(null)
     setGenerationMode(null)
     planRef.current=null
     setShowDock(true)
@@ -806,7 +843,7 @@ export default function SpatialApp(){
         {staged&&mode==='promenade'&&<button type="button" onClick={reopen}>New prompt</button>}
       </div>
     </header>
-    {editionLabel&&<p className="spatial-chip" role="note" data-testid="spatial-edition-chip">{HONEST_COPY[editionLabel]}{fallbackReason&&REASON_COPY[fallbackReason]?` (${REASON_COPY[fallbackReason]})`:''}{(editionLabel==='meta'||editionLabel==='meta-cached')&&generationMode==='hybrid'?' · Hybrid':''}</p>}
+    {editionLabel&&<p className="spatial-chip" role="note" data-testid="spatial-edition-chip">{HONEST_COPY[editionLabel]}{fallbackReason&&REASON_COPY[fallbackReason]?` (${REASON_COPY[fallbackReason]})`:''}{(editionLabel==='meta'||editionLabel==='meta-cached')&&generationMode==='hybrid'?' · Hybrid':''}{(editionLabel==='meta'||editionLabel==='meta-cached')&&exhibits.some(exhibit=>exhibit.article)?' · Article edition':''}</p>}
     {composing&&<div role="status" className="spatial-generating">
       <p className="spatial-eyebrow">02 · Generating</p>
       <p className="spatial-generating-title">Composing your exhibition…</p>
@@ -855,12 +892,21 @@ export default function SpatialApp(){
           <input type="checkbox" checked={consent} disabled={composing} onChange={event=>setConsent(event.target.checked)}/>
           Allow AI curation
         </label>
+        <label className="spatial-consent">
+          <input type="checkbox" checked={articleFormat} disabled={composing} onChange={event=>setArticleFormat(event.target.checked)}/>
+          Article edition · 5–8 stories
+        </label>
         <button type="submit" disabled={!prompt.trim()||composing}>{composing?'Composing…':'Begin exploration →'}</button>
       </form>
       {modeError==='hybrid_unavailable'&&!composing&&<div ref={modeErrorRef} role="alert" className="spatial-mode-error">
         <p><strong>Hybrid is currently unavailable.</strong> Nothing was generated.</p>
         <button type="button" onClick={()=>{setEditorialMode('lite');void submit(undefined,undefined,'lite')}}>Switch to Lite & retry</button>
         <button type="button" onClick={()=>void submit()}>Try Hybrid again</button>
+      </div>}
+      {articleError&&!composing&&<div role="alert" className="spatial-mode-error">
+        <p><strong>{articleError.title}</strong> {articleError.detail}</p>
+        <button type="button" onClick={()=>{setArticleFormat(false);void submit(undefined,undefined,undefined,'standard')}}>Continue with the standard edition</button>
+        <button type="button" onClick={()=>void submit(undefined,undefined,undefined,'articles')}>Try articles again</button>
       </div>}
       <p className="spatial-fine">Off by default. When on, your prompt may be sent to Meta for curation.</p>
       {cleared&&<p role="status" className="spatial-status">
@@ -871,7 +917,7 @@ export default function SpatialApp(){
       <article className="spatial-rail-card rail-story">
         <p className="spatial-eyebrow">Story</p>
         <h2>{active.title}</h2>
-        <p>{active.narrative}</p>
+        <p>{active.article?active.article.deck:active.narrative}</p>
         <button type="button" id="spatial-read-story" onClick={()=>setStory({assetId:active.assetId})}>Read story →</button>
         <button type="button" onClick={()=>setInspect({assetId:active.assetId})}>Inspect exhibit →</button>
         <p className="spatial-fine">Read the story, or scroll to explore.{active.hotspots.length>0?' Select an object in Inspect to explore details.':''}</p>

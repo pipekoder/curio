@@ -58,9 +58,9 @@ export function parseStagedPlan(raw:unknown):StagedPlan{
 // to the disclosed authored fallback (timedOut), never to a hang.
 export const EDITORIAL_TIMEOUT_MS=90000
 
-export function editionStatusCopy(timedOut:boolean,skipped:number):string{
+export function editionStatusCopy(timedOut:boolean,skipped:number,noun:'feature'|'article'='feature'):string{
   if(timedOut)return `The full review was still running after ${EDITORIAL_TIMEOUT_MS/1000} seconds, so this visit uses the authored edition.`
-  if(skipped)return `${skipped} feature${skipped===1?'':'s'} referenced unavailable imagery and ${skipped===1?'was':'were'} left out.`
+  if(skipped)return `${skipped} ${noun}${skipped===1?'':'s'} referenced unavailable imagery and ${skipped===1?'was':'were'} left out.`
   return ''
 }
 

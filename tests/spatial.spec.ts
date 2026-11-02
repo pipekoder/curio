@@ -2,6 +2,7 @@ import {test,expect,type Page,type Route} from '@playwright/test'
 import {readFileSync} from 'node:fs'
 import {fileURLToPath} from 'node:url'
 import {join,dirname} from 'node:path'
+import {articleResponseFixture} from './article-fixtures'
 
 // Serialized readerDemoCatalog records (demo-curio-owner-08/18-v1); the
 // edition adapter validates them strictly, so fixture drift fails loudly.
@@ -329,6 +330,59 @@ test('hybrid mode propagates, shows while generating, and confirms on the chip',
   await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of',{timeout:15000})
   expect((bodies[0] as Record<string,unknown>).editorialMode).toBe('hybrid')
   await expect(page.getByTestId('spatial-edition-chip')).toContainText('AI-curated edition · Meta AI · Hybrid')
+})
+
+test('article opt-in stages five docks and renders deck plus brand captions',async({page})=>{
+  let body:unknown=null
+  await page.route('**/api/editorial',route=>{
+    body=route.request().postDataJSON()
+    return route.fulfill({status:200,json:articleResponseFixture()})
+  })
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await expect(page.locator('.spatial-canvas')).toBeVisible()
+  await page.getByLabel('Allow AI curation').check()
+  await page.getByLabel(/Article edition/).check()
+  await submitPrompt(page)
+  await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of 5',{timeout:15000})
+  expect((body as Record<string,unknown>).editionFormat).toBe('curio-editorial-articles-v1')
+  await expect(page.getByTestId('spatial-edition-chip')).toContainText('AI-curated edition · Meta AI · Article edition')
+  await expect(page.locator('#spatial-rail')).toContainText('A short introduction to demo article 1.')
+  await page.getByRole('button',{name:'Read story'}).click()
+  const story=page.locator('.spatial-story')
+  await expect(story).toContainText('The quiet craft of demo article 1')
+  await expect(story).toContainText('A short introduction to demo article 1.')
+  await expect(story.locator('figure')).toHaveCount(3)
+  await expect(story).toContainText('Atelier Nord')
+  await expect(story).toContainText('Casa Lumen')
+  // Article editions carry no EditorialPlan, so Sources stays hidden.
+  await expect(story.getByRole('button',{name:/Sources/})).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(story).toHaveCount(0)
+})
+
+test('insufficient article content discloses state and retries the standard edition',async({page})=>{
+  const bodies:unknown[]=[]
+  await page.route('**/api/editorial',route=>{
+    const payload=route.request().postDataJSON() as Record<string,unknown>
+    bodies.push(payload)
+    if(payload.editionFormat)return route.fulfill({status:409,json:{status:'insufficient_content',eligibleImages:9,requiredImages:15,fallbackReason:'insufficient_content'}})
+    return route.fulfill({status:200,json:{plan:metaPlan,items:groundedItems,source:'meta',retrieval:'d1',cached:false}})
+  })
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await expect(page.locator('.spatial-canvas')).toBeVisible()
+  await page.getByLabel(/Article edition/).check()
+  await submitPrompt(page)
+  const alert=page.getByRole('alert')
+  await expect(alert).toContainText('Not enough approved imagery')
+  await expect(alert).toContainText('9 of 15')
+  await expect(page.getByTestId('spatial-edition-chip')).toHaveCount(0)
+  await page.getByRole('button',{name:'Continue with the standard edition'}).click()
+  await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of 2',{timeout:15000})
+  await expect(page.getByTestId('spatial-edition-chip')).not.toContainText('Article edition')
+  expect(bodies).toHaveLength(2)
+  expect((bodies[1] as Record<string,unknown>).editionFormat).toBeUndefined()
 })
 
 test('a refused hybrid stages nothing and retries explicitly in lite',async({page})=>{
