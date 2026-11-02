@@ -105,6 +105,28 @@ test('arriving at an exhibit reveals its lateral rail',async({page})=>{
   await page.screenshot({path:'test-results/spatial-promenade-1440.png'})
 })
 
+test('promenade visits every dock with its story rail',async({page})=>{
+  test.setTimeout(120000)
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await submitPrompt(page)
+  await expect(page.getByTestId('spatial-edition-chip')).toBeVisible()
+  // The assembly director settles the page at dock 0 when it finishes; wait
+  // for that before driving the dock loop so no late settle yanks us back.
+  await page.waitForFunction(()=>window.__spatial?.().assembly==='idle',{timeout:30000})
+  const exhibits=await page.evaluate(()=>window.__spatial?.().exhibits??0)
+  expect(exhibits).toBeGreaterThan(0)
+  for(let i=0;i<exhibits;i++){
+    await page.evaluate(([idx,count])=>{
+      const max=document.documentElement.scrollHeight-window.innerHeight
+      window.scrollTo(0,max*(60+idx*40)/(60+(count-1)*40+50))
+    },[i,exhibits])
+    await expect(page.locator('.spatial-crumb')).toContainText(`Exhibit ${i+1} of ${exhibits}`,{timeout:10000})
+    await expect(page.locator('.spatial-rail')).toBeVisible()
+    await expect(page.locator('.spatial-rail-card').first()).toContainText('Story')
+  }
+})
+
 test('inspecting an exhibit shows its authored detail and releases',async({page})=>{
   await page.setViewportSize({width:1440,height:900})
   await page.goto('/spatial')
