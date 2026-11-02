@@ -2,7 +2,7 @@
 import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import {readFileSync} from 'node:fs'
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare'
-import {advanceLongform,LongformJobStore,type LongformModel} from '../worker/longform-editorial'
+import {advanceLongform,LongformJobStore,LongformTransientError,type LongformModel} from '../worker/longform-editorial'
 
 vi.setConfig({testTimeout:20000,hookTimeout:20000})
 let mf:Miniflare,store:LongformJobStore
@@ -24,10 +24,22 @@ it('persists resumable checkpoints, validates the word target and completes only
 it('fails closed on unavailable budget or unsupported section citations without retries',async()=>{
  const job=await store.create(input),model:LongformModel={outline:vi.fn(async()=>outline),draft:vi.fn(async()=>({text:longText(1),sourceIds:['unapproved']})),reviewSection:vi.fn(),revise:vi.fn(),reviewWhole:vi.fn()}
  const noBudget=await advanceLongform(store,job.id,model,async()=>false)
- expect(noBudget.state.phase).toBe('failed');expect(model.outline).not.toHaveBeenCalled()
+ expect(noBudget.state).toMatchObject({phase:'outline',modelCalls:0,lastTransientError:'Article budget unavailable'});expect(model.outline).not.toHaveBeenCalled()
+ const resumed=await advanceLongform(store,job.id,model,async()=>true)
+ expect(resumed.state).toMatchObject({phase:'sections',modelCalls:1,lastTransientError:null});expect(model.outline).toHaveBeenCalledOnce()
  const other=await store.create({...input,prompt:'A different editorial question'})
  await advanceLongform(store,other.id,model,async()=>true)
  const failed=await advanceLongform(store,other.id,model,async()=>true)
  expect(failed.state).toMatchObject({phase:'failed',modelCalls:2})
  expect(model.draft).toHaveBeenCalledTimes(1)
+})
+it('keeps a provider transport failure resumable and counts the reserved attempt',async()=>{
+ const model:LongformModel={outline:vi.fn().mockRejectedValueOnce(new LongformTransientError('provider unavailable')).mockResolvedValueOnce(outline),draft:vi.fn(),reviewSection:vi.fn(),revise:vi.fn(),reviewWhole:vi.fn()}
+ const created=await store.create({...input,prompt:'A separate private recovery test'})
+ const stopped=await advanceLongform(store,created.id,model,async()=>true)
+ expect(stopped.state).toMatchObject({phase:'outline',modelCalls:1,lastTransientError:'provider unavailable'})
+ expect(model.outline).toHaveBeenCalledOnce()
+ const resumed=await advanceLongform(store,created.id,model,async()=>true)
+ expect(resumed.state).toMatchObject({phase:'sections',modelCalls:2,lastTransientError:null})
+ expect(model.outline).toHaveBeenCalledTimes(2)
 })

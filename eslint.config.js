@@ -9,6 +9,13 @@ export default ts.config(
   {
     files: [
       "shared/editorial*.ts",
+      "shared/cultural-evidence.ts",
+      "shared/public-citations.ts",
+      "worker/cultural-*.ts",
+      "worker/longform*.ts",
+      "worker/catalog-api.ts",
+      "tests/cultural*.test.ts",
+      "tests/longform*.test.ts",
       "dev/*.ts",
       "tests/norm*.ts",
       "scripts/norm-local-validation.mjs",
