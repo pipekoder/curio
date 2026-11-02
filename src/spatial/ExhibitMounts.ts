@@ -58,8 +58,19 @@ export class ExhibitMounts{
       )
       board.position.y=2.6
       mount.add(board)
+      // Artwork shares the slab's rounded silhouette exactly, so no square
+      // image corner can escape the glass perimeter. ShapeGeometry emits raw
+      // XY coordinates as UVs, hence the static remap to 0..1 here.
+      const artGeo=new THREE.ShapeGeometry(roundedRect(FRAME_W,FRAME_H,FRAME_R),12)
+      {
+        const positions=artGeo.getAttribute('position')
+        const uvs=artGeo.getAttribute('uv')
+        for(let i=0;i<positions.count;i++){
+          uvs.setXY(i,positions.getX(i)/FRAME_W+0.5,positions.getY(i)/FRAME_H+0.5)
+        }
+      }
       const art=new THREE.Mesh(
-        new THREE.PlaneGeometry(FRAME_W,FRAME_H),
+        artGeo,
         new THREE.MeshBasicMaterial({color:0xe8ecf1}),
       )
       art.position.set(0,2.6,ART_Z)
