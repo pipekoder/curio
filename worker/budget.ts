@@ -13,7 +13,7 @@ export class InferenceBudget {
     const now=Date.now(),minute=60000,hour=3600000,day=86400000
     if(request.method==='GET'&&url.pathname==='/status'){
       const policy=z.strictObject({ceiling:z.number().int().min(1).max(500),daily:z.number().int().min(1).max(160),demo:z.boolean()}).safeParse({ceiling:Number(url.searchParams.get('ceiling')),daily:Number(url.searchParams.get('daily')),demo:url.searchParams.get('demo')==='true'})
-      if(!policy.success)return Response.json({error:'Invalid status policy'},{status:400})
+      if(!policy.success||!policy.data.demo&&(policy.data.ceiling>100||policy.data.daily>100))return Response.json({error:'Invalid status policy'},{status:400})
       const used=(key:string)=>this.state.storage.sql.exec<{count:number}>('SELECT count FROM counters WHERE key = ?',key).toArray()[0]?.count??0
       const lifetimeUsed=used('lifetime'),dayUsed=used(`day:${Math.floor(now/day)}`)
       const recent=this.state.storage.sql.exec<{at:number;units:number;outcome:string;policy:string}>('SELECT at,units,outcome,policy FROM reservation_events ORDER BY id DESC LIMIT 20').toArray()
@@ -33,7 +33,7 @@ export class InferenceBudget {
     const parsed=z.strictObject({ip:z.string().regex(/^[a-f0-9]{64}$/),ceiling:z.number().int().min(1).max(500),daily:z.number().int().min(1).max(160).default(20),demo:z.boolean().default(false),demoTester:z.string().regex(/^[a-f0-9]{64}$/).optional(),units:z.union([z.literal(1),z.literal(2),z.literal(3),z.literal(4)]).default(1),samAssetId:z.string().regex(/^[a-z0-9-]+$/).max(80).optional(),editorialPilot:z.boolean().optional()}).safeParse(await request.json())
     if(!parsed.success)return Response.json({error:'Invalid reservation'},{status:400})
     const {ip,ceiling,daily,demo,demoTester,units,samAssetId,editorialPilot=false}=parsed.data
-    if((!demo&&(ceiling>100||daily!==20||demoTester))||(demo&&(ceiling<daily||demoTester&&units!==4))||(editorialPilot&&(units!==4||samAssetId)))return Response.json({error:'Invalid policy'},{status:400})
+    if((!demo&&(ceiling>100||daily>100||demoTester))||(demo&&(ceiling<daily||demoTester&&units!==4))||(editorialPilot&&(units!==4||samAssetId)))return Response.json({error:'Invalid policy'},{status:400})
     const result=this.state.storage.transactionSync(()=>{
       this.state.storage.sql.exec('DELETE FROM counters WHERE expires > 0 AND expires <= ?',now)
       this.state.storage.sql.exec('DELETE FROM demo_leases WHERE expires <= ?',now)

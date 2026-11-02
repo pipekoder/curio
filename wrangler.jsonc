@@ -24,7 +24,8 @@
     "ASSET_AI_ENABLED": "false",
     "SAM_DECODER_ENABLED": "false",
     "META_SPARK_MODEL": "muse-spark-1.3",
-    "MAGAZINE_MAX_CALLS": "20",
+    "MAGAZINE_MAX_CALLS": "100",
+    "INFERENCE_DAILY_MAX_UNITS": "100",
     "CATALOG_OPERATOR_ENABLED": "true",
     "CATALOG_PUBLIC_ENABLED": "true",
     "PUBLIC_APP_ORIGIN": "https://curio.shuang-han807.workers.dev"
