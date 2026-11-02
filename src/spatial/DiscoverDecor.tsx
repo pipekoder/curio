@@ -15,10 +15,12 @@ export default function DiscoverDecor({variant}:{variant?:'discover'|'exhibit'})
       <circle cx="880" cy="150" r="2.5"/>
       <circle cx="430" cy="760" r="2.5"/>
     </svg>
-    <div className="decor-plane plane-l1"/>
-    <div className="decor-plane plane-l2"/>
-    <div className="decor-plane plane-r1"/>
-    <div className="decor-plane plane-r2"/>
+    {!exhibit&&<>
+      <div className="decor-plane plane-l1"/>
+      <div className="decor-plane plane-l2"/>
+      <div className="decor-plane plane-r1"/>
+      <div className="decor-plane plane-r2"/>
+    </>}
     <svg className="decor-floor" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" focusable="false">
       <defs>
         <radialGradient id="discover-floor-glow" cx="50%" cy="50%" r="50%">
@@ -39,10 +41,7 @@ export default function DiscoverDecor({variant}:{variant?:'discover'|'exhibit'})
     {exhibit?<>
       <span className="decor-tag tag-orbit">Exhibit 01</span>
       <span className="decor-tag tag-culture">Culture</span>
-      <span className="decor-tag tag-objects">Objects</span>
-      <span className="decor-tag tag-materials">Materials</span>
-      <span className="decor-tag tag-ideas">Form</span>
-      <span className="decor-scroll">Scroll to travel</span>
+      <span className="decor-scroll"><span className="decor-scroll-dot"/></span>
     </>:<>
       <span className="decor-tag tag-orbit">Orbit 01</span>
       <span className="decor-tag tag-culture">Culture</span>
