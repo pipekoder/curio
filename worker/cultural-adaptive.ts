@@ -29,7 +29,9 @@ export async function executeAdaptiveResearch(input:AdaptiveInput,deps:{plan:()=
     if(decision.action==='narrow')return {status:'narrowed' as const,plan,rounds:index+1,mode:rankings.at(-1)?.mode??'lexical_only',pack:null}
     if(decision.action==='review_evidence')break
   }
-  const sources=[...found.values()].slice(0,12)
+  const lastRanking=rankings.at(-1)?.results??[]
+  const byRank=new Map(lastRanking.map((row,index)=>[row.id,index]))
+  const sources=[...found.values()].sort((a,b)=>(byRank.get(a.id)??Number.MAX_SAFE_INTEGER)-(byRank.get(b.id)??Number.MAX_SAFE_INTEGER)||a.id.localeCompare(b.id)).slice(0,12)
   if(!sources.length)return {status:'narrowed' as const,plan,rounds:retrievalRounds,mode:rankings.at(-1)?.mode??'lexical_only',pack:null}
   const pack=validateCulturalEvidence({version:CULTURAL_EVIDENCE_VERSION,id:`pack:${(await digest(JSON.stringify([input.assetVersionIds,sources.map(s=>s.sha256)]))).slice(0,32)}`,createdAt:new Date().toISOString(),assetVersionIds:input.assetVersionIds,sourceIds:sources.map(source=>source.id),sources:sources.map(source=>({id:source.id,canonicalUrl:source.url,origin:source.origin,retrievedAt:source.retrievedAt,sha256:source.sha256,author:source.attribution.author,publication:null,publishedAt:source.attribution.publishedAt,rights:'pending',verification:'pending'})),passages:sources.map(source=>({id:source.passage.id,sourceId:source.id,text:source.excerpt,documentSha256:source.sha256,start:source.passage.start,end:source.passage.end})),claims:[],relationships:[],status:'candidate'},input.assetVersionIds)
   return {status:'candidate_review_required' as const,plan,rounds:retrievalRounds,mode:rankings.at(-1)?.mode??'lexical_only',pack}
