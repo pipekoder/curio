@@ -5,10 +5,12 @@ import {citationsForFeature,fetchCitations,featureHasCitedClaims,type PublicCita
 const KIND_LABEL={factual:'Fact',comparison:'Comparison',interpretation:'Interpretation'} as const
 const SUPPORT_LABEL={reviewed_paraphrase:'Reviewed paraphrase',approved_excerpt:'Approved excerpt'} as const
 
-// Cultural evidence citations inside the expanded Story. The affordance shows
-// only when the edition plan binds V3 claims for this exhibit; citation
-// details load on explicit open and recheck every time, so revoked material
-// cannot persist. Only reviewed response fields render, as plain text.
+// Cultural evidence citations as a discreet bottom section of the expanded
+// Story. The affordance shows only when the edition plan binds V3 claims
+// for this exhibit; citation details load on explicit open and recheck
+// every time, so revoked material cannot persist. Only reviewed response
+// fields render, as plain text. An empty lookup hides the section rather
+// than leaving a placeholder behind.
 export default function Sources({exhibit,plan}:{
   exhibit:{featureIndex:number;catalogId:string;assetId:string};plan:StagedPlan|null
 }){
@@ -16,6 +18,7 @@ export default function Sources({exhibit,plan}:{
   const [status,setStatus]=useState<'idle'|'loading'|'ready'|'empty'>('idle')
   const [citations,setCitations]=useState<PublicCitation[]>([])
   if(!plan||!featureHasCitedClaims(plan,exhibit.featureIndex))return null
+  if(open&&status==='empty')return null
   const toggle=()=>{
     if(open){setOpen(false);return}
     setOpen(true)
@@ -26,10 +29,9 @@ export default function Sources({exhibit,plan}:{
       else setStatus('empty')
     })
   }
-  return <section className="spatial-sources" aria-label="Sources">
-    <button type="button" aria-expanded={open} onClick={toggle}>Sources {open?'▾':'▸'}</button>
+  return <section className="spatial-sources" aria-label="Sources & References">
+    <button type="button" aria-expanded={open} onClick={toggle}>Sources & References {open?'▾':'▸'}</button>
     {open&&status==='loading'&&<p className="spatial-fine">Checking approved sources…</p>}
-    {open&&status==='empty'&&<p className="spatial-fine">No approved sources available for this story right now.</p>}
     {open&&status==='ready'&&<ol className="spatial-sources-list">{citations.map((citation,index)=>(
       <li key={`${citation.claimId}-${index}`}>
         <p className="spatial-sources-claim"><strong>{KIND_LABEL[citation.claimKind]}</strong> · Operator reviewed · Approved</p>

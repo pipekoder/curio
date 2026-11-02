@@ -43,22 +43,34 @@ export function magnetEscape(velocity:number,threshold:number):boolean{
   return Math.abs(velocity)>threshold
 }
 
-// Promenade composition: mounts march rightward at a fixed step while the
-// camera carries an equal lateral bias, so every active mount frames at the
-// same left-of-center apparent position with its neighbor peeking past it.
-export const MOUNT_X0=-3.4
+// Promenade composition: mounts march leftward at a fixed step while the
+// camera carries the matching lateral bias, so every active mount frames
+// front-center with its back-left neighbor peeking past it. Spatial while
+// exploring, frontal when reading: the artwork arrives facing the reader.
+export const MOUNT_X0=0
 export const MOUNT_STEP=3.6
 export function mountX(index:number):number{
-  return MOUNT_X0+index*MOUNT_STEP
+  return MOUNT_X0-index*MOUNT_STEP
 }
 // Rigid lateral camera offset for distance d: 0 at the first dock,
-// (count-1)*MOUNT_STEP at the last, linear between, clamped outside.
+// -(count-1)*MOUNT_STEP at the last, linear between, clamped outside.
+// The bias equals the active mount's x at every dock, so the reading
+// position is centered without rotating the scene.
 export function lateralBias(d:number,docks:readonly number[],count:number):number{
   if(docks.length<2||count<2)return 0
   const span=docks[docks.length-1]-docks[0]
   if(span<=0)return 0
   const t=Math.min(1,Math.max(0,(d-docks[0])/span))
-  return t*(count-1)*MOUNT_STEP
+  return 0-t*(count-1)*MOUNT_STEP
+}
+
+// Depth-based mount opacity: 1 at the reading focus, easing to 0.6 a full
+// dock spacing away. Smooth in between so approaching mounts clarify and
+// departing mounts fade with no jumps.
+export function depthOpacity(distance:number,dock:number,range=40):number{
+  if(!(range>0))return 1
+  const t=clamp(1-Math.abs(distance-dock)/range,0,1)
+  return 0.6+0.4*t*t*(3-2*t)
 }
 
 // Promenade layout: origin rest, one dock per exhibit down-axis, an overlook

@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest'
-import {clamp,dampedStep,dockMagnet,exhibitLayout,lateralBias,lerp,magnetEscape,scrollToDistance,splinePosition} from '../src/spatial/camera-math'
+import {clamp,dampedStep,depthOpacity,dockMagnet,exhibitLayout,lateralBias,lerp,magnetEscape,scrollToDistance,splinePosition} from '../src/spatial/camera-math'
 
 describe('spatial camera math',()=>{
  it('damps toward the target without overshoot and snaps on degenerate input',()=>{
@@ -47,7 +47,7 @@ describe('spatial camera math',()=>{
   expect(three.waypoints[1].p[2]).toBe(-40)
   expect(three.waypoints[3].p[2]).toBe(-120)
   expect(three.mounts.map(m=>m.z)).toEqual([-52,-92,-132])
-  expect(three.mounts.map(m=>Math.round(m.x*100)/100)).toEqual([-3.4,0.2,3.8])
+  expect(three.mounts.map(m=>Math.round(m.x*100)/100)).toEqual([0,-3.6,-7.2])
   const none=exhibitLayout(0)
   expect(none.docks).toEqual([])
   expect(none.mounts).toEqual([])
@@ -57,11 +57,31 @@ describe('spatial camera math',()=>{
   const three=exhibitLayout(3)
   expect(three.docks).toEqual([60,100,140])
   expect(lateralBias(three.docks[0],three.docks,3)).toBe(0)
-  expect(lateralBias(three.docks[1],three.docks,3)).toBeCloseTo(3.6)
-  expect(lateralBias(three.docks[2],three.docks,3)).toBeCloseTo(7.2)
+  expect(lateralBias(three.docks[1],three.docks,3)).toBeCloseTo(-3.6)
+  expect(lateralBias(three.docks[2],three.docks,3)).toBeCloseTo(-7.2)
   expect(lateralBias(0,three.docks,3)).toBe(0)
-  expect(lateralBias(999,three.docks,3)).toBeCloseTo(7.2)
+  expect(lateralBias(999,three.docks,3)).toBeCloseTo(-7.2)
   expect(lateralBias(60,[],1)).toBe(0)
+})
+ it('centers the active mount with its neighbor back-left',()=>{
+  const three=exhibitLayout(4)
+  three.docks.forEach((dock,index)=>{
+    expect(lateralBias(dock,three.docks,4)).toBeCloseTo(three.mounts[index].x)
+  })
+  // From the second dock, the upcoming mount waits left of the camera.
+  expect(three.mounts[2].x-lateralBias(three.docks[1],three.docks,4)).toBeCloseTo(-3.6)
+  expect(three.mounts[1].x-lateralBias(three.docks[1],three.docks,4)).toBe(0)
+})
+ it('eases mount opacity from full at focus to 0.6 a spacing away',()=>{
+  expect(depthOpacity(100,100)).toBe(1)
+  expect(depthOpacity(60,100)).toBeCloseTo(0.6)
+  expect(depthOpacity(140,100)).toBeCloseTo(0.6)
+  expect(depthOpacity(200,100)).toBeCloseTo(0.6)
+  const mid=depthOpacity(80,100)
+  expect(mid).toBeGreaterThan(0.6)
+  expect(mid).toBeLessThan(1)
+  expect(depthOpacity(90,100)).toBeGreaterThan(mid)
+  expect(depthOpacity(100,100,0)).toBe(1)
 })
  it('keeps helpers total',()=>{
   expect(lerp(0,10,0.25)).toBe(2.5)
