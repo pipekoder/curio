@@ -41,6 +41,7 @@ import type { EditorialSource } from '../shared/editorial-sources';
 import { loadEditorialSources,parsePilotVersions } from './editorial-sources';
 import { resolveR2MediaPermit } from './media-ai-adapter';
 import {loadApprovedCulturalEvidence,culturalSourcesForEditorial} from './cultural-evidence-store';
+import {publicCitationsForPlan} from './editorial-citations';
 import type { Bindings } from "./index";
 // Index is never public. Only already approved compiled catalog records can be
 // hydrated from D1 hits; no returned URL, name, hint, job or source row is exposed.
@@ -110,6 +111,15 @@ export async function editorialPool(
 // Every hit is revalidated against freshly permission-filtered authoritative pool.
 const plans = new Map<string, { expires: number; plan: unknown }>();
 export const editorialApi = new Hono<{ Bindings: Bindings }>();
+editorialApi.post('/citations',async c=>{
+  if(c.env?.CULTURAL_INTELLIGENCE_V3_ENABLED!=='true'||c.env?.CATALOG_PUBLIC_ENABLED!=='true')return c.json({status:'disabled'},503)
+  if(!c.env.PUBLIC_APP_ORIGIN||c.req.header('Origin')!==c.env.PUBLIC_APP_ORIGIN||c.req.header('Content-Type')?.split(';')[0]!=='application/json')return c.json({error:'Origin or content type not allowed.'},403)
+  let input:unknown
+  try{input=JSON.parse(await boundedText(c.req.raw.body,32768))}catch{return c.json({error:'Invalid citation request.'},400)}
+  const parsed=z.strictObject({plan:editorialPlan}).safeParse(input)
+  if(!parsed.success)return c.json({error:'Invalid citation request.'},400)
+  try{const result=await publicCitationsForPlan(parsed.data.plan,c.env);return result?c.json(result):c.json({error:'Citations unavailable.'},404)}catch{return c.json({error:'Citations unavailable.'},404)}
+})
 editorialApi.post("/", async (c) => {
   let input: unknown;
   try {
