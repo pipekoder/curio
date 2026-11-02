@@ -21,15 +21,21 @@
 .decor-tag::after{content:'';display:block;width:26px;height:1px;background:#9fb0c8;margin-top:7px}
 .tag-orbit{left:4%;top:29%}
 .tag-culture{left:4%;top:62%}
-.tag-objects{right:4%;top:37%;text-align:right}
-.tag-ideas{right:4%;top:65%;text-align:right}
-.tag-objects::before,.tag-ideas::before{display:none}
-.tag-objects::after,.tag-ideas::after{margin-left:auto}
+.tag-objects{right:2.5%;top:37%;text-align:right}
+.tag-ideas{right:2.5%;top:65%;text-align:right}
+.tag-objects::before,.tag-ideas::before,.tag-materials::before{display:none}
+.tag-objects::after,.tag-ideas::after,.tag-materials::after{margin-left:auto}
+.decor-scroll{position:absolute;right:26px;top:50%;margin-top:-60px;width:1px;height:120px;background:linear-gradient(#8b98ad00,#8b98ad66 30%,#8b98ad66 70%,#8b98ad00)}
+.decor-scroll-dot{position:absolute;left:0;top:6px;animation:decor-scroll-drift 2.8s ease-in-out infinite}
+.decor-scroll-dot::before{content:'';display:block;width:7px;height:7px;margin-left:-3px;border-right:1px solid #8b98ad;border-bottom:1px solid #8b98ad;transform:rotate(45deg)}
+@keyframes decor-scroll-drift{0%{transform:translateY(0);opacity:0}18%{opacity:1}82%{opacity:1}100%{transform:translateY(88px);opacity:0}}
+@media(prefers-reduced-motion:reduce){.decor-scroll-dot{animation:none;transform:translateY(52px);opacity:1}}
+.exhibit-decor .decor-floor{opacity:.85}
 .decor-reticle{position:absolute;left:50%;bottom:26px;width:40px;height:40px;margin-left:-20px;border:1px solid #9fb0c880;border-radius:50%}
 .decor-reticle::before,.decor-reticle::after{content:'';position:absolute;background:#9fb0c8}
 .decor-reticle::before{left:50%;top:12px;bottom:12px;width:1px;margin-left:-.5px}
 .decor-reticle::after{top:50%;left:12px;right:12px;height:1px;margin-top:-.5px}
 @media(max-width:1200px){.plane-l2,.plane-r2{display:none}}
 @media(max-width:1100px){.decor-tag{display:none}}
-@media(max-width:760px){.decor-plane{display:none}.decor-reticle{display:none}}
+@media(max-width:760px){.decor-plane{display:none}.decor-reticle{display:none}.decor-scroll{display:none}}
 @media(max-width:640px){.decor-orbits{opacity:.25}}
