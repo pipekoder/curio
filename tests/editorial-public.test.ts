@@ -59,6 +59,41 @@ it('allows a consenting visitor to receive only independently reviewed published
   expect((result.plan as {features:{assetId:string}[]}).features.map(f=>f.assetId)).toEqual(expect.arrayContaining(ids))
 })
 
+it('routes only the Chief Editor to Wonder in an explicitly enabled Hybrid request and keeps caches separate',async()=>{
+  const send=provider('PASS');vi.stubGlobal('fetch',send)
+  const sendMode=(editorialMode?:string,overrides:Record<string,unknown>={})=>app.request(`${origin}/api/editorial`,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json','CF-Connecting-IP':'192.0.2.1'},body:JSON.stringify({...prefs,interests:'Compare the seating and light in this unique two-mode routing test',...(editorialMode?{editorialMode}:{})})},{...env(),EDITORIAL_HYBRID_ENABLED:'true',EDITORIAL_WONDER_PROVIDER_VERIFIED:'true',META_WONDER_MODEL:'muse-wonder-1.0',...overrides})
+  const lite=await (await sendMode()).json() as {source:string;generation:{editorialMode:string;chiefEditorModel:string};cached:boolean}
+  const hybrid=await (await sendMode('hybrid')).json() as {source:string;generation:{editorialMode:string;chiefEditorModel:string;reviewerModel:string;revisionModel:null};cached:boolean}
+  expect(lite).toMatchObject({source:'meta',generation:{editorialMode:'lite',chiefEditorModel:'muse-spark-1.3'}})
+  expect(hybrid).toMatchObject({source:'meta',cached:false,generation:{editorialMode:'hybrid',chiefEditorModel:'muse-wonder-1.0',reviewerModel:'muse-spark-1.3',revisionModel:null}})
+  expect(send.mock.calls.map(([,init])=>JSON.parse(String(init.body)).model)).toEqual(['muse-spark-1.3','muse-spark-1.3','muse-wonder-1.0','muse-spark-1.3'])
+  expect((await (await sendMode('hybrid')).json())).toMatchObject({cached:true,generation:hybrid.generation})
+  expect(reserve).toHaveBeenCalledTimes(2)
+  expect(send).toHaveBeenCalledTimes(4)
+})
+
+it('advertises Hybrid only after explicit provider verification and rejects invalid or disabled selections before inference',async()=>{
+  const send=provider('PASS');vi.stubGlobal('fetch',send)
+  const config=await (await app.request(`${origin}/api/editorial/capabilities`,{},env())).json()
+  expect(config).toMatchObject({defaultMode:'lite',liteAvailable:true,hybridAvailable:false})
+  const request=(mode:string,overrides:Record<string,unknown>={})=>app.request(`${origin}/api/editorial`,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json','CF-Connecting-IP':'192.0.2.1'},body:JSON.stringify({...prefs,editorialMode:mode})},{...env(),...overrides})
+  expect((await request('wonder')).status).toBe(400)
+  const disabled=await request('hybrid',{EDITORIAL_HYBRID_ENABLED:'true',META_WONDER_MODEL:'muse-wonder-1.0'})
+  expect(disabled.status).toBe(503)
+  expect(await disabled.json()).toMatchObject({code:'hybrid_unavailable'})
+  const enabled={EDITORIAL_HYBRID_ENABLED:'true',EDITORIAL_WONDER_PROVIDER_VERIFIED:'true',META_WONDER_MODEL:'muse-wonder-1.0'}
+  expect(await (await app.request(`${origin}/api/editorial/capabilities`,{}, {...env(),...enabled})).json()).toMatchObject({hybridAvailable:true})
+  expect(send).not.toHaveBeenCalled();expect(reserve).not.toHaveBeenCalled()
+})
+
+it('does not silently reroute a failed Wonder Chief Editor call to Spark',async()=>{
+  const send=vi.fn(async(_url:string,_init:RequestInit)=>{void _url;void _init;return new Response('provider unavailable',{status:503})});vi.stubGlobal('fetch',send)
+  const result=await app.request(`${origin}/api/editorial`,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json','CF-Connecting-IP':'192.0.2.1'},body:JSON.stringify({...prefs,interests:'A distinct Wonder provider failure study of seating',editorialMode:'hybrid'})},{...env(),EDITORIAL_HYBRID_ENABLED:'true',EDITORIAL_WONDER_PROVIDER_VERIFIED:'true',META_WONDER_MODEL:'muse-wonder-1.0'})
+  expect(await result.json()).toMatchObject({source:'deterministic',fallbackReason:'provider_or_validation',inference:{attempted:true,reservedUnits:4}})
+  expect(send).toHaveBeenCalledOnce()
+  expect(JSON.parse(String(send.mock.calls[0][1].body)).model).toBe('muse-wonder-1.0')
+})
+
 it('uses a secure demo session for the higher reviewed-Editorial budget without changing the response contract',async()=>{
   const send=provider('PASS');vi.stubGlobal('fetch',send)
   const operator='operator-test-token-at-least-32-bytes'

@@ -219,6 +219,7 @@ export type EditorialEdition = {
   cached: boolean;
   items: CatalogItem[];
   editorialSources?: EditorialSource[];
+  generation?: import('./editorial-model-contract').EditorialGenerationMetadata;
 };
 export const defaultPreferences: EditorialPreferences = {
   interests: "",

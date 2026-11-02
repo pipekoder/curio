@@ -43,6 +43,7 @@ import { resolveR2MediaPermit } from './media-ai-adapter';
 import {loadApprovedCulturalEvidence,culturalSourcesForEditorial} from './cultural-evidence-store';
 import {publicCitationsForPlan} from './editorial-citations';
 import type { Bindings } from "./index";
+import {chiefModel, editorialModeSchema, generationMetadata, hybridAvailable, hybridConfigured, EDITORIAL_MODEL_ROUTING_VERSION, type EditorialMode} from './editorial-model-routing';
 // Index is never public. Only already approved compiled catalog records can be
 // hydrated from D1 hits; no returned URL, name, hint, job or source row is exposed.
 export async function editorialPool(
@@ -109,8 +110,9 @@ export async function editorialPool(
 }
 // Bounded isolate-local cache: no D1 writes, raw preferences, images or secrets.
 // Every hit is revalidated against freshly permission-filtered authoritative pool.
-const plans = new Map<string, { expires: number; plan: unknown }>();
+const plans = new Map<string, { expires: number; plan: unknown; generation: ReturnType<typeof generationMetadata> }>();
 export const editorialApi = new Hono<{ Bindings: Bindings }>();
+editorialApi.get('/capabilities',c=>c.json({version:EDITORIAL_MODEL_ROUTING_VERSION,defaultMode:'lite',liteAvailable:true,hybridAvailable:hybridAvailable(c.env??{}),modes:[{id:'lite',label:'Lite',description:'Muse Spark editorial workflow'},{id:'hybrid',label:'Hybrid',description:'Muse Wonder Chief Editor with Spark review'}]}));
 editorialApi.post('/citations',async c=>{
   if(c.env?.CULTURAL_INTELLIGENCE_V3_ENABLED!=='true'||c.env?.CATALOG_PUBLIC_ENABLED!=='true')return c.json({status:'disabled'},503)
   if(!c.env.PUBLIC_APP_ORIGIN||c.req.header('Origin')!==c.env.PUBLIC_APP_ORIGIN||c.req.header('Content-Type')?.split(';')[0]!=='application/json')return c.json({error:'Origin or content type not allowed.'},403)
@@ -131,7 +133,14 @@ editorialApi.post("/", async (c) => {
     );
   }
   let p: EditorialPreferences;
-  try { p = resolveEditorialInput(input); }
+  let editorialMode:EditorialMode='lite';
+  try {
+    if(input && typeof input==='object' && !Array.isArray(input) && 'editorialMode' in input){
+      const {editorialMode:requested,...preferences}=input as Record<string,unknown>;
+      editorialMode=editorialModeSchema.parse(requested);
+      p=resolveEditorialInput(preferences);
+    }else p=resolveEditorialInput(input);
+  }
   catch { return c.json({ error: "Invalid editorial preferences." }, 400); }
   const env = c.env ?? {};
   if (
@@ -140,6 +149,7 @@ editorialApi.post("/", async (c) => {
     c.req.header("Content-Type")?.split(";")[0] !== "application/json"
   )
     return c.json({ error: "Origin or content type not allowed." }, 403);
+  if(editorialMode==='hybrid'&&!hybridConfigured(env))return c.json({error:'Hybrid editorial mode is currently unavailable.',code:'hybrid_unavailable'},503);
   const pilot=parsePilotVersions(env.EDITORIAL_PILOT_VERSION_IDS)
   const dynamicCatalog=env.EDITORIAL_PUBLIC_AI_ENABLED==='true'&&env.EDITORIAL_DYNAMIC_CATALOG_ENABLED==='true'
   const selectedPilot=dynamicCatalog?null:pilot
@@ -206,7 +216,7 @@ editorialApi.post("/", async (c) => {
   const reviewEnabled=true
   const knowledgeV2=reviewEnabled&&env.EDITORIAL_KNOWLEDGE_V2_ENABLED==='true'
   const key = await catalogDigest(
-    JSON.stringify(["editorial-v4-prompt", EDITORIAL_QUALITY_VERSION, PROMPT_INTENT_VERSION, VISUAL_LANGUAGE_VERSION,reviewEnabled?EDITORIAL_STANDARD_VERSION:null,knowledgeV2?EDITORIAL_KNOWLEDGE_VERSION:null, p, pool.items, pool.visualContexts,sources,culturalSources.length?culturalPack:null]),
+    JSON.stringify(["editorial-v4-prompt", EDITORIAL_MODEL_ROUTING_VERSION,editorialMode, EDITORIAL_QUALITY_VERSION, PROMPT_INTENT_VERSION, VISUAL_LANGUAGE_VERSION,reviewEnabled?EDITORIAL_STANDARD_VERSION:null,knowledgeV2?EDITORIAL_KNOWLEDGE_VERSION:null, p, pool.items, pool.visualContexts,sources,culturalSources.length?culturalPack:null]),
   );
   const cached = plans.get(key);
   if (cached && cached.expires > Date.now())
@@ -215,6 +225,7 @@ editorialApi.post("/", async (c) => {
         plan: validateOriginalPlan(cached.plan, pool.items, p, pool.approvals,sources,pool.visualContexts,reviewEnabled),
         items: pool.items,
         source: "meta",
+        generation:cached.generation,
         retrieval: pool.retrieval,
         cached: true,
         imageContextAssetIds: cached.plan ? pool.visualContexts.filter(v => v.source === "meta_image_observation" && (cached.plan as { features: { assetId: string }[] }).features.some(f => f.assetId === v.assetId)).map(v => v.assetId) : [],
@@ -236,17 +247,19 @@ editorialApi.post("/", async (c) => {
     inference = { ...inference, attempted: true, reservedUnits: reservation.reservedUnits };
     fallbackReason = "provider_or_validation";
     callStarted = performance.now();
-    const workflow=await runEditorialWorkflow(p,pool.items,env.META_API_KEY,pool.visualContexts,pool.approvals,sources,reservation,reviewEnabled,undefined,knowledgeV2)
+    const workflow=await runEditorialWorkflow(p,pool.items,env.META_API_KEY,pool.visualContexts,pool.approvals,sources,reservation,reviewEnabled,undefined,knowledgeV2,editorialMode)
     inference={...inference,...workflow.measurement}
     if(workflow.status==='rejected'){outcome='fallback';fallbackReason='editorial_rejected';return fallback()}
     const plan=workflow.plan
     if (plans.size >= 30) plans.delete(plans.keys().next().value!);
-    plans.set(key, { expires: Date.now() + 300000, plan });
+    const generation=generationMetadata(editorialMode,workflow.revised)
+    plans.set(key, { expires: Date.now() + 300000, plan,generation });
     outcome='completed'
     return c.json({
       plan,
       items: pool.items,
       source: "meta",
+      generation,
       retrieval: pool.retrieval,
       cached: false,
       imageContextAssetIds: pool.visualContexts.filter(v => v.source === "meta_image_observation" && plan.features.some(f => f.assetId === v.assetId)).map(v => v.assetId),
@@ -283,9 +296,9 @@ function combineMeasurements(...measurements:EditorialMeasurement[]):EditorialMe
   return {latencyMs:measurements.reduce((total,row)=>total+row.latencyMs,0),usage:rows.length?{inputTokens:rows.reduce((total,row)=>total+row.inputTokens,0),outputTokens:rows.reduce((total,row)=>total+row.outputTokens,0),cachedInputTokens:rows.every(row=>row.cachedInputTokens!==null)?rows.reduce((total,row)=>total+(row.cachedInputTokens??0),0):null,totalTokens:rows.reduce((total,row)=>total+row.totalTokens,0)}:null}
 }
 type EditorialWorkflowDependencies={generate:typeof generateEditorialResult;review:typeof reviewEditorialPlan;revise:typeof reviseEditorialPlan}
-export async function runEditorialWorkflow(p:EditorialPreferences,pool:CatalogItem[],key:string,visualContexts:readonly VisualContext[],approvals:ExternalAssetApprovals,sources:readonly EditorialSource[],reservation:InferenceReservation,reviewEnabled:boolean,deps:EditorialWorkflowDependencies={generate:generateEditorialResult,review:reviewEditorialPlan,revise:reviseEditorialPlan},knowledgeV2=false){
+export async function runEditorialWorkflow(p:EditorialPreferences,pool:CatalogItem[],key:string,visualContexts:readonly VisualContext[],approvals:ExternalAssetApprovals,sources:readonly EditorialSource[],reservation:InferenceReservation,reviewEnabled:boolean,deps:EditorialWorkflowDependencies={generate:generateEditorialResult,review:reviewEditorialPlan,revise:reviseEditorialPlan},knowledgeV2=false,editorialMode:EditorialMode='lite'){
   if(!reservation.claim())throw new EditorialWorkflowBudgetError({latencyMs:0,usage:null})
-  const generated=await deps.generate(p,pool,key,visualContexts,undefined,approvals,sources,knowledgeV2)
+  const generated=await deps.generate(p,pool,key,visualContexts,undefined,approvals,sources,knowledgeV2,editorialMode)
   if(!reviewEnabled)return {status:'pass' as const,plan:generated.plan,measurement:generated.measurement,revised:false}
   if(!reservation.claim())throw new EditorialWorkflowBudgetError(generated.measurement)
   let review:Awaited<ReturnType<typeof reviewEditorialPlan>>
@@ -315,6 +328,7 @@ export async function generateEditorialResult(
   approvals:ExternalAssetApprovals=approvedExternalAssets,
   sources:readonly EditorialSource[]=[],
   knowledgeV2=false,
+  editorialMode:EditorialMode='lite',
 ) {
   const eligible = pool.filter((a) => p.allocations[a.category] > 0 && (a.provenance.origin === "authored_geometry" || a.permissions.aiAnalysis.status === "approved" && a.permissions.aiAnalysis.evidence));
   const sourceSet=new Set(sources.map(source=>source.id))
@@ -338,18 +352,19 @@ export async function generateEditorialResult(
       .max(6),
   });
   const started = performance.now();
+  const modelConfig=chiefModel(editorialMode);
   const response = await editorialQualityFetch("https://api.meta.ai/v1/chat/completions", {
     method: "POST",
     redirect: "manual",
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(modelConfig.timeoutMs),
     headers: {
       Authorization: `Bearer ${key}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "muse-spark-1.3",
-      max_completion_tokens: 2200,
-      reasoning_effort: "minimal",
+      model: modelConfig.model,
+      max_completion_tokens: modelConfig.max_completion_tokens,
+      reasoning_effort: modelConfig.reasoning_effort,
       stream: false,
       messages: [
         {
