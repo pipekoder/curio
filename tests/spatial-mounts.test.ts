@@ -15,7 +15,7 @@ const stubLoader=()=>{
   }
 }
 const exhibit=(assetId:string):StagedExhibit=>({
-  assetId,title:'Study',narrative:'A reading.',image:`/${assetId}.png`,
+  assetId,catalogId:'catalog',featureIndex:0,title:'Study',narrative:'A reading.',image:`/${assetId}.png`,
   attribution:'Attribution',rights:'Rights',hotspots:[],
 })
 const mountedIds=(mounts:ExhibitMounts):string[]=>{
@@ -99,15 +99,33 @@ describe('exhibit mount lifecycle',()=>{
     mounts.group.traverse(object=>{
       if((object as THREE.Mesh).isMesh&&(object.userData as {assetId?:string}).assetId){
         const mesh=object as THREE.Mesh
-        if(mesh.geometry instanceof THREE.PlaneGeometry)art=mesh
+        if(mesh.geometry instanceof THREE.ShapeGeometry&&!(mesh.material as THREE.MeshBasicMaterial).vertexColors)art=mesh
       }
       const material=(object as THREE.Mesh).material as THREE.MeshBasicMaterial|undefined
       if(material&&material.vertexColors)glass=true
       if((object as THREE.LineLoop).isLineLoop)loop=true
     })
     expect(art).not.toBeNull()
-    const params=(art!.geometry as THREE.PlaneGeometry).parameters
-    expect([params.width,params.height]).toEqual([FRAME_W,FRAME_H])
+    art!.geometry.computeBoundingBox()
+    const box=art!.geometry.boundingBox!
+    expect(box.max.x-box.min.x).toBeCloseTo(FRAME_W)
+    expect(box.max.y-box.min.y).toBeCloseTo(FRAME_H)
+    // Rounded silhouette: no vertex touches the square corner tips (the old
+    // square plane put vertices exactly on them), and the nearest vertex is
+    // the shared quadratic corner's midpoint, r*sqrt(2)/4 from the tip.
+    const positions=art!.geometry.getAttribute('position')
+    const uvs=art!.geometry.getAttribute('uv')
+    let nearest=Infinity
+    for(let i=0;i<positions.count;i++){
+      const tipGap=Math.hypot(FRAME_W/2-Math.abs(positions.getX(i)),FRAME_H/2-Math.abs(positions.getY(i)))
+      expect(tipGap).toBeGreaterThan(0.1)
+      if(tipGap<nearest)nearest=tipGap
+      expect(uvs.getX(i)).toBeGreaterThanOrEqual(-1e-6)
+      expect(uvs.getX(i)).toBeLessThanOrEqual(1+1e-6)
+      expect(uvs.getY(i)).toBeGreaterThanOrEqual(-1e-6)
+      expect(uvs.getY(i)).toBeLessThanOrEqual(1+1e-6)
+    }
+    expect(nearest).toBeCloseTo(0.45*Math.SQRT2/4,3)
     expect(glass).toBe(true)
     expect(loop).toBe(true)
     const ring=mounts.group.children[0].children.find(child=>child instanceof THREE.Mesh&&child.geometry instanceof THREE.TorusGeometry) as THREE.Mesh
