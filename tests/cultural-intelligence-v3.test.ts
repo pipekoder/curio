@@ -6,7 +6,7 @@ import {assessCulturalSufficiency,planCulturalResearch} from '../worker/cultural
 import {catalogApi} from '../worker/catalog-api'
 
 const version=`version-${'a'.repeat(64)}`,sha='b'.repeat(64)
-const pack=()=>({version:CULTURAL_EVIDENCE_VERSION,id:'pack:test',createdAt:'2026-11-02T10:00:00.000Z',assetVersionIds:[version],sourceIds:['source:test'],sources:[{id:'source:test',canonicalUrl:'https://example.org/article',origin:'https://example.org',retrievedAt:'2026-11-02T10:00:00.000Z',sha256:sha,author:null,publication:null,publishedAt:null,rights:'approved_for_paraphrase',verification:'operator_reviewed'}],passages:[{id:`passage:${'d'.repeat(32)}`,sourceId:'source:test',text:'A chair has a documented design history.',documentSha256:sha,start:0,end:38}],claims:[{id:'claim:test',text:'A chair has a documented design history.',kind:'factual',assetVersionIds:[version],passageIds:[`passage:${'d'.repeat(32)}`],status:'reviewed',conflict:null}],relationships:[{id:'relation:test',from:'chair:test',to:'design:test',type:'documented',claimIds:['claim:test'],confidence:0.8}],status:'approved'})
+const pack=()=>({version:CULTURAL_EVIDENCE_VERSION,id:'pack:test',createdAt:'2026-11-02T10:00:00.000Z',assetVersionIds:[version],sourceIds:['source:test'],sources:[{id:'source:test',canonicalUrl:'https://example.org/article',origin:'https://example.org',retrievedAt:'2026-11-02T10:00:00.000Z',sha256:sha,author:null,publication:null,publishedAt:null,rights:'approved_for_paraphrase',verification:'operator_reviewed'}],passages:[{id:`passage:${'d'.repeat(32)}`,sourceId:'source:test',text:'A chair has a documented design history.',documentSha256:sha,start:0,end:38}],claims:[{id:'claim:test',text:'A chair has a documented design history.',kind:'factual',assetVersionIds:[version],passageIds:[`passage:${'d'.repeat(32)}`],status:'reviewed',conflict:null}],relationships:[{id:'relation:test',from:'chair:test',to:'design:test',type:'documented',claimIds:['claim:test'],confidence:0.8}],status:'approved',reviewRevision:1,reviewHistory:[{revision:1,action:'approve',at:'2026-11-02T00:00:00.000Z',actor:'catalog-operator'}]})
 
 describe('cultural V3 trust boundary',()=>{
   it('validates exact versions, passage identity, rights and reviewed claims',()=>{
@@ -62,5 +62,7 @@ describe('cultural V3 trust boundary',()=>{
     expect((await request(`Bearer ${token}`)).status).toBe(503)
     expect((await request('Bearer wrong')).status).toBe(403)
     expect((await request(`Bearer ${token}`,'https://evil.example')).status).toBe(403)
+    const article=()=>catalogApi.request(`${origin}/cultural/articles`,{method:'POST',headers:{Authorization:`Bearer ${token}`,Origin:origin,'Content-Type':'application/json','CF-Connecting-IP':'192.0.2.1'},body:JSON.stringify({consent:true,prompt:'Explore design rituals',assetVersionIds:[version]})},env)
+    expect((await article()).status).toBe(503)
   })
 })

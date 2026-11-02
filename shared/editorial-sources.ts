@@ -9,7 +9,8 @@ export const editorialSource = z.strictObject({
   value: bounded,
   authority: z.enum(['owner_supplied_mockup','operator_reviewed_cultural']),
   source: z.enum(['content_studio','cultural_evidence_pack']),
-}).refine(value=>(value.authority==='owner_supplied_mockup')===(value.source==='content_studio')&&(value.kind==='cultural_claim')===(value.authority==='operator_reviewed_cultural'),{message:'Editorial source authority mismatch'})
+  citations:z.array(z.strictObject({sourceId:z.string().max(180),passageId:z.string().max(180),url:z.url().max(2048),publication:z.string().max(160).nullable()})).max(6).optional(),
+}).refine(value=>(value.authority==='owner_supplied_mockup')===(value.source==='content_studio')&&(value.kind==='cultural_claim')===(value.authority==='operator_reviewed_cultural')&&(value.kind==='cultural_claim'||!value.citations),{message:'Editorial source authority mismatch'})
 export const editorialSources = z.array(editorialSource).max(120)
 export type EditorialSource = z.infer<typeof editorialSource>
 

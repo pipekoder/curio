@@ -34,6 +34,8 @@ export const culturalEvidencePack=z.strictObject({
   sourceIds:z.array(id).max(24),
   sources:z.array(culturalSource).max(12),passages:z.array(culturalPassage).max(12),
   claims:z.array(culturalClaim).max(12),relationships:z.array(culturalRelationship).max(24),
+  reviewRevision:z.number().int().min(0).max(1000).default(0),
+  reviewHistory:z.array(z.strictObject({revision:z.number().int().positive(),action:z.enum(['approve','revoke']),at:z.iso.datetime(),actor:z.literal('catalog-operator')})).max(20).default([]),
   status:z.enum(['candidate','approved','rejected']),
 })
 export type CulturalEvidencePack=z.infer<typeof culturalEvidencePack>
@@ -52,12 +54,15 @@ export function validateCulturalEvidence(raw:unknown, approvedAssetVersions:read
   for(const claim of pack.claims){if(!unique(claim.assetVersionIds)||claim.assetVersionIds.some(value=>!pack.assetVersionIds.includes(value)))throw Error('Cultural claim asset mismatch');if(pack.status==='approved'&&!claim.passageIds.length)throw Error('Uncited cultural claim');for(const reference of claim.passageIds)if(!passages.has(reference))throw Error('Unknown cultural passage')}
   for(const relationship of pack.relationships)for(const reference of relationship.claimIds)if(!claims.has(reference))throw Error('Unknown cultural claim')
   if(pack.status==='approved'){
+    const latest=pack.reviewHistory.at(-1)
+    if(!latest||latest.action!=='approve'||latest.revision!==pack.reviewRevision)throw Error('Cultural approval history missing')
     if(!pack.sources.length||!pack.claims.length)throw Error('Empty cultural evidence')
     if(pack.sources.some(source=>source.verification!=='operator_reviewed'||!['approved_for_paraphrase','approved_for_quotation'].includes(source.rights)))throw Error('Cultural source not approved')
     if(pack.claims.some(claim=>claim.status!=='reviewed'||claim.conflict))throw Error('Cultural claim not reviewed')
     if(pack.relationships.some(relationship=>relationship.type==='documented'&&relationship.claimIds.some(value=>claims.get(value)?.kind!=='factual')))throw Error('Undocumented relationship')
     if(pack.relationships.some(relationship=>relationship.type==='comparison'&&relationship.claimIds.some(value=>!['comparison','factual'].includes(claims.get(value)?.kind??''))))throw Error('Unsupported comparison')
   }
+  if(pack.status==='rejected'&&pack.reviewHistory.at(-1)?.action!=='revoke')throw Error('Cultural revocation history missing')
   return pack
 }
 
