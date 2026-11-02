@@ -69,6 +69,43 @@
 .spatial-sources-item q{display:block;margin:6px 0;font:italic 400 14px/1.6 Georgia,serif;color:#101219}
 .spatial-sources a{color:#385fa8}
 .rail-story button{display:block;width:100%;margin-top:8px}
+/* Discover mode switch: native radios styled as a segmented control. */
+.spatial-mode{display:grid;grid-template-columns:1fr 1fr;gap:10px;border:0;margin:16px 0 0;padding:0}
+.spatial-mode legend{font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:#626b7a;margin:0 auto 8px;padding:0}
+.spatial-mode-option{position:relative;display:block;margin:0;cursor:pointer}
+.spatial-mode-option input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+.spatial-mode-card{display:block;height:100%;box-sizing:border-box;border:1px solid #c6ceda;border-radius:14px;background:#fffffff2;padding:10px 12px;box-shadow:inset 0 1px 0 #ffffff}
+.spatial-mode-card strong{display:block;font-size:12px;letter-spacing:.06em;color:#101219}
+.spatial-mode-card small{display:block;margin-top:2px;font-size:11px;line-height:1.45;color:#626b7a}
+.spatial-mode-option input:checked + .spatial-mode-card{border-color:#101219;background:linear-gradient(165deg,#ffffff 0%,#eef3fcf2 100%);box-shadow:inset 0 1px 0 #ffffff,0 0 0 1px #101219,0 8px 20px #5f6f8026}
+.spatial-mode-option input:disabled{cursor:not-allowed}
+.spatial-mode-option input:disabled + .spatial-mode-card{opacity:.5;cursor:not-allowed}
+/* Curiosity suggestions: compact chips under the prompt input. */
+.spatial-suggestions{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:14px}
+.spatial-suggestions button{min-height:36px;padding:7px 14px;border:1px solid #c6ceda;border-radius:9999px;background:#fffffff2;color:#3c4350;cursor:pointer;font:inherit;font-size:12px;max-width:100%}
+.spatial-suggestions button[aria-label]{width:36px;padding:7px 0;font-size:16px;line-height:1}
+.spatial-suggestions-label{display:flex;align-items:center;justify-content:center;gap:10px;flex-basis:100%;margin:2px 0 2px!important;font-size:12px!important;letter-spacing:.04em}
+.spatial-seed-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;flex-basis:100%}
+.spatial-seed-grid button{white-space:normal;line-height:1.4}
+.spatial-surprise-block{margin-top:12px;border-top:1px solid #e0e5ed;padding-top:10px}
+.spatial-surprise-block p{margin:0;font:italic 400 15px/1.5 Georgia,serif;color:#101219}
+.spatial-surprise-row{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:6px}
+.spatial-surprise-row .spatial-fine{margin:0}
+.spatial-surprise-block button{min-height:36px;padding:7px 22px;border:1px dashed #cfa64f;border-radius:9999px;background:#fffffff2;color:#7a5c1e;cursor:pointer;font:inherit;font-size:12px;flex:none}
+/* Generating: honest preparation card while the exhibition assembles. */
+.spatial-generating{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:20;width:max-content;max-width:min(92vw,440px);text-align:center;background:linear-gradient(165deg,#fffffff5 0%,#f2f6fff0 60%,#fdf3faed 100%);border:1px solid #e0e5ed;border-radius:18px;box-shadow:inset 0 1px 0 #ffffff,0 1px 2px #5f6f8021,0 12px 32px #5f6f8026,0 32px 80px #5f6f802e;padding:14px 28px 16px}
+.spatial-generating .spatial-eyebrow{margin:0 0 4px}
+.spatial-generating-title{margin:0 0 4px!important;font:400 18px/1.3 Georgia,serif!important;color:#101219!important}
+.spatial-generating-pulse{display:block;width:10px;height:10px;margin:10px auto 0;border-radius:50%;background:#a9c5ff;animation:generating-ping 1.8s ease-out infinite}
+@keyframes generating-ping{0%{box-shadow:0 0 0 0 #a9c5ff66}70%{box-shadow:0 0 0 12px #a9c5ff00}100%{box-shadow:0 0 0 0 #a9c5ff00}}
+/* Hybrid refusal: explicit error with deliberate retry actions. */
+.spatial-mode-error{margin-top:14px;border:1px solid #d9a5a5;border-radius:14px;background:#fdf3f3f2;padding:14px 16px}
+.spatial-mode-error p{margin:0 0 10px;font-size:13px;line-height:1.6;color:#3c4350}
+.spatial-mode-error button{min-height:40px;padding:8px 16px;border:1px solid #c6ceda;border-radius:9999px;background:#fff;color:#101219;cursor:pointer;font:inherit;font-size:12px;margin:0 8px 0 0}
+/* Journey: refined bar glass and node imagery (data flow untouched). */
+.spatial-journey-bar{background:linear-gradient(165deg,#fffffff5 0%,#f2f6fff0 100%);box-shadow:inset 0 1px 0 #ffffff,0 1px 2px #5f6f8021,0 12px 32px #5f6f8026,0 32px 80px #5f6f802e;backdrop-filter:blur(14px)}
+.spatial-node-figure{margin:0 0 12px;border:1px solid #e0e5ed;border-radius:12px;overflow:hidden;background:#e8ecf1}
+.spatial-node-figure img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover}
 .spatial-journey-bar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:15;display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:94vw;background:#fffffff0;border:1px solid #e0e5ed;border-radius:9999px;padding:8px 14px;box-shadow:inset 0 1px 0 #ffffffd9,0 1px 2px #5f6f8021,0 8px 24px #5f6f8026,0 20px 48px #5f6f8029}
 .spatial-journey-bar button{min-height:40px;padding:8px 14px;border:1px solid #c6ceda;border-radius:9999px;background:#fff;color:#101219;cursor:pointer;font:inherit;font-size:12px}
 .spatial-node-enter{min-height:44px;padding:10px 20px;border:0;border-radius:9999px;background:#101219;color:#fff;font:inherit;font-size:13px;cursor:pointer;margin-top:8px}
@@ -84,11 +121,13 @@
 .spatial-fallback ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
 .spatial-fallback li{background:#fff;border:1px solid #e0e5ed;border-radius:10px;padding:8px 12px}
 /* Static hover tints only; no transitions by design. */
-.spatial-actions button:hover,.spatial-rail-card button:hover,.spatial-journey-bar button:hover,.spatial-inspect-close:hover,.spatial-story button:hover{background:#f7f8fa}
+.spatial-actions button:hover,.spatial-rail-card button:hover,.spatial-journey-bar button:hover,.spatial-inspect-close:hover,.spatial-story button:hover,.spatial-suggestions button:hover,.spatial-mode-error button:hover,.spatial-surprise-block button:hover{background:#f7f8fa}
+.spatial-mode-option:hover .spatial-mode-card{border-color:#8b98ad}
 .spatial-dock button[type=submit]:hover:not(:disabled),.spatial-node-enter:hover,.spatial-fallback button:hover:not(:disabled){background:#1e2430}
-.spatial-hud a:focus-visible,.spatial-hud button:focus-visible,.spatial-dock button:focus-visible,.spatial-dock textarea:focus-visible,.spatial-consent input:focus-visible,.spatial-skip:focus-visible,.spatial-rail-card button:focus-visible,.spatial-inspect-close:focus-visible,.spatial-journey-bar button:focus-visible,.spatial-node-enter:focus-visible,.object-region:focus-visible,.spatial-story button:focus-visible,.spatial-sources a:focus-visible{outline:2px solid #385fa8;outline-offset:3px}
-@media(max-width:640px){.spatial-story{top:auto;bottom:12px;left:12px;right:12px;width:auto;max-height:82vh;padding:22px 20px}.spatial-hud{gap:10px;padding:10px 14px}.spatial-crumb{display:none}.spatial-dock{padding:20px}.spatial-node-panel{top:auto;bottom:84px;left:12px;right:12px;width:auto;max-height:42vh}.spatial-journey-bar{bottom:12px;gap:8px;padding:6px 10px;flex-wrap:nowrap;overflow-x:auto;max-width:calc(100vw - 24px)}.spatial-journey-bar button{flex:none;min-height:36px;padding:6px 12px}.spatial-journey-bar .spatial-fine{display:none}}
-@media(prefers-reduced-motion:reduce){.spatial-dock{animation:none}.spatial-root{scroll-behavior:auto}.spatial-story-backdrop,.spatial-story,.spatial-story-hero{animation:none}}
+.spatial-hud a:focus-visible,.spatial-hud button:focus-visible,.spatial-dock button:focus-visible,.spatial-dock textarea:focus-visible,.spatial-consent input:focus-visible,.spatial-skip:focus-visible,.spatial-rail-card button:focus-visible,.spatial-inspect-close:focus-visible,.spatial-journey-bar button:focus-visible,.spatial-node-enter:focus-visible,.object-region:focus-visible,.spatial-story button:focus-visible,.spatial-sources a:focus-visible,.spatial-suggestions button:focus-visible,.spatial-mode-error button:focus-visible,.spatial-surprise-block button:focus-visible{outline:2px solid #385fa8;outline-offset:3px}
+.spatial-mode-option input:focus-visible + .spatial-mode-card{outline:2px solid #385fa8;outline-offset:3px}
+@media(max-width:640px){.spatial-mode{grid-template-columns:1fr}.spatial-seed-grid{grid-template-columns:1fr}.spatial-node-figure img{aspect-ratio:16/9}.spatial-story{top:auto;bottom:12px;left:12px;right:12px;width:auto;max-height:82vh;padding:22px 20px}.spatial-hud{gap:10px;padding:10px 14px}.spatial-crumb{display:none}.spatial-dock{padding:20px}.spatial-node-panel{top:auto;bottom:84px;left:12px;right:12px;width:auto;max-height:42vh}.spatial-journey-bar{bottom:12px;gap:8px;padding:6px 10px;flex-wrap:nowrap;overflow-x:auto;max-width:calc(100vw - 24px)}.spatial-journey-bar button{flex:none;min-height:36px;padding:6px 12px}.spatial-journey-bar .spatial-fine{display:none}}
+@media(prefers-reduced-motion:reduce){.spatial-dock{animation:none}.spatial-root{scroll-behavior:auto}.spatial-story-backdrop,.spatial-story,.spatial-story-hero{animation:none}.spatial-generating-pulse{animation:none}}
 /* Verified-object discovery: approved SAM regions on the exhibit image. */
 .object-discovery{margin:0 0 18px}
 .object-figure{position:relative;margin:0;border:1px solid #e0e5ed;border-radius:12px;overflow:hidden;background:#e8ecf1}
