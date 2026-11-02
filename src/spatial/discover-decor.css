@@ -21,15 +21,18 @@
 .decor-tag::after{content:'';display:block;width:26px;height:1px;background:#9fb0c8;margin-top:7px}
 .tag-orbit{left:4%;top:29%}
 .tag-culture{left:4%;top:62%}
-.tag-objects{right:4%;top:37%;text-align:right}
-.tag-ideas{right:4%;top:65%;text-align:right}
-.tag-objects::before,.tag-ideas::before{display:none}
-.tag-objects::after,.tag-ideas::after{margin-left:auto}
+.tag-objects{right:2.5%;top:37%;text-align:right}
+.tag-ideas{right:2.5%;top:65%;text-align:right}
+.tag-objects::before,.tag-ideas::before,.tag-materials::before{display:none}
+.tag-objects::after,.tag-ideas::after,.tag-materials::after{margin-left:auto}
+.tag-materials{right:2.5%;top:51%;text-align:right}
+.decor-scroll{position:absolute;right:26px;top:50%;margin-top:-60px;writing-mode:vertical-rl;font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:#8b98ad;white-space:nowrap}
+.exhibit-decor .decor-floor{opacity:.85}
 .decor-reticle{position:absolute;left:50%;bottom:26px;width:40px;height:40px;margin-left:-20px;border:1px solid #9fb0c880;border-radius:50%}
 .decor-reticle::before,.decor-reticle::after{content:'';position:absolute;background:#9fb0c8}
 .decor-reticle::before{left:50%;top:12px;bottom:12px;width:1px;margin-left:-.5px}
 .decor-reticle::after{top:50%;left:12px;right:12px;height:1px;margin-top:-.5px}
 @media(max-width:1200px){.plane-l2,.plane-r2{display:none}}
 @media(max-width:1100px){.decor-tag{display:none}}
-@media(max-width:760px){.decor-plane{display:none}.decor-reticle{display:none}}
+@media(max-width:760px){.decor-plane{display:none}.decor-reticle{display:none}.decor-scroll{display:none}}
 @media(max-width:640px){.decor-orbits{opacity:.25}}
