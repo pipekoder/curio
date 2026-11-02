@@ -6,6 +6,7 @@ export type StagedHotspot={id:string;label:string;x:number;y:number;productName:
 export type StagedExhibit={
   assetId:string;title:string;narrative:string;image:string;
   attribution:string;rights:string;hotspots:StagedHotspot[];thread?:string
+  catalogId:string;featureIndex:number
 }
 
 // Maps a validated edition to stageable exhibits. A feature stages only when
@@ -21,14 +22,19 @@ function resolveImage(item:CatalogItem):string|null{
 export function stageEdition(edition:EditorialEdition,max=6):{exhibits:StagedExhibit[];skipped:number}{
   const exhibits:StagedExhibit[]=[]
   let skipped=0
-  for(const feature of edition.plan.features){
+  for(const [position,feature] of edition.plan.features.entries()){
     if(exhibits.length>=max)break
+    // Editions filtered to stageable features carry each feature's true plan
+    // position for citation matching; direct plans use list position.
+    const planIndex=(feature as {planIndex?:unknown}).planIndex
+    const featureIndex=typeof planIndex==='number'?planIndex:position
     const item=edition.items.find(candidate=>candidate.id===feature.catalogId&&candidate.image.id===feature.assetId)
     const image=item?resolveImage(item):null
     if(!item||!image){skipped++;continue}
     const media=demoMediaFor(feature.assetId)
     exhibits.push({
-      assetId:feature.assetId,title:feature.headline,narrative:feature.narrative,image,
+      assetId:feature.assetId,catalogId:feature.catalogId,featureIndex,
+      title:feature.headline,narrative:feature.narrative,image,
       attribution:item.provenance.attribution,
       rights:`${item.licensing.rightsHolder??'Rights holder unlisted'} · ${item.image.id}`,
       hotspots:media?.product?[{

@@ -105,6 +105,131 @@ test('arriving at an exhibit reveals its lateral rail',async({page})=>{
   await page.screenshot({path:'test-results/spatial-promenade-1440.png'})
 })
 
+test('exhibit decor keeps only approved markers and an animated scroll cue',async({page})=>{
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await submitPrompt(page)
+  await expect(page.getByTestId('spatial-edition-chip')).toBeVisible()
+  await page.waitForFunction(()=>window.__spatial?.().assembly==='idle',{timeout:30000})
+  await expect(page.locator('.exhibit-decor .decor-plane')).toHaveCount(0)
+  await expect(page.locator('.exhibit-decor .decor-tag')).toHaveCount(2)
+  await expect(page.locator('.exhibit-decor')).toContainText('Exhibit 01')
+  await expect(page.locator('.exhibit-decor')).toContainText('Culture')
+  await expect(page.locator('.exhibit-decor')).not.toContainText('Objects')
+  await expect(page.locator('.exhibit-decor')).not.toContainText('Materials')
+  await expect(page.locator('.exhibit-decor .decor-scroll-dot')).toHaveCount(1)
+})
+
+test('reading a story expands in place and returns without moving the camera',async({page})=>{
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await submitPrompt(page)
+  await expect(page.getByTestId('spatial-edition-chip')).toBeVisible()
+  await page.waitForFunction(()=>window.__spatial?.().assembly==='idle',{timeout:30000})
+  // Let the settle glide finish so the stillness check starts from rest.
+  await page.waitForFunction(()=>{
+    const d=window.__spatial?.().distance??0
+    const w=window as unknown as {__lastD?:number}
+    const settled=w.__lastD!==undefined&&Math.abs(d-w.__lastD)<1e-9
+    w.__lastD=d
+    return settled
+  },{timeout:15000,polling:400})
+  const before=await page.evaluate(()=>window.__spatial?.().distance)
+  await page.getByRole('button',{name:'Read story'}).click()
+  const story=page.locator('.spatial-story')
+  await expect(story).toBeVisible()
+  await expect(story.getByRole('heading',{name:/A closer look/})).toBeFocused()
+  await expect(story.locator('.spatial-story-hero img')).toBeVisible()
+  await expect(story).toContainText('Story · Exhibit 1 of')
+  // Scrolling the article never dismisses it.
+  await story.evaluate(el=>{el.scrollTop=el.scrollHeight})
+  await expect(story).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(story).toHaveCount(0)
+  await expect(page.getByRole('button',{name:'Read story'})).toBeFocused()
+  const after=await page.evaluate(()=>window.__spatial?.().distance)
+  expect(after).toBeCloseTo(before!,6)
+  await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of')
+})
+
+test('a story without V3 claims offers no Sources affordance',async({page})=>{
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await submitPrompt(page)
+  await expect(page.getByTestId('spatial-edition-chip')).toBeVisible()
+  await page.waitForFunction(()=>window.__spatial?.().assembly==='idle',{timeout:30000})
+  await page.getByRole('button',{name:'Read story'}).click()
+  await expect(page.locator('.spatial-story')).toBeVisible()
+  await expect(page.locator('.spatial-sources')).toHaveCount(0)
+})
+
+// Synthetic V3 plan + citations fixtures: shapes follow the contract, values
+// are test-only (example.org is never presented as a real Curio source).
+const v3Plan={
+  ...metaPlan,
+  culturalEvidenceVersion:'curio-cultural-evidence-v3.0.0',
+  features:metaPlan.features.map(feature=>({...feature,culturalClaims:[{sourceId:'source:example'}]})),
+}
+const citationsFixture={
+  version:'curio-public-citations-v1',
+  features:[{
+    featureIndex:0,catalogId:'demo-curio-owner-08-v1',assetId:'curio-owner-08-v1',
+    headline:'A closer look: Ochre Arc Chair',
+    citations:[{
+      claimId:'claim:ritual',sourceId:'source:example:claim:ritual',
+      narrativeText:'An approved editorial comparison about an everyday ritual.',
+      claimKind:'comparison',evidenceStatus:'operator_reviewed',reviewStatus:'approved',
+      sources:[{
+        sourceId:'source:example',passageId:'passage:example',
+        canonicalUrl:'https://example.org/article',publication:'Example Review',
+        support:{kind:'reviewed_paraphrase',text:'An approved editorial comparison about an everyday ritual.'},
+      }],
+    }],
+  }],
+}
+
+test('V3 sources open on demand with reviewed claims only',async({page})=>{
+  let citationsBody:unknown='unset'
+  await page.route('**/api/editorial',route=>route.fulfill({status:200,json:{plan:v3Plan,items:groundedItems,source:'meta',retrieval:'d1',cached:false}}))
+  await page.route('**/api/editorial/citations',route=>{
+    citationsBody=route.request().postDataJSON()
+    return route.fulfill({status:200,json:citationsFixture})
+  })
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await submitPrompt(page)
+  await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of',{timeout:15000})
+  await page.waitForFunction(()=>window.__spatial?.().assembly==='idle',{timeout:30000})
+  await page.getByRole('button',{name:'Read story'}).click()
+  const sources=page.locator('.spatial-sources')
+  await expect(sources).toHaveCount(1)
+  // No lookup happens before the visitor opens Sources.
+  expect(citationsBody).toBe('unset')
+  await sources.getByRole('button',{name:/Sources/}).click()
+  await expect(sources).toContainText('An approved editorial comparison about an everyday ritual.')
+  await expect(sources).toContainText('Comparison · Operator reviewed · Approved')
+  await expect(sources).toContainText('Reviewed paraphrase · Example Review')
+  await expect(sources.getByRole('link',{name:'Open source ↗'})).toHaveAttribute('href','https://example.org/article')
+  // The lookup POSTs the plan alone: no prompt, preferences, or token.
+  expect(Object.keys(citationsBody as Record<string,unknown>)).toEqual(['plan'])
+})
+
+test('unavailable citations hide gracefully without blocking the story',async({page})=>{
+  await page.route('**/api/editorial',route=>route.fulfill({status:200,json:{plan:v3Plan,items:groundedItems,source:'meta',retrieval:'d1',cached:false}}))
+  await page.route('**/api/editorial/citations',route=>route.fulfill({status:404,json:{error:'gone'}}))
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await submitPrompt(page)
+  await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of',{timeout:15000})
+  await page.waitForFunction(()=>window.__spatial?.().assembly==='idle',{timeout:30000})
+  await page.getByRole('button',{name:'Read story'}).click()
+  const sources=page.locator('.spatial-sources')
+  await sources.getByRole('button',{name:/Sources/}).click()
+  await expect(sources).toContainText('No approved sources available for this story right now.')
+  await expect(sources.locator('.spatial-sources-list')).toHaveCount(0)
+  await expect(page.locator('.spatial-story')).toContainText('A closer look: Ochre Arc Chair')
+})
+
 test('promenade visits every dock with its story rail',async({page})=>{
   test.setTimeout(120000)
   await page.setViewportSize({width:1440,height:900})
