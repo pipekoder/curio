@@ -2,6 +2,8 @@
 
 The existing `POST /api/editorial` stays unchanged for requests without `editionFormat`. Its deterministic, disclosed 2D/Silver Field baseline remains available, including when article generation is disabled or the catalog cannot support an article edition. This branch adds an opt-in **article response**; it does not modify the Exhibition or Expanded Story UI.
 
+Rollback is immediate at the contract boundary: keep or set `EDITORIAL_ARTICLES_ENABLED=false` and stop sending `editionFormat`. The ordinary Editorial path and its baseline remain available. Before any future activation, compare the deployed Worker flag readback with `wrangler.jsonc` and the existing Cloudflare dashboard settings so a Git build cannot silently overwrite manually managed AI flags. No Production flag change is part of this PR.
+
 Send the existing prompt or preference shape, consent, and optional `editorialMode: "lite" | "hybrid"`, plus `editionFormat: "curio-editorial-articles-v1"`. The article path requires `EDITORIAL_ARTICLES_ENABLED=true`, the existing public Editorial/Reviewer AI flags, consent, published D1/R2 content and the existing shared four-unit inference budget. The new flag is false in `wrangler.jsonc`. No schema migration or new endpoint is needed. Existing six-version pilot settings continue to govern the existing editorial path but are not used by this separate opted-in article format. Production activation requires an owner-reviewed operational test and frontend support.
 
 Response on approved AI output:
