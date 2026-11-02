@@ -9,6 +9,10 @@ export default ts.config(
   {
     files: [
       "shared/editorial*.ts",
+      "shared/cultural-evidence.ts",
+      "worker/cultural-*.ts",
+      "worker/catalog-api.ts",
+      "tests/cultural-intelligence-v3.test.ts",
       "dev/*.ts",
       "tests/norm*.ts",
       "scripts/norm-local-validation.mjs",
