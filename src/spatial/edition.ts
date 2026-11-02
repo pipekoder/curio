@@ -38,10 +38,12 @@ export function parseStagedPlan(raw:unknown):StagedPlan{
   })
   const plan=editorialPlan.parse({...core,features:stripped})
   const out:StagedPlan={...plan,features:plan.features.map(feature=>({...feature}))}
-  if(culturalEvidenceVersion!==undefined)out.culturalEvidenceVersion=culturalEvidenceVersion
+  // These fields remain opaque to the client. The citation endpoint parses
+  // and revalidates their actual values against current server evidence.
+  if(culturalEvidenceVersion!==undefined)out.culturalEvidenceVersion=culturalEvidenceVersion as EditorialPlan['culturalEvidenceVersion']
   features.forEach((feature,index)=>{
     const claims=(feature as Record<string,unknown>).culturalClaims
-    if(claims!==undefined)out.features[index].culturalClaims=claims
+    if(claims!==undefined)out.features[index].culturalClaims=claims as EditorialPlan['features'][number]['culturalClaims']
   })
   return out
 }
