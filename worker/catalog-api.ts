@@ -7,8 +7,18 @@ import { CatalogConflict, D1Catalog } from './catalog-store'
 import { assetApi } from './asset-api'
 import { allowedOperatorOrigin } from './operator-origin'
 import {SamObjectStore} from './sam-object-store'
+import {researchPublicSources} from './cultural-research'
+import {culturalPlannerInput,planCulturalResearch} from './cultural-planner'
+import {culturalEvidenceKey,passageProofKey,verifyCapturedPassages} from './cultural-evidence-store'
+import {validateCulturalEvidence} from '../shared/cultural-evidence'
+import {reserveInference} from './inference-budget'
+import {CatalogPublications} from './catalog-publications'
+import type {Bindings} from './index'
+import {resolveR2MediaPermit} from './media-ai-adapter'
+import {editorialPool} from './editorial'
+import {resolveEditorialInput} from '../shared/editorial-intent'
 
-export type CatalogBindings = { CATALOG_DB?: D1Database; CATALOG_OPERATOR_ENABLED?: string; CATALOG_OPERATOR_TOKEN?: string; PUBLIC_APP_ORIGIN?: string; ASSET_AI_ENABLED?: string }
+export type CatalogBindings = { CATALOG_DB?: D1Database; CATALOG_OPERATOR_ENABLED?: string; CATALOG_OPERATOR_TOKEN?: string; PUBLIC_APP_ORIGIN?: string; ASSET_AI_ENABLED?: string; CULTURAL_INTELLIGENCE_V3_ENABLED?:string; RESEARCH_SOURCE_ORIGINS?:string; META_API_KEY?:string; META_SPARK_MODEL?:string; INFERENCE_BUDGET?:DurableObjectNamespace; RATE_LIMIT_SALT?:string; MEDIA_BUCKET?:R2Bucket }
 export const catalogApi = new Hono<{ Bindings: CatalogBindings }>()
 catalogApi.use('*', async (c, next) => {
   c.header('Cache-Control', 'no-store')
@@ -34,6 +44,42 @@ catalogApi.get('/status', c => new D1Catalog(c.env.CATALOG_DB!).status().then(va
 catalogApi.route('/intelligence', assetApi)
 catalogApi.get('/sources', c => new D1Catalog(c.env.CATALOG_DB!).listSources().then(value => c.json({ sources: value })))
 catalogApi.get('/sources/:id/facts', async c => c.json({ facts: await new D1Catalog(c.env.CATALOG_DB!).sourceFacts(c.req.param('id')) }))
+catalogApi.post('/cultural/plan',async c=>{
+  if(c.env.CULTURAL_INTELLIGENCE_V3_ENABLED!=='true'||!c.env.META_API_KEY||c.env.META_SPARK_MODEL!=='muse-spark-1.3')return c.json({status:'disabled'},503)
+  const raw=z.strictObject({consent:z.literal(true),prompt:z.string().trim().min(3).max(500),assetVersionIds:z.array(z.string().regex(/^version-[a-f0-9]{64}$/)).min(1).max(6)}).parse(await body(c.req.raw))
+  const ip=c.req.header('CF-Connecting-IP')!
+  try{
+    const preferences=resolveEditorialInput({prompt:raw.prompt,consent:true})
+    const pool=await editorialPool(c.env as Bindings,preferences,raw.assetVersionIds,true,false)
+    if(pool.retrieval!=='d1'||pool.items.length!==raw.assetVersionIds.length||raw.assetVersionIds.some(id=>!pool.items.some(item=>item.image.id===id)))return c.json({error:'Cultural planning assets unavailable.'},409)
+    const input=culturalPlannerInput.parse({interest:raw.prompt,assetVersionIds:raw.assetVersionIds,ownerFacts:pool.sources.slice(0,24).map(source=>({id:source.id,assetId:source.assetId,value:source.value})),observations:pool.visualContexts.slice(0,12).map(context=>({assetId:context.assetId,text:JSON.stringify(context.observations)})),existingEvidence:[]})
+    return c.json({plan:await planCulturalResearch(input,c.env.META_API_KEY,async()=>Boolean((await reserveInference(c.env as Bindings,ip,1)).allowed))})
+  }
+  catch{return c.json({error:'Cultural planning unavailable or budget exhausted.'},503)}
+})
+catalogApi.post('/cultural/retrieve',async c=>{
+  if(c.env.CULTURAL_INTELLIGENCE_V3_ENABLED!=='true'||!c.env.RESEARCH_SOURCE_ORIGINS||!c.env.MEDIA_BUCKET)return c.json({status:'disabled'},503)
+  try{return c.json(await researchPublicSources(await body(c.req.raw),c.env.RESEARCH_SOURCE_ORIGINS,{onPassage:async proof=>{await c.env.MEDIA_BUCKET!.put(passageProofKey(proof.id),JSON.stringify(proof),{httpMetadata:{contentType:'application/json'}})}}))}
+  catch{return c.json({error:'Cultural retrieval unavailable.'},422)}
+})
+catalogApi.post('/cultural/packs',async c=>{
+  if(c.env.CULTURAL_INTELLIGENCE_V3_ENABLED!=='true'||!c.env.MEDIA_BUCKET)return c.json({status:'disabled'},503)
+  try{
+    const raw:unknown=await body(c.req.raw)
+    const ids=z.object({assetVersionIds:z.array(z.string().regex(/^version-[a-f0-9]{64}$/)).min(1).max(6)}).parse(raw).assetVersionIds
+    const publication=await new CatalogPublications(c.env.CATALOG_DB!).list('',6,ids)
+    if(publication.items.length!==ids.length||ids.some(id=>!publication.items.some(item=>item.image.id===id&&item.permissions.aiAnalysis.status==='approved'&&item.permissions.aiAnalysis.evidence)))return c.json({error:'Cultural asset publication unavailable.'},409)
+    const available=await Promise.all(ids.map(async id=>{const permit=await resolveR2MediaPermit(c.env.CATALOG_DB!,id);if(!permit)return false;const head=await c.env.MEDIA_BUCKET!.head(permit.r2Key);return head?.size===permit.byteSize&&head.customMetadata?.sha256===permit.sha256&&head.customMetadata?.versionId===id}))
+    if(available.some(value=>!value))return c.json({error:'Cultural asset media unavailable.'},409)
+    const pack=validateCulturalEvidence(raw,ids)
+    if(pack.status!=='approved')return c.json({error:'Cultural evidence requires operator review.'},409)
+    if(!await verifyCapturedPassages(c.env.MEDIA_BUCKET,pack))return c.json({error:'Cultural passage proof unavailable.'},409)
+    const key=await culturalEvidenceKey(ids),bytes=JSON.stringify(pack)
+    if(new TextEncoder().encode(bytes).length>65536)return c.json({error:'Cultural pack exceeds bound.'},413)
+    await c.env.MEDIA_BUCKET.put(key,bytes,{httpMetadata:{contentType:'application/json'},customMetadata:{version:pack.version,packId:pack.id}})
+    return c.json({stored:true,packId:pack.id,assetVersionIds:ids},201)
+  }catch{return c.json({error:'Cultural evidence invalid or unavailable.'},422)}
+})
 catalogApi.post('/query', async c => c.json(await new D1Catalog(c.env.CATALOG_DB!).query(queryRequest.parse(await body(c.req.raw)))))
 catalogApi.get('/assets/:id', async c => {
   if (!/^asset-[a-f0-9]{64}$/.test(c.req.param('id'))) return c.json({ error: 'Invalid asset ID.' }, 400)
