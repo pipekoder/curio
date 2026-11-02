@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react'
+import {useCallback,useEffect,useRef,useState} from 'react'
 import * as THREE from 'three'
 import {SpatialFallback} from './fallback'
 import {SilverField,webglAvailable} from './SilverField'
@@ -7,11 +7,12 @@ import {ExhibitMounts} from './ExhibitMounts'
 import {HudBridge} from './HudBridge'
 import {loadCatalogNodes,revalidateVersions} from './nodes'
 import type {CatalogNode} from './contracts'
-import {editionStatusCopy,fetchEdition,type HonestState} from './edition'
+import {editionStatusCopy,fetchEdition,type HonestState,type StagedPlan} from './edition'
+import StoryReader from './StoryReader'
 import {stageEdition,type StagedExhibit} from './staging'
 import {AssemblyDirector} from './assembly'
 import {AssemblyField} from './AssemblyField'
-import {exhibitLayout,splinePosition,type Waypoint} from './camera-math'
+import {exhibitLayout,lateralBias,splinePosition,type Waypoint} from './camera-math'
 import {NETWORK_CENTER,ORBIT_DEFAULT,pickSurprise,orbitCamera} from './network-math'
 import {NetworkChamber} from './NetworkChamber'
 import {SPATIAL_SESSION_KEY,clearSpatialSession} from './clear'
@@ -62,6 +63,10 @@ export default function SpatialApp(){
   const [showDock,setShowDock]=useState(true)
   const [current,setCurrent]=useState(-1)
   const [inspect,setInspect]=useState<Inspect|null>(null)
+  const [story,setStory]=useState<{assetId:string}|null>(null)
+  // Complete validated edition plan for the read-only Sources lookup; set
+  // wherever exhibits stage, cleared with the visit.
+  const planRef=useRef<StagedPlan|null>(null)
   const [elapsed,setElapsed]=useState(0)
   const [mode,setMode]=useState<'promenade'|'network'>('promenade')
   const [selected,setSelected]=useState(-1)
@@ -75,7 +80,7 @@ export default function SpatialApp(){
   const fieldRef=useRef<SilverField|null>(null)
   const directorRef=useRef(new AssemblyDirector())
   const assemblyRef=useRef<AssemblyField|null>(null)
-  const stagedRef=useRef<{exhibits:StagedExhibit[];label:HonestState;skipped:number;reason?:string;timedOut:boolean}|null>(null)
+  const stagedRef=useRef<{exhibits:StagedExhibit[];label:HonestState;skipped:number;reason?:string;timedOut:boolean;fullPlan:StagedPlan}|null>(null)
   // True cancellation for the edition request: a new submit or Clear aborts
   // the in-flight fetch instead of leaving it to run out the 90s bound. The
   // submit-ID guard still ignores any response that slips through the race.
@@ -257,6 +262,7 @@ export default function SpatialApp(){
               resolveFiredRef.current=true
               const staged=stagedRef.current
               if(staged){
+                planRef.current=staged.fullPlan
                 setExhibits(staged.exhibits)
                 setEditionLabel(staged.label)
                 setFallbackReason(staged.reason??null)
@@ -336,7 +342,7 @@ export default function SpatialApp(){
     mounts.onArtworkError=(assetId:string)=>{pruneExhibits(id=>id!==assetId,'revoked')}
     const layout=exhibitLayout(exhibits.length)
     layoutRef.current=layout
-    rig.setPath(layout.waypoints,layout.docks)
+    rig.setPath(layout.waypoints,layout.docks,d=>lateralBias(d,layout.docks,exhibits.length))
     mounts.setExhibits(exhibits,layout.mounts)
   },[exhibits])
 
@@ -440,6 +446,7 @@ export default function SpatialApp(){
       return
     }
     if(reduced.current||!assemblyRef.current){
+      planRef.current=edition.fullPlan
       setExhibits(staged)
       setEditionLabel(honest)
       setFallbackReason(reason??null)
@@ -453,7 +460,7 @@ export default function SpatialApp(){
       }))
       return
     }
-    stagedRef.current={exhibits:staged,label:honest,skipped,reason,timedOut}
+    stagedRef.current={exhibits:staged,label:honest,skipped,reason,timedOut,fullPlan:edition.fullPlan}
     directorRef.current.onSettled()
   }
 
@@ -491,6 +498,8 @@ export default function SpatialApp(){
     setEditionLabel(null)
     setFallbackReason(null)
     setInspect(null)
+    setStory(null)
+    planRef.current=null
     setShowDock(true)
     setAnnounce(removed.length?`Visit cleared. ${removed.length} keys removed.`:'Visit cleared.')
     bridgeRef.current!.emit({type:'clear',removed})
@@ -504,6 +513,8 @@ export default function SpatialApp(){
   }
 
   const lockScroll=(locked:boolean)=>{document.documentElement.style.overflow=locked?'hidden':''}
+  const closeStory=useCallback(()=>setStory(null),[])
+  const inspectFromStory=useCallback((assetId:string)=>{setStory(null);setInspect({assetId})},[])
 
   const scrollToDock=(dock:number)=>{
     const maxScroll=document.documentElement.scrollHeight-window.innerHeight
@@ -718,6 +729,7 @@ export default function SpatialApp(){
   const stagedIds=new Set(exhibits.map(e=>e.assetId))
   const active=current>=0?exhibits[current]:null
   const inspected=inspect?exhibits.find(e=>e.assetId===inspect.assetId)??null:null
+  const storyExhibit=story?exhibits.find(e=>e.assetId===story.assetId)??null:null
   const inspectedHotspot=inspected?.hotspots.find(h=>h.id===inspect?.hotspotId)??inspected?.hotspots[0]
   const selectedNode=selected>=0?nodes[selected]??null:null
   const selectedStaged=selectedNode?stagedIds.has(selectedNode.assetId):false
@@ -732,6 +744,7 @@ export default function SpatialApp(){
     <canvas ref={canvasRef} className="spatial-canvas" aria-hidden="true"/>
     <div className="spatial-vignette" aria-hidden="true"/>
     {showDock&&!composing&&<DiscoverDecor/>}
+    {exhibits.length>0&&mode==='promenade'&&!composing&&<DiscoverDecor variant="exhibit"/>}
     <header className={showDock?'spatial-hud is-discover':'spatial-hud'}>
       <a className="spatial-brand" href="/" aria-label="Curio home">curio<span>.</span></a>
       <nav className="spatial-crumb" aria-label="Journey" aria-live="polite">
@@ -767,28 +780,16 @@ export default function SpatialApp(){
       </p>}
     </section>}
     {active&&!inspect&&mode==='promenade'&&<section id="spatial-rail" tabIndex={-1} className="spatial-rail" aria-label={`Contents of ${active.title}`}>
-      <article className="spatial-rail-card">
+      <article className="spatial-rail-card rail-story">
         <p className="spatial-eyebrow">Story</p>
         <h2>{active.title}</h2>
         <p>{active.narrative}</p>
+        <button type="button" id="spatial-read-story" onClick={()=>setStory({assetId:active.assetId})}>Read story →</button>
         <button type="button" onClick={()=>setInspect({assetId:active.assetId})}>Inspect exhibit →</button>
-      </article>
-      <article className="spatial-rail-card">
-        <p className="spatial-eyebrow">Visual detail</p>
-        {active.hotspots.length
-          ?<ul>{active.hotspots.map(h=><li key={h.id}><button type="button" onClick={()=>setInspect({assetId:active.assetId,hotspotId:h.id})}>{h.label} →</button></li>)}</ul>
-          :<p>No annotated details on this study.</p>}
-      </article>
-      <article className="spatial-rail-card">
-        <p className="spatial-eyebrow">Attribution</p>
-        <p>{active.attribution}</p>
-        <p className="spatial-fine">{active.rights}</p>
-      </article>
-      <article className="spatial-rail-card">
-        <p className="spatial-eyebrow">Thread onward</p>
-        <p>{active.thread??'The next exhibit continues the promenade.'}</p>
+        <p className="spatial-fine">Read the story, or scroll to explore.{active.hotspots.length>0?' Select an object in Inspect to explore details.':''}</p>
       </article>
     </section>}
+    {storyExhibit&&mode==='promenade'&&<StoryReader exhibit={storyExhibit} plan={planRef.current} index={exhibits.indexOf(storyExhibit)} total={exhibits.length} onClose={closeStory} onInspect={inspectFromStory}/>}
     {inspected&&<aside className="spatial-inspect" aria-label={`Inspecting ${inspected.title}`}>
       <button type="button" className="spatial-inspect-close" onClick={()=>setInspect(null)} aria-label="Close inspection">×</button>
       <ObjectDiscovery key={inspected.assetId} assetId={inspected.assetId} image={inspected.image} alt={`Artwork for ${inspected.title}`}/>
@@ -798,8 +799,9 @@ export default function SpatialApp(){
         ?<><p>{inspectedHotspot.brandName} · unverified · fictional, not for sale</p>
           <p className="spatial-fine">Demo price: ${inspectedHotspot.priceUsd.toLocaleString('en-US')} USD</p>
           <ul>{inspectedHotspot.assumptions.map(a=><li key={a}>{a}</li>)}</ul>
-          <p className="spatial-fine">Manually authored hotspot · no SAM inference. Material and specifications unverified.</p></>
-        :<><p>{inspected.narrative}</p><p className="spatial-fine">{inspected.attribution}</p></>}
+          <p className="spatial-fine">Manually authored hotspot · no SAM inference. Material and specifications unverified.</p>
+          <p className="spatial-fine">{inspected.attribution} · {inspected.rights}</p></>
+        :<><p>{inspected.narrative}</p><p className="spatial-fine">{inspected.attribution} · {inspected.rights}</p></>}
     </aside>}
     {mode==='network'&&<nav id="spatial-journey" tabIndex={-1} className="spatial-journey-bar" aria-label="Journey network">
       <button type="button" onClick={backToPromenade}>← Promenade</button>
