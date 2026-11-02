@@ -35,6 +35,7 @@ export type Bindings = CatalogBindings & {
   EDITORIAL_KNOWLEDGE_V2_ENABLED?: string
   EDITORIAL_REVIEW_PILOT_TOKEN?: string
   MAGAZINE_MAX_CALLS?: string
+  INFERENCE_DAILY_MAX_UNITS?: string
   EDITORIAL_PILOT_VERSION_IDS?: string
   PUBLIC_APP_ORIGIN?: string
   RATE_LIMIT_SALT?: string
