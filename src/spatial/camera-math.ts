@@ -53,7 +53,8 @@ export function exhibitLayout(count:number,spacing=40,startZ=-40):{waypoints:Way
     const d=60+i*spacing
     docks.push(d)
     waypoints.push({d,p:[0,2.2,startZ-i*spacing]})
-    mounts.push({x:i%2?2.4:-2.4,z:startZ-i*spacing-12})
+    const side=i%2?1:-1
+    mounts.push({x:side*(3.4+Math.min(Math.floor(i/2),1)*0.3),z:startZ-i*spacing-12})
   }
   const pathLength=60+Math.max(0,count-1)*spacing+50
   waypoints.push({d:pathLength,p:[0,6,startZ-Math.max(0,count-1)*spacing-50]})

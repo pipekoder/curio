@@ -732,6 +732,7 @@ export default function SpatialApp(){
     <canvas ref={canvasRef} className="spatial-canvas" aria-hidden="true"/>
     <div className="spatial-vignette" aria-hidden="true"/>
     {showDock&&!composing&&<DiscoverDecor/>}
+    {exhibits.length>0&&mode==='promenade'&&!composing&&<DiscoverDecor variant="exhibit"/>}
     <header className={showDock?'spatial-hud is-discover':'spatial-hud'}>
       <a className="spatial-brand" href="/" aria-label="Curio home">curio<span>.</span></a>
       <nav className="spatial-crumb" aria-label="Journey" aria-live="polite">
@@ -766,27 +767,18 @@ export default function SpatialApp(){
         Visit cleared from this browser{cleared.length?`: ${cleared.join(', ')}`:'. No visit data was found in this browser.'} Server data handling: pending confirmation.
       </p>}
     </section>}
-    {active&&!inspect&&mode==='promenade'&&<section id="spatial-rail" tabIndex={-1} className="spatial-rail" aria-label={`Contents of ${active.title}`}>
-      <article className="spatial-rail-card">
+    {active&&!inspect&&mode==='promenade'&&<section id="spatial-rail" tabIndex={-1} className={`spatial-rail ${current%2===0?'story-right':'story-left'}`} aria-label={`Contents of ${active.title}`}>
+      <article className="spatial-rail-card rail-story">
         <p className="spatial-eyebrow">Story</p>
         <h2>{active.title}</h2>
         <p>{active.narrative}</p>
         <button type="button" onClick={()=>setInspect({assetId:active.assetId})}>Inspect exhibit →</button>
       </article>
-      <article className="spatial-rail-card">
+      <article className="spatial-rail-card rail-detail">
         <p className="spatial-eyebrow">Visual detail</p>
         {active.hotspots.length
           ?<ul>{active.hotspots.map(h=><li key={h.id}><button type="button" onClick={()=>setInspect({assetId:active.assetId,hotspotId:h.id})}>{h.label} →</button></li>)}</ul>
           :<p>No annotated details on this study.</p>}
-      </article>
-      <article className="spatial-rail-card">
-        <p className="spatial-eyebrow">Attribution</p>
-        <p>{active.attribution}</p>
-        <p className="spatial-fine">{active.rights}</p>
-      </article>
-      <article className="spatial-rail-card">
-        <p className="spatial-eyebrow">Thread onward</p>
-        <p>{active.thread??'The next exhibit continues the promenade.'}</p>
       </article>
     </section>}
     {inspected&&<aside className="spatial-inspect" aria-label={`Inspecting ${inspected.title}`}>
@@ -798,8 +790,9 @@ export default function SpatialApp(){
         ?<><p>{inspectedHotspot.brandName} · unverified · fictional, not for sale</p>
           <p className="spatial-fine">Demo price: ${inspectedHotspot.priceUsd.toLocaleString('en-US')} USD</p>
           <ul>{inspectedHotspot.assumptions.map(a=><li key={a}>{a}</li>)}</ul>
-          <p className="spatial-fine">Manually authored hotspot · no SAM inference. Material and specifications unverified.</p></>
-        :<><p>{inspected.narrative}</p><p className="spatial-fine">{inspected.attribution}</p></>}
+          <p className="spatial-fine">Manually authored hotspot · no SAM inference. Material and specifications unverified.</p>
+          <p className="spatial-fine">{inspected.attribution} · {inspected.rights}</p></>
+        :<><p>{inspected.narrative}</p><p className="spatial-fine">{inspected.attribution} · {inspected.rights}</p></>}
     </aside>}
     {mode==='network'&&<nav id="spatial-journey" tabIndex={-1} className="spatial-journey-bar" aria-label="Journey network">
       <button type="button" onClick={backToPromenade}>← Promenade</button>
