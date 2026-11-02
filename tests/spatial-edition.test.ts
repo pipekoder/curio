@@ -13,8 +13,8 @@ describe('spatial edition fetch',()=>{
   const failing=vi.fn(async()=>{throw Error('offline')})
   const {edition,honest}=await fetchEdition('quiet rooms',false,failing as unknown as typeof fetch)
   expect(honest).toBe('authored-fallback')
-  expect(edition.plan.features.length).toBeGreaterThan(0)
-  expect(edition.source).toBe('deterministic')
+  expect(edition!.plan.features.length).toBeGreaterThan(0)
+  expect(edition!.source).toBe('deterministic')
  })
  it('sends the actual consent value, defaulting to the caller choice',async()=>{
   const seen:string[]=[]
@@ -33,7 +33,7 @@ describe('spatial edition fetch',()=>{
   ] as const){
     const {edition,honest:got,fallbackReason}=await fetchEdition('quiet rooms',false,ok(body) as unknown as typeof fetch)
     expect(got).toBe(honest)
-    expect(edition.items).toStrictEqual(body.items)
+    expect(edition!.items).toStrictEqual(body.items)
     if('fallbackReason' in body)expect(fallbackReason).toBe(body.fallbackReason)
   }
  })
@@ -42,7 +42,7 @@ describe('spatial edition fetch',()=>{
   const body={plan:joined,items:pool,source:'meta',retrieval:'d1',cached:false}
   const {edition,honest}=await fetchEdition('quiet rooms',false,ok(body) as unknown as typeof fetch)
   expect(honest).toBe('meta')
-  expect(edition.plan.features).toHaveLength(1)
+  expect(edition!.plan.features).toHaveLength(1)
   const stray={...plan(),features:[{...plan().features[0],catalogId:'no-such-id'}]}
   const missed=await fetchEdition('quiet rooms',false,ok({...body,plan:stray}) as unknown as typeof fetch)
   expect(missed.honest).toBe('authored-fallback')
@@ -80,7 +80,7 @@ describe('spatial edition fetch',()=>{
   const {edition,honest,timedOut}=await fetchEdition('quiet rooms',true,hanging as unknown as typeof fetch,{timeoutMs:30})
   expect(honest).toBe('authored-fallback')
   expect(timedOut).toBe(true)
-  expect(edition.plan.features.length).toBeGreaterThan(0)
+  expect(edition!.plan.features.length).toBeGreaterThan(0)
  })
  it('treats caller cancellation as stale, not as a timeout',async()=>{
   const hanging=vi.fn(async(_url:unknown,init:{signal?:AbortSignal})=>new Promise<never>((_,reject)=>{
@@ -117,8 +117,8 @@ describe('spatial edition fetch',()=>{
   const {edition,honest,timedOut}=await fetchEdition('quiet rooms',true,ok(body) as unknown as typeof fetch)
   expect(honest).toBe('meta')
   expect(timedOut).toBe(false)
-  expect(edition.plan.features).toHaveLength(2)
-  expect(edition.plan.features[0].narrative).toHaveLength(long.length)
+  expect(edition!.plan.features).toHaveLength(2)
+  expect(edition!.plan.features[0].narrative).toHaveLength(long.length)
  })
  it('discloses timeouts and skipped features in edition status',()=>{
   expect(editionStatusCopy(true,0)).toContain('90 seconds')

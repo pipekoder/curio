@@ -230,6 +230,160 @@ test('unavailable citations hide gracefully without blocking the story',async({p
   await expect(page.locator('.spatial-story')).toContainText('A closer look: Ochre Arc Chair')
 })
 
+test('the inspiration row fills the prompt with a sentence without generating',async({page})=>{
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await expect(page.locator('.spatial-canvas')).toBeVisible()
+  await expect(page.locator('.spatial-suggestions-label')).toContainText('Need a little inspiration?')
+  // Measure at steady state: the dock entrance scales from .55 to 1 over 1.6s.
+  await page.locator('.spatial-dock').evaluate(el=>Promise.all(el.getAnimations().map(animation=>animation.finished)))
+  const row=page.locator('.spatial-seed-row')
+  const seed=row.locator('.spatial-seed')
+  await expect(seed).toHaveCount(1)
+  expect(await seed.textContent()).toContain('·')
+  // Seed plus two perfectly round icon buttons share one row.
+  const circles=row.locator('.spatial-circle')
+  await expect(circles).toHaveCount(2)
+  for(const circle of await circles.all()){
+    const box=await circle.boundingBox()
+    expect(Math.abs(box!.width-box!.height)).toBeLessThan(0.5)
+    expect(box!.width).toBeGreaterThanOrEqual(36)
+  }
+  await expect(row.getByRole('button',{name:'Refresh suggestion'})).toHaveAttribute('title','Refresh suggestion')
+  await expect(row.getByRole('button',{name:'Surprise me'})).toHaveAttribute('title','Show me something unexpected')
+  await seed.click()
+  const filled=await page.getByLabel('Your curiosity').inputValue()
+  expect(filled.startsWith("I'm curious about ")).toBe(true)
+  expect(filled.endsWith('.')).toBe(true)
+  await expect(page.getByTestId('spatial-edition-chip')).toHaveCount(0)
+  // Free writing still works with no fixed format.
+  await page.getByLabel('Your curiosity').fill('just some words')
+  await expect(page.getByLabel('Your curiosity')).toHaveValue('just some words')
+})
+
+test('refresh swaps the seed without repeating it',async({page})=>{
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await expect(page.locator('.spatial-canvas')).toBeVisible()
+  const seed=page.locator('.spatial-seed')
+  const first=await seed.textContent()
+  await page.getByRole('button',{name:'Refresh suggestion'}).click()
+  const second=await seed.textContent()
+  expect(second).not.toBe(first)
+})
+
+test('surprise me fills an empty input with varied directions',async({page})=>{
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await expect(page.locator('.spatial-canvas')).toBeVisible()
+  await expect(page.getByLabel('Your curiosity')).toHaveValue('')
+  const surprise=page.locator('.spatial-seed-row').getByRole('button',{name:'Surprise me'})
+  await surprise.click()
+  const first=await page.getByLabel('Your curiosity').inputValue()
+  expect(first.startsWith("I'm curious about ")).toBe(true)
+  await surprise.click()
+  const second=await page.getByLabel('Your curiosity').inputValue()
+  expect(second.startsWith("I'm curious about ")).toBe(true)
+  expect(second).not.toBe(first)
+  await expect(page.getByTestId('spatial-edition-chip')).toHaveCount(0)
+})
+
+const modelCaps={version:'curio-editorial-model-routing-v1',defaultMode:'lite',liteAvailable:true,hybridAvailable:true,modes:[]}
+const hybridGeneration={version:'curio-editorial-model-routing-v1',editorialMode:'hybrid',chiefEditorModel:'muse-wonder-1.0',reviewerModel:'muse-spark-1.3',revisionModel:null,confirmationModel:null}
+
+test('hybrid stays disabled without capabilities and the mode is omitted',async({page})=>{
+  let body:unknown=null
+  await page.route('**/api/editorial',route=>{
+    body=route.request().postDataJSON()
+    return route.fulfill({status:503,json:{error:'AI disabled'}})
+  })
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await expect(page.locator('.spatial-canvas')).toBeVisible()
+  await expect(page.locator('input[name=editorial-mode][value=lite]')).toBeChecked()
+  await expect(page.locator('input[name=editorial-mode][value=hybrid]')).toBeDisabled()
+  await submitPrompt(page)
+  await expect(page.getByTestId('spatial-edition-chip')).toContainText('Curio-authored edition · AI not used',{timeout:15000})
+  expect(Object.keys(body as Record<string,unknown>).sort()).toEqual(['consent','prompt'])
+})
+
+test('hybrid mode propagates, shows while generating, and confirms on the chip',async({page})=>{
+  const bodies:unknown[]=[]
+  await page.route('**/api/editorial/capabilities',route=>route.fulfill({status:200,json:modelCaps}))
+  await page.route('**/api/editorial',async route=>{
+    bodies.push(route.request().postDataJSON())
+    await new Promise(resolve=>setTimeout(resolve,1500))
+    return route.fulfill({status:200,json:{plan:metaPlan,items:groundedItems,source:'meta',retrieval:'d1',cached:false,generation:hybridGeneration}})
+  })
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await expect(page.locator('.spatial-canvas')).toBeVisible()
+  const hybrid=page.locator('input[name=editorial-mode][value=hybrid]')
+  await expect(hybrid).toBeEnabled()
+  // Native radios keep full keyboard support: arrows move the selection.
+  await page.locator('input[name=editorial-mode][value=lite]').focus()
+  await page.keyboard.press('ArrowRight')
+  await expect(hybrid).toBeChecked()
+  await submitPrompt(page)
+  await expect(page.locator('.spatial-generating')).toContainText('Hybrid · Wonder + Spark')
+  await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of',{timeout:15000})
+  expect((bodies[0] as Record<string,unknown>).editorialMode).toBe('hybrid')
+  await expect(page.getByTestId('spatial-edition-chip')).toContainText('AI-curated edition · Meta AI · Hybrid')
+})
+
+test('a refused hybrid stages nothing and retries explicitly in lite',async({page})=>{
+  const bodies:unknown[]=[]
+  await page.route('**/api/editorial/capabilities',route=>route.fulfill({status:200,json:modelCaps}))
+  await page.route('**/api/editorial',route=>{
+    bodies.push(route.request().postDataJSON())
+    if(bodies.length===1)return route.fulfill({status:503,json:{code:'hybrid_unavailable',error:'Hybrid editorial mode is currently unavailable.'}})
+    return route.fulfill({status:200,json:{plan:metaPlan,items:groundedItems,source:'meta',retrieval:'d1',cached:false}})
+  })
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await expect(page.locator('.spatial-canvas')).toBeVisible()
+  await expect(page.locator('input[name=editorial-mode][value=hybrid]')).toBeEnabled()
+  await page.locator('input[name=editorial-mode][value=hybrid]').check()
+  await submitPrompt(page)
+  const error=page.locator('.spatial-mode-error')
+  await expect(error).toBeVisible()
+  await expect(error).toContainText('Nothing was generated.')
+  expect(await page.evaluate(()=>window.__spatial?.().exhibits??0)).toBe(0)
+  await expect(page.getByTestId('spatial-edition-chip')).toHaveCount(0)
+  await error.getByRole('button',{name:'Switch to Lite & retry'}).click()
+  await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of',{timeout:15000})
+  expect(bodies).toHaveLength(2)
+  expect((bodies[0] as Record<string,unknown>).editorialMode).toBe('hybrid')
+  expect((bodies[1] as Record<string,unknown>).editorialMode).toBe('lite')
+  await expect(page.getByTestId('spatial-edition-chip')).toContainText('AI-curated edition · Meta AI')
+  await expect(page.getByTestId('spatial-edition-chip')).not.toContainText('Hybrid')
+  await page.getByRole('button',{name:'New prompt'}).click()
+  await expect(page.locator('input[name=editorial-mode][value=lite]')).toBeChecked()
+})
+
+test('journey node panel shows the node artwork',async({page})=>{
+  await openJourney(page)
+  await page.getByRole('button',{name:'Surprise me'}).click()
+  const panel=page.getByTestId('spatial-node-panel')
+  await expect(panel).toBeVisible()
+  const figure=panel.locator('.spatial-node-figure img')
+  await expect(figure).toBeVisible()
+  expect(await figure.getAttribute('src')).toMatch(/^\/(editorial|catalog)\//)
+})
+
+test('discover stays usable under reduced motion',async({browser})=>{
+  const context=await browser.newContext({viewport:{width:1440,height:900},reducedMotion:'reduce'})
+  const page=await context.newPage()
+  await page.goto('/spatial')
+  await expect(page.locator('.spatial-canvas')).toBeVisible()
+  await expect(page.locator('.spatial-seed')).toHaveCount(1)
+  await page.locator('.spatial-seed').click()
+  expect(await page.getByLabel('Your curiosity').inputValue()).not.toBe('')
+  await page.getByRole('button',{name:'Begin exploration'}).click()
+  await expect(page.getByTestId('spatial-edition-chip')).toBeVisible({timeout:30000})
+  await context.close()
+})
+
 test('promenade visits every dock with its story rail',async({page})=>{
   test.setTimeout(120000)
   await page.setViewportSize({width:1440,height:900})
@@ -524,7 +678,7 @@ test('slow generation holds with honest elapsed time and no simulated progress',
   await page.goto('/spatial')
   await page.getByLabel('Your curiosity').fill('A quiet room with soft light')
   await page.getByRole('button',{name:'Begin exploration'}).click()
-  await expect(page.getByRole('status').first()).toContainText(/\(\ds\)/,{timeout:10000})
+  await expect(page.getByRole('status').first()).toContainText(/\d+s elapsed/,{timeout:10000})
   await expect(page.getByRole('status').first()).not.toContainText('%')
   const hold=await page.evaluate(()=>window.__spatial?.())
   expect(['stream','lattice']).toContain(hold?.assembly)
@@ -568,7 +722,7 @@ test('a slow full-review workflow still stages meta past the old bound',async({p
   await page.goto('/')
   await page.getByLabel('Your curiosity').fill('A quiet room with soft light')
   await page.getByRole('button',{name:'Begin exploration'}).click()
-  await expect(page.getByRole('status').first()).toContainText(/\(\ds\)/,{timeout:10000})
+  await expect(page.getByRole('status').first()).toContainText(/\d+s elapsed/,{timeout:10000})
   await expect(page.getByTestId('spatial-edition-chip')).toContainText('AI-curated edition · Meta AI',{timeout:45000})
 })
 

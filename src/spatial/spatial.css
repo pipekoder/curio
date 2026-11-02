@@ -12,7 +12,7 @@
 .spatial-actions{margin-left:auto;display:flex;gap:14px;align-items:center}
 .spatial-actions a{font-size:12px;color:#626b7a;text-underline-offset:4px}
 .spatial-actions button{min-height:40px;padding:8px 16px;border:1px solid #c6ceda;border-radius:9999px;background:#fff;color:#101219;cursor:pointer;font:inherit;font-size:12px}
-.spatial-dock{position:fixed;left:50%;top:50%;z-index:10;width:min(94vw,800px);max-height:calc(100svh - 110px);overflow:auto;transform:translate(-50%,-50%);background:linear-gradient(150deg,#fffffff2 0%,#f4f8ffe8 38%,#fdf3faee 62%,#edf6f4ee 100%);border:1px solid #e0e5ed;border-radius:28px;box-shadow:inset 0 1px 0 #ffffff,inset 0 -1px 0 #ffffff80,0 1px 2px #5f6f8021,0 12px 32px #5f6f8026,0 32px 80px #5f6f802e;backdrop-filter:blur(14px);padding:clamp(32px,5vw,60px);text-align:center;animation:spatial-approach 1.6s cubic-bezier(.2,.7,.2,1) both}
+.spatial-dock{position:fixed;left:50%;top:50%;z-index:10;width:min(94vw,800px);max-height:calc(100svh - 110px);overflow:auto;container-type:inline-size;transform:translate(-50%,-50%);background:linear-gradient(150deg,#fffffff2 0%,#f4f8ffe8 38%,#fdf3faee 62%,#edf6f4ee 100%);border:1px solid #e0e5ed;border-radius:28px;box-shadow:inset 0 1px 0 #ffffff,inset 0 -1px 0 #ffffff80,0 1px 2px #5f6f8021,0 12px 32px #5f6f8026,0 32px 80px #5f6f802e;backdrop-filter:blur(14px);padding:clamp(32px,5vw,60px);text-align:center;animation:spatial-approach 1.6s cubic-bezier(.2,.7,.2,1) both}
 .spatial-dock.is-docked{animation:none;transform:translate(-50%,-50%);opacity:1;filter:none}
 .spatial-dock.is-composing{animation:none;opacity:0;transform:translate(-50%,-50%) translateY(60px) scale(.96);pointer-events:none;transition:opacity .5s ease,transform .5s ease}
 @keyframes spatial-approach{from{transform:translate(-50%,-50%) scale(.55);opacity:0;filter:blur(10px)}to{transform:translate(-50%,-50%) scale(1);opacity:1;filter:blur(0)}}
@@ -20,11 +20,15 @@
 .spatial-dock .spatial-eyebrow{display:flex;align-items:center;justify-content:center;gap:16px;color:#b98a3e;margin:0 0 16px}
 .spatial-dock .spatial-eyebrow::before,.spatial-dock .spatial-eyebrow::after{content:'';height:1px;width:min(110px,16%);background:linear-gradient(90deg,transparent,#cfa64f)}
 .spatial-dock .spatial-eyebrow::after{background:linear-gradient(90deg,#cfa64f,transparent)}
-.spatial-dock h1{margin:0 0 24px;font:400 clamp(40px,5.2vw,68px)/1.04 Georgia,serif;letter-spacing:-.015em}
+.spatial-dock h1{margin:0 0 24px;font:400 clamp(24px,5.2vw,46px)/1.1 Georgia,serif;font-size:clamp(24px,6.2cqw,46px);letter-spacing:-.015em;white-space:nowrap}
 .spatial-dock textarea{width:100%;box-sizing:border-box;min-height:76px;resize:vertical;border:1px solid #c6ceda;border-radius:16px;background:#f7fafdcc;padding:12px 14px;font:16px/1.5 Georgia,serif;color:#101219;box-shadow:inset 0 1px 0 #ffffff,inset 0 -1px 1px #dfe8f2}
-.spatial-dock button[type=submit]{margin-top:16px;min-height:48px;padding:14px 34px;border:0;border-radius:9999px;background:#101219;color:#fff;font:inherit;font-size:13px;letter-spacing:.18em;text-transform:uppercase;cursor:pointer}
+.spatial-dock button[type=submit]{margin-top:16px;min-height:48px;padding:14px 34px;border:1px solid #101219;border-radius:9999px;background:linear-gradient(180deg,#2b3242 0%,#101219 62%);color:#fff;font:inherit;font-size:13px;letter-spacing:.18em;text-transform:uppercase;cursor:pointer;box-shadow:inset 0 1px 0 #ffffff2e,0 10px 24px #10121930}
 .spatial-dock button[type=submit]:disabled{opacity:.45;cursor:not-allowed}
 .spatial-consent{display:flex;gap:10px;align-items:center;justify-content:center;margin-top:14px;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#626b7a;cursor:pointer}
+.spatial-consent input{appearance:none;flex:none;width:18px;height:18px;margin:0;border-radius:6px;border:1px solid #c6ceda;background:linear-gradient(180deg,#ffffff,#edf2f9);box-shadow:inset 0 1px 0 #ffffff;cursor:pointer}
+.spatial-consent input:hover{border-color:#8b98ad}
+.spatial-consent input:checked{border-color:#101219;background:#101219 url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'><path d='M4 12.5l5 5L20 6.5'/></svg>") center/12px no-repeat}
+.spatial-consent input:disabled{opacity:.45;cursor:not-allowed}
 .spatial-consent input{width:16px;height:16px;accent-color:#101219}
 .spatial-status{margin:14px 0 0;font-size:13px;line-height:1.6;color:#626b7a}
 .spatial-sr{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
@@ -69,6 +73,35 @@
 .spatial-sources-item q{display:block;margin:6px 0;font:italic 400 14px/1.6 Georgia,serif;color:#101219}
 .spatial-sources a{color:#385fa8}
 .rail-story button{display:block;width:100%;margin-top:8px}
+/* Inspiration row: one seed plus two circular glass icon buttons. */
+.spatial-suggestions-label{margin:14px 0 6px!important;font-size:12px!important;letter-spacing:.04em}
+.spatial-seed-row{display:flex;align-items:center;gap:10px}
+.spatial-seed{flex:1;min-width:0;min-height:40px;padding:9px 16px;border:1px solid #d8dee8;border-radius:9999px;background:linear-gradient(180deg,#fffffff2,#f2f6fce6);color:#3c4350;cursor:pointer;font:inherit;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:inset 0 1px 0 #ffffff}
+.spatial-circle{flex:none;min-width:40px;min-height:40px;width:40px;height:40px;padding:0;border:1px solid #d8dee8;border-radius:50%;background:linear-gradient(180deg,#fffffff2,#edf2f9e6);color:#3c4350;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 #ffffff}
+/* Compact mode switch: one glass pill with an adjacent description. */
+.spatial-mode-row{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;margin-top:14px}
+.spatial-mode-row .spatial-fine{margin:0;max-width:250px;text-align:left}
+.spatial-mode-compact{display:inline-flex;gap:0;border:1px solid #c6ceda;border-radius:9999px;background:#eef2f8cc;margin:0;padding:4px;box-shadow:inset 0 1px 2px #d7e0ec}
+.spatial-mode-option{position:relative;display:block;margin:0;cursor:pointer}
+.spatial-mode-option input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+.spatial-mode-compact .spatial-mode-card{display:block;box-sizing:border-box;border:0;border-radius:9999px;background:transparent;padding:8px 18px;font-size:12px;letter-spacing:.04em;color:#626b7a;white-space:nowrap}
+.spatial-mode-compact .spatial-mode-option input:checked + .spatial-mode-card{background:linear-gradient(180deg,#ffffff,#e6edf6);color:#101219;box-shadow:inset 0 1px 0 #ffffff,0 2px 8px #5f6f8033,0 0 0 1px #e0e5ed}
+.spatial-mode-compact .spatial-mode-option input:disabled{cursor:not-allowed}
+.spatial-mode-compact .spatial-mode-option input:disabled + .spatial-mode-card{opacity:.5;cursor:not-allowed}
+/* Generating: honest preparation card while the exhibition assembles. */
+.spatial-generating{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:20;width:max-content;max-width:min(92vw,440px);text-align:center;background:linear-gradient(165deg,#fffffff5 0%,#f2f6fff0 60%,#fdf3faed 100%);border:1px solid #e0e5ed;border-radius:18px;box-shadow:inset 0 1px 0 #ffffff,0 1px 2px #5f6f8021,0 12px 32px #5f6f8026,0 32px 80px #5f6f802e;padding:14px 28px 16px}
+.spatial-generating .spatial-eyebrow{margin:0 0 4px}
+.spatial-generating-title{margin:0 0 4px!important;font:400 18px/1.3 Georgia,serif!important;color:#101219!important}
+.spatial-generating-pulse{display:block;width:10px;height:10px;margin:10px auto 0;border-radius:50%;background:#a9c5ff;animation:generating-ping 1.8s ease-out infinite}
+@keyframes generating-ping{0%{box-shadow:0 0 0 0 #a9c5ff66}70%{box-shadow:0 0 0 12px #a9c5ff00}100%{box-shadow:0 0 0 0 #a9c5ff00}}
+/* Hybrid refusal: explicit error with deliberate retry actions. */
+.spatial-mode-error{margin-top:14px;border:1px solid #d9a5a5;border-radius:14px;background:#fdf3f3f2;padding:14px 16px}
+.spatial-mode-error p{margin:0 0 10px;font-size:13px;line-height:1.6;color:#3c4350}
+.spatial-mode-error button{min-height:40px;padding:8px 16px;border:1px solid #c6ceda;border-radius:9999px;background:#fff;color:#101219;cursor:pointer;font:inherit;font-size:12px;margin:0 8px 0 0}
+/* Journey: refined bar glass and node imagery (data flow untouched). */
+.spatial-journey-bar{background:linear-gradient(165deg,#fffffff5 0%,#f2f6fff0 100%);box-shadow:inset 0 1px 0 #ffffff,0 1px 2px #5f6f8021,0 12px 32px #5f6f8026,0 32px 80px #5f6f802e;backdrop-filter:blur(14px)}
+.spatial-node-figure{margin:0 0 12px;border:1px solid #e0e5ed;border-radius:12px;overflow:hidden;background:#e8ecf1}
+.spatial-node-figure img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover}
 .spatial-journey-bar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:15;display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:94vw;background:#fffffff0;border:1px solid #e0e5ed;border-radius:9999px;padding:8px 14px;box-shadow:inset 0 1px 0 #ffffffd9,0 1px 2px #5f6f8021,0 8px 24px #5f6f8026,0 20px 48px #5f6f8029}
 .spatial-journey-bar button{min-height:40px;padding:8px 14px;border:1px solid #c6ceda;border-radius:9999px;background:#fff;color:#101219;cursor:pointer;font:inherit;font-size:12px}
 .spatial-node-enter{min-height:44px;padding:10px 20px;border:0;border-radius:9999px;background:#101219;color:#fff;font:inherit;font-size:13px;cursor:pointer;margin-top:8px}
@@ -84,11 +117,13 @@
 .spatial-fallback ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
 .spatial-fallback li{background:#fff;border:1px solid #e0e5ed;border-radius:10px;padding:8px 12px}
 /* Static hover tints only; no transitions by design. */
-.spatial-actions button:hover,.spatial-rail-card button:hover,.spatial-journey-bar button:hover,.spatial-inspect-close:hover,.spatial-story button:hover{background:#f7f8fa}
-.spatial-dock button[type=submit]:hover:not(:disabled),.spatial-node-enter:hover,.spatial-fallback button:hover:not(:disabled){background:#1e2430}
-.spatial-hud a:focus-visible,.spatial-hud button:focus-visible,.spatial-dock button:focus-visible,.spatial-dock textarea:focus-visible,.spatial-consent input:focus-visible,.spatial-skip:focus-visible,.spatial-rail-card button:focus-visible,.spatial-inspect-close:focus-visible,.spatial-journey-bar button:focus-visible,.spatial-node-enter:focus-visible,.object-region:focus-visible,.spatial-story button:focus-visible,.spatial-sources a:focus-visible{outline:2px solid #385fa8;outline-offset:3px}
-@media(max-width:640px){.spatial-story{top:auto;bottom:12px;left:12px;right:12px;width:auto;max-height:82vh;padding:22px 20px}.spatial-hud{gap:10px;padding:10px 14px}.spatial-crumb{display:none}.spatial-dock{padding:20px}.spatial-node-panel{top:auto;bottom:84px;left:12px;right:12px;width:auto;max-height:42vh}.spatial-journey-bar{bottom:12px;gap:8px;padding:6px 10px;flex-wrap:nowrap;overflow-x:auto;max-width:calc(100vw - 24px)}.spatial-journey-bar button{flex:none;min-height:36px;padding:6px 12px}.spatial-journey-bar .spatial-fine{display:none}}
-@media(prefers-reduced-motion:reduce){.spatial-dock{animation:none}.spatial-root{scroll-behavior:auto}.spatial-story-backdrop,.spatial-story,.spatial-story-hero{animation:none}}
+.spatial-actions button:hover,.spatial-rail-card button:hover,.spatial-journey-bar button:hover,.spatial-inspect-close:hover,.spatial-story button:hover,.spatial-mode-error button:hover{background:#f7f8fa}
+.spatial-seed:hover,.spatial-circle:hover{border-color:#8b98ad;box-shadow:inset 0 1px 0 #ffffff,0 4px 14px #5f6f8026}
+.spatial-dock button[type=submit]:hover:not(:disabled),.spatial-node-enter:hover,.spatial-fallback button:hover:not(:disabled){background:linear-gradient(180deg,#39415a 0%,#1e2430 62%)}
+.spatial-hud a:focus-visible,.spatial-hud button:focus-visible,.spatial-dock button:focus-visible,.spatial-dock textarea:focus-visible,.spatial-consent input:focus-visible,.spatial-skip:focus-visible,.spatial-rail-card button:focus-visible,.spatial-inspect-close:focus-visible,.spatial-journey-bar button:focus-visible,.spatial-node-enter:focus-visible,.object-region:focus-visible,.spatial-story button:focus-visible,.spatial-sources a:focus-visible,.spatial-seed:focus-visible,.spatial-circle:focus-visible,.spatial-mode-error button:focus-visible{outline:2px solid #385fa8;outline-offset:3px}
+.spatial-mode-option input:focus-visible + .spatial-mode-card{outline:2px solid #385fa8;outline-offset:3px}
+@media(max-width:640px){.spatial-node-figure img{aspect-ratio:16/9}.spatial-story{top:auto;bottom:12px;left:12px;right:12px;width:auto;max-height:82vh;padding:22px 20px}.spatial-hud{gap:10px;padding:10px 14px}.spatial-crumb{display:none}.spatial-dock{padding:20px}.spatial-node-panel{top:auto;bottom:84px;left:12px;right:12px;width:auto;max-height:42vh}.spatial-journey-bar{bottom:12px;gap:8px;padding:6px 10px;flex-wrap:nowrap;overflow-x:auto;max-width:calc(100vw - 24px)}.spatial-journey-bar button{flex:none;min-height:36px;padding:6px 12px}.spatial-journey-bar .spatial-fine{display:none}}
+@media(prefers-reduced-motion:reduce){.spatial-dock{animation:none}.spatial-root{scroll-behavior:auto}.spatial-story-backdrop,.spatial-story,.spatial-story-hero{animation:none}.spatial-generating-pulse{animation:none}}
 /* Verified-object discovery: approved SAM regions on the exhibit image. */
 .object-discovery{margin:0 0 18px}
 .object-figure{position:relative;margin:0;border:1px solid #e0e5ed;border-radius:12px;overflow:hidden;background:#e8ecf1}

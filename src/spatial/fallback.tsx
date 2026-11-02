@@ -23,7 +23,9 @@ export function SpatialFallback(){
     setBusy(true)
     try{
       const {edition}=await fetchEdition(trimmed,false)
-      setExhibits(stageEdition(edition).exhibits)
+      // The fallback path never selects Hybrid, so a refusal cannot occur;
+      // the guard only satisfies the nullable no-edition result.
+      if(edition)setExhibits(stageEdition(edition).exhibits)
     }finally{
       setBusy(false)
     }
