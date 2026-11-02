@@ -25,3 +25,10 @@ it('narrows conflicts and insufficient evidence without approving sources',async
   expect(retrieve).toHaveBeenCalledTimes(1)
   expect((await executeAdaptiveResearch(adaptiveInput.parse({...input,rounds:[input.rounds[0]]}),{plan:async()=>plan,retrieve})).pack).toBeNull()
 })
+it('uses the actual fused lexical ranking to order candidate sources',async()=>{
+  const retrieve=vi.fn(async(_query:string,urls:string[])=>[source(urls[0].endsWith('/a')?'a':'b')])
+  const rank=vi.fn(async()=>({mode:'lexical_rrf',results:[{id:'source:b',score:.04},{id:'source:a',score:.03}]}))
+  const result=await executeAdaptiveResearch(input,{plan:async()=>plan,retrieve,rank})
+  expect(result.mode).toBe('lexical_rrf')
+  expect(result.pack?.sourceIds).toEqual(['source:b','source:a'])
+})
