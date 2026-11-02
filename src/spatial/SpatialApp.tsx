@@ -8,6 +8,8 @@ import {HudBridge} from './HudBridge'
 import {loadCatalogNodes,revalidateVersions} from './nodes'
 import type {CatalogNode} from './contracts'
 import {editionStatusCopy,fetchEdition,type HonestState,type StagedPlan} from './edition'
+import {fetchCapabilities,type EditorialCapabilities,type EditorialMode,type GenerationMetadata} from './editorial-mode'
+import {INTEREST_SEEDS,SEED_DISPLAY,drawSurprise,pickSuggestions,type InterestSeed} from './prompt-library'
 import StoryReader from './StoryReader'
 import {stageEdition,type StagedExhibit} from './staging'
 import {AssemblyDirector} from './assembly'
@@ -60,6 +62,13 @@ export default function SpatialApp(){
   // Clear returns to consent:false, and true is sent only from this checkbox.
   const [consent,setConsent]=useState(false)
   const [composing,setComposing]=useState(false)
+  const [editorialMode,setEditorialMode]=useState<EditorialMode>('lite')
+  const [capabilities,setCapabilities]=useState<EditorialCapabilities|null>(null)
+  const [modeError,setModeError]=useState<'hybrid_unavailable'|null>(null)
+  const [generationMode,setGenerationMode]=useState<EditorialMode|null>(null)
+  const [suggestion,setSuggestion]=useState<InterestSeed>(()=>pickSuggestions()[0])
+  const surpriseCursor=useRef(Math.floor(Math.random()*INTEREST_SEEDS.length))
+  const modeErrorRef=useRef<HTMLDivElement>(null)
   const [showDock,setShowDock]=useState(true)
   const [current,setCurrent]=useState(-1)
   const [inspect,setInspect]=useState<Inspect|null>(null)
@@ -80,7 +89,7 @@ export default function SpatialApp(){
   const fieldRef=useRef<SilverField|null>(null)
   const directorRef=useRef(new AssemblyDirector())
   const assemblyRef=useRef<AssemblyField|null>(null)
-  const stagedRef=useRef<{exhibits:StagedExhibit[];label:HonestState;skipped:number;reason?:string;timedOut:boolean;fullPlan:StagedPlan}|null>(null)
+  const stagedRef=useRef<{exhibits:StagedExhibit[];label:HonestState;skipped:number;reason?:string;timedOut:boolean;fullPlan:StagedPlan;generation:GenerationMetadata|null}|null>(null)
   // True cancellation for the edition request: a new submit or Clear aborts
   // the in-flight fetch instead of leaving it to run out the 90s bound. The
   // submit-ID guard still ignores any response that slips through the race.
@@ -263,6 +272,7 @@ export default function SpatialApp(){
               const staged=stagedRef.current
               if(staged){
                 planRef.current=staged.fullPlan
+                setGenerationMode(staged.generation?.editorialMode??null)
                 setExhibits(staged.exhibits)
                 setEditionLabel(staged.label)
                 setFallbackReason(staged.reason??null)
@@ -383,6 +393,24 @@ export default function SpatialApp(){
   },[mode])
 
   useEffect(()=>{
+    // Read-only model-routing capabilities; a missing endpoint (pre-PR-75
+    // backend) resolves to null and Hybrid stays disabled, never pretended.
+    void fetchCapabilities().then(caps=>{if(caps)setCapabilities(caps)})
+  },[])
+
+  useEffect(()=>{
+    // Bring refused-mode retries into view inside the dock scrollport only:
+    // touching page scroll here would move the exhibition camera.
+    if(!modeError)return
+    const panel=modeErrorRef.current
+    const scroller=panel?.closest('.spatial-dock')
+    if(panel&&scroller){
+      const over=panel.offsetTop+panel.offsetHeight-scroller.clientHeight
+      if(over>0)scroller.scrollTop=over+16
+    }
+  },[modeError])
+
+  useEffect(()=>{
     if(mode!=='network')return
     const onKey=(event:KeyboardEvent)=>{
       if(event.key!=='Escape')return
@@ -397,7 +425,7 @@ export default function SpatialApp(){
     return <SpatialFallback/>
   }
 
-  const submit=async(event?:React.FormEvent,promptOverride?:string)=>{
+  const submit=async(event?:React.FormEvent,promptOverride?:string,modeOverride?:EditorialMode)=>{
     event?.preventDefault()
     const trimmed=(promptOverride??prompt).trim()
     if(!trimmed||composing)return
@@ -405,6 +433,7 @@ export default function SpatialApp(){
     setComposing(true)
     setCleared(null)
     setElapsed(0)
+    setModeError(null)
     setStatus('Composing your exhibition…')
     const submitId=++submitIdRef.current
     window.scrollTo(0,0)
@@ -432,8 +461,25 @@ export default function SpatialApp(){
     fetchAbortRef.current?.abort()
     const controller=new AbortController()
     fetchAbortRef.current=controller
-    const {edition,honest,fallbackReason:reason,timedOut}=await fetchEdition(trimmed,consent,fetch,{onResponse:()=>directorRef.current.onResponse(),signal:controller.signal})
+    const selectedMode=modeOverride??editorialMode
+    // The mode propagates only to a contract backend: the current strict
+    // prompt shape would 400 an extra field, so omission means Lite there.
+    const {edition,honest,fallbackReason:reason,timedOut,modeError:refused,generation}=await fetchEdition(trimmed,consent,fetch,{onResponse:()=>directorRef.current.onResponse(),signal:controller.signal,editorialMode:capabilities?selectedMode:undefined})
     if(submitId!==submitIdRef.current)return
+    if(refused||!edition){
+      setComposing(false)
+      window.clearInterval(tickerRef.current)
+      rigRef.current?.setPath(exhibitLayout(0).waypoints,[])
+      directorRef.current.reset()
+      const failed=assemblyRef.current
+      if(failed&&field){failed.dispose(field.scene);assemblyRef.current=null}
+      setModeError('hybrid_unavailable')
+      setStatus('Hybrid editorial mode is currently unavailable, so nothing was generated.')
+      // Availability may have changed since the capabilities read; re-check
+      // (adopting only successful reads, so a blip never un-proves Hybrid).
+      void fetchCapabilities().then(caps=>{if(caps)setCapabilities(caps)})
+      return
+    }
     const {exhibits:staged,skipped}=stageEdition(edition)
     if(!staged.length){
       setComposing(false)
@@ -447,6 +493,7 @@ export default function SpatialApp(){
     }
     if(reduced.current||!assemblyRef.current){
       planRef.current=edition.fullPlan
+      setGenerationMode(generation?.editorialMode??null)
       setExhibits(staged)
       setEditionLabel(honest)
       setFallbackReason(reason??null)
@@ -460,7 +507,7 @@ export default function SpatialApp(){
       }))
       return
     }
-    stagedRef.current={exhibits:staged,label:honest,skipped,reason,timedOut,fullPlan:edition.fullPlan}
+    stagedRef.current={exhibits:staged,label:honest,skipped,reason,timedOut,fullPlan:edition.fullPlan,generation}
     directorRef.current.onSettled()
   }
 
@@ -499,6 +546,8 @@ export default function SpatialApp(){
     setFallbackReason(null)
     setInspect(null)
     setStory(null)
+    setModeError(null)
+    setGenerationMode(null)
     planRef.current=null
     setShowDock(true)
     setAnnounce(removed.length?`Visit cleared. ${removed.length} keys removed.`:'Visit cleared.')
@@ -757,8 +806,13 @@ export default function SpatialApp(){
         {staged&&mode==='promenade'&&<button type="button" onClick={reopen}>New prompt</button>}
       </div>
     </header>
-    {editionLabel&&<p className="spatial-chip" role="note" data-testid="spatial-edition-chip">{HONEST_COPY[editionLabel]}{fallbackReason&&REASON_COPY[fallbackReason]?` (${REASON_COPY[fallbackReason]})`:''}</p>}
-    {composing&&<p role="status" className="spatial-chip">Composing your exhibition…{elapsed>0?` (${elapsed}s)`:''}</p>}
+    {editionLabel&&<p className="spatial-chip" role="note" data-testid="spatial-edition-chip">{HONEST_COPY[editionLabel]}{fallbackReason&&REASON_COPY[fallbackReason]?` (${REASON_COPY[fallbackReason]})`:''}{(editionLabel==='meta'||editionLabel==='meta-cached')&&generationMode==='hybrid'?' · Hybrid':''}</p>}
+    {composing&&<div role="status" className="spatial-generating">
+      <p className="spatial-eyebrow">02 · Generating</p>
+      <p className="spatial-generating-title">Composing your exhibition…</p>
+      <p className="spatial-fine">{elapsed>0?`${elapsed}s elapsed`:'Starting…'} · {editorialMode==='hybrid'?'Hybrid · Wonder + Spark':'Lite · Spark'}</p>
+      <span className="spatial-generating-pulse" aria-hidden="true"/>
+    </div>}
     {!composing&&status&&<p role="status" className={`spatial-chip${editionLabel?' is-sub':''}`}>{status}</p>}
     {showDock&&<section className={`spatial-dock${entered?' is-docked':''}${composing?' is-composing':''}`} aria-labelledby="spatial-prompt-heading">
       <p className="spatial-eyebrow">01 · Discover</p>
@@ -766,14 +820,48 @@ export default function SpatialApp(){
       <form onSubmit={submit}>
         <label className="spatial-sr" htmlFor="spatial-prompt">Your curiosity</label>
         <textarea id="spatial-prompt" rows={2} maxLength={1000} value={prompt}
-          placeholder="A quiet room, a bold garment, an unfamiliar coast…"
+          placeholder="I'm curious about a quiet room, a bold garment, an unfamiliar coast…"
           onChange={event=>setPrompt(event.target.value)}/>
+        <p className="spatial-suggestions-label">Need a little inspiration?</p>
+        <div className="spatial-seed-row">
+          <button type="button" className="spatial-seed" onClick={()=>{setPrompt(suggestion.sentence);document.getElementById('spatial-prompt')?.focus()}}>{SEED_DISPLAY(suggestion)}</button>
+          <button type="button" className="spatial-circle" aria-label="Refresh suggestion" title="Refresh suggestion" onClick={()=>setSuggestion(previous=>pickSuggestions(INTEREST_SEEDS,[previous],1)[0])}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 3v5h-5"/></svg>
+          </button>
+          <button type="button" className="spatial-circle" aria-label="Surprise me" title="Show me something unexpected" onClick={()=>{
+            const drawn=drawSurprise(INTEREST_SEEDS,[suggestion],surpriseCursor.current)
+            surpriseCursor.current=drawn.cursor
+            setPrompt(drawn.seed.sentence)
+            document.getElementById('spatial-prompt')?.focus()
+          }}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 4l1.7 4.8L18.5 10.5l-4.8 1.7L12 17l-1.7-4.8L5.5 10.5l4.8-1.7z"/><path d="M18.5 15.5l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg>
+          </button>
+        </div>
+        <div className="spatial-mode-row">
+          <fieldset className="spatial-mode spatial-mode-compact">
+            <legend className="spatial-sr">Editorial mode</legend>
+            <label className="spatial-mode-option">
+              <input type="radio" name="editorial-mode" value="lite" checked={editorialMode==='lite'} disabled={composing} onChange={()=>setEditorialMode('lite')}/>
+              <span className="spatial-mode-card">Lite · Spark</span>
+            </label>
+            <label className="spatial-mode-option">
+              <input type="radio" name="editorial-mode" value="hybrid" checked={editorialMode==='hybrid'} disabled={composing||!capabilities?.hybridAvailable} onChange={()=>setEditorialMode('hybrid')}/>
+              <span className="spatial-mode-card">Hybrid · Wonder + Spark</span>
+            </label>
+          </fieldset>
+          <p className="spatial-fine">{editorialMode==='hybrid'?'Deeper editorial exploration. May take longer.':'Faster editorial discovery.'}{!capabilities?.hybridAvailable?' Hybrid is currently unavailable.':''}</p>
+        </div>
         <label className="spatial-consent">
           <input type="checkbox" checked={consent} disabled={composing} onChange={event=>setConsent(event.target.checked)}/>
           Allow AI curation
         </label>
         <button type="submit" disabled={!prompt.trim()||composing}>{composing?'Composing…':'Begin exploration →'}</button>
       </form>
+      {modeError==='hybrid_unavailable'&&!composing&&<div ref={modeErrorRef} role="alert" className="spatial-mode-error">
+        <p><strong>Hybrid is currently unavailable.</strong> Nothing was generated.</p>
+        <button type="button" onClick={()=>{setEditorialMode('lite');void submit(undefined,undefined,'lite')}}>Switch to Lite & retry</button>
+        <button type="button" onClick={()=>void submit()}>Try Hybrid again</button>
+      </div>}
       <p className="spatial-fine">Off by default. When on, your prompt may be sent to Meta for curation.</p>
       {cleared&&<p role="status" className="spatial-status">
         Visit cleared from this browser{cleared.length?`: ${cleared.join(', ')}`:'. No visit data was found in this browser.'} Server data handling: pending confirmation.
@@ -815,6 +903,7 @@ export default function SpatialApp(){
       <button type="button" className="spatial-inspect-close" onClick={()=>selectNode(-1)} aria-label="Close node panel">×</button>
       <p className="spatial-eyebrow">04 · Journey</p>
       <h2>{selectedNode.label}</h2>
+      {selectedNode.thumbnail&&<figure className="spatial-node-figure"><img src={selectedNode.thumbnail} alt=""/></figure>}
       <p>{selectedNode.kind} · {selectedStaged?'in your current edition':'in the catalog, outside your current edition'}</p>
       {selectedStaged
         ?<button type="button" className="spatial-node-enter" onClick={()=>diveTo(selected)}>Enter exhibit →</button>
