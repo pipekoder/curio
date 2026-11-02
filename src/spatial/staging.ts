@@ -1,12 +1,15 @@
 import {demoMediaFor} from '../editorial-demo-media'
 import type {EditorialEdition} from '../../shared/editorial'
+import type {EditorialArticleEdition} from '../../shared/editorial-articles'
 import type {CatalogItem} from '../../shared/catalog'
 
 export type StagedHotspot={id:string;label:string;x:number;y:number;productName:string;brandName:string;priceUsd:number;assumptions:readonly string[]}
+export type StagedArticleImage={catalogId:string;assetId:string;image:string;alt:string;brandName:string;attribution:string;rights:string}
+export type StagedArticle={id:string;deck:string;storyImages:StagedArticleImage[]}
 export type StagedExhibit={
   assetId:string;title:string;narrative:string;image:string;
   attribution:string;rights:string;hotspots:StagedHotspot[];thread?:string
-  catalogId:string;featureIndex:number
+  catalogId:string;featureIndex:number;article?:StagedArticle
 }
 
 // Maps a validated edition to stageable exhibits. A feature stages only when
@@ -45,5 +48,46 @@ export function stageEdition(edition:EditorialEdition,max=6):{exhibits:StagedExh
     })
   }
   const unique=[...new Map(exhibits.map(exhibit=>[exhibit.assetId,exhibit])).values()].slice(0,6)
+  return {exhibits:unique,skipped}
+}
+
+// Maps a validated article edition to stageable exhibits: one dock per
+// article, hero first. Every story image must join a returned item on both
+// IDs with approved artwork; brand captions come from the article record,
+// while URLs, alt text and attribution come only from joined items. An
+// article with any unresolvable image is skipped whole, never patched.
+export function stageArticleEdition(edition:{articleEdition:EditorialArticleEdition;items:CatalogItem[]},max=8):{exhibits:StagedExhibit[];skipped:number}{
+  const exhibits:StagedExhibit[]=[]
+  let skipped=0
+  for(const [index,article] of edition.articleEdition.articles.entries()){
+    if(exhibits.length>=max)break
+    const storyImages:StagedArticleImage[]=[]
+    let complete=true
+    for(const reference of article.images){
+      const item=edition.items.find(candidate=>candidate.id===reference.catalogId&&candidate.image.id===reference.assetId)
+      const image=item?resolveImage(item):null
+      if(!item||!image){complete=false;break}
+      storyImages.push({
+        catalogId:item.id,assetId:item.image.id,image,
+        alt:item.image.alt,brandName:reference.brandName,
+        attribution:item.provenance.attribution,
+        rights:`${item.licensing.rightsHolder??'Rights holder unlisted'} · ${item.image.id}`,
+      })
+    }
+    if(!complete||storyImages.length<3){skipped++;continue}
+    const hero=storyImages[0]
+    const media=demoMediaFor(hero.assetId)
+    exhibits.push({
+      assetId:hero.assetId,catalogId:hero.catalogId,featureIndex:index,
+      title:article.headline,narrative:article.narrative,image:hero.image,
+      attribution:hero.attribution,rights:hero.rights,
+      hotspots:media?.product?[{
+        id:media.product.id,label:media.product.hotspot.label,x:media.product.hotspot.x,y:media.product.hotspot.y,
+        productName:media.product.name,brandName:media.product.brandName,priceUsd:media.product.priceUsd,assumptions:media.product.assumptions,
+      }]:[],
+      article:{id:article.id,deck:article.deck,storyImages},
+    })
+  }
+  const unique=[...new Map(exhibits.map(exhibit=>[exhibit.article!.id,exhibit])).values()].slice(0,8)
   return {exhibits:unique,skipped}
 }
