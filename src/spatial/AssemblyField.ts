@@ -4,8 +4,7 @@ import type {AssemblyPhase} from './assembly'
 // Convergence particles for Generate: stream from a shell around the first
 // mount, settle onto its face grid, dissolve as the exhibit resolves.
 const COUNT=2600
-const FACE_W=7.8
-const FACE_H=5.2
+import {FRAME_H as FACE_H,FRAME_W as FACE_W} from './ExhibitMounts'
 
 export class AssemblyField{
   private points:THREE.Points
@@ -16,7 +15,7 @@ export class AssemblyField{
   private grid:Float32Array
   private seed:Float32Array
 
-  constructor(scene:THREE.Scene,private target:{x:number;y:number;z:number}={x:-2.4,y:2.6,z:-52}){
+  constructor(scene:THREE.Scene,private target:{x:number;y:number;z:number}={x:-3.4,y:2.6,z:-52}){
     this.start=new Float32Array(COUNT*3)
     this.control=new Float32Array(COUNT*3)
     this.grid=new Float32Array(COUNT*3)

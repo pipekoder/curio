@@ -47,7 +47,7 @@ describe('spatial camera math',()=>{
   expect(three.waypoints[1].p[2]).toBe(-40)
   expect(three.waypoints[3].p[2]).toBe(-120)
   expect(three.mounts.map(m=>m.z)).toEqual([-52,-92,-132])
-  expect(three.mounts.map(m=>m.x)).toEqual([-2.4,2.4,-2.4])
+  expect(three.mounts.map(m=>Math.round(m.x*100)/100)).toEqual([-3.4,3.4,-3.7])
   const none=exhibitLayout(0)
   expect(none.docks).toEqual([])
   expect(none.mounts).toEqual([])

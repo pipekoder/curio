@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import {beforeEach,describe,expect,it,vi} from 'vitest'
 import * as THREE from 'three'
-import {ExhibitMounts} from '../src/spatial/ExhibitMounts'
+import {ExhibitMounts,FRAME_H,FRAME_W} from '../src/spatial/ExhibitMounts'
 import type {StagedExhibit} from '../src/spatial/staging'
 
 type Pending={url:string;onLoad:(texture:THREE.Texture)=>void;onError:()=>void}
@@ -89,5 +89,29 @@ describe('exhibit mount lifecycle',()=>{
     mounts.setExhibits([],[])
     for(const spy of disposed)expect(spy).toHaveBeenCalledTimes(1)
     expect(mounts.group.children).toHaveLength(0)
+  })
+  it('fills the rounded frame edge-to-edge with artwork',()=>{
+    const scene=new THREE.Scene()
+    const {loader}=stubLoader()
+    const mounts=new ExhibitMounts(scene,loader)
+    mounts.setExhibits([{...exhibit('a'),hotspots:[{id:'h',label:'Detail',x:0.25,y:0.25,brandName:'Brand',productName:'Product',priceUsd:10,assumptions:[]}]}],[])
+    let art:THREE.Mesh|null=null,glass=false,loop=false
+    mounts.group.traverse(object=>{
+      if((object as THREE.Mesh).isMesh&&(object.userData as {assetId?:string}).assetId){
+        const mesh=object as THREE.Mesh
+        if(mesh.geometry instanceof THREE.PlaneGeometry)art=mesh
+      }
+      const material=(object as THREE.Mesh).material as THREE.MeshBasicMaterial|undefined
+      if(material&&material.vertexColors)glass=true
+      if((object as THREE.LineLoop).isLineLoop)loop=true
+    })
+    expect(art).not.toBeNull()
+    const params=(art!.geometry as THREE.PlaneGeometry).parameters
+    expect([params.width,params.height]).toEqual([FRAME_W,FRAME_H])
+    expect(glass).toBe(true)
+    expect(loop).toBe(true)
+    const ring=mounts.group.children[0].children.find(child=>child instanceof THREE.Mesh&&child.geometry instanceof THREE.TorusGeometry) as THREE.Mesh
+    expect(ring.position.x).toBeCloseTo((0.25-0.5)*FRAME_W)
+    expect(ring.position.y).toBeCloseTo(2.6+(0.5-0.25)*FRAME_H)
   })
 })
