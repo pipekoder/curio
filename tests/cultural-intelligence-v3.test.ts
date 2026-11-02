@@ -52,6 +52,7 @@ describe('cultural V3 trust boundary',()=>{
     expect(reserve).toHaveBeenCalledOnce();expect(fetcher).toHaveBeenCalledOnce()
     expect(assessCulturalSufficiency(plan,[],0).action).toBe('narrow')
     expect(assessCulturalSufficiency(plan,[{relevance:.5,sourceId:'a'},{relevance:.7,sourceId:'b'}],1).action).toBe('review_evidence')
+    expect(assessCulturalSufficiency({...plan,reason:'conflict'},[{relevance:.8,sourceId:'a'},{relevance:.9,sourceId:'b'}],1).action).toBe('narrow')
     await expect(planCulturalResearch(input,'mock-key',async()=>false,fetcher)).rejects.toThrow('budget')
     expect(fetcher).toHaveBeenCalledOnce()
   })
