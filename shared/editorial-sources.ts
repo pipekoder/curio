@@ -11,7 +11,7 @@ export const editorialSource = z.strictObject({
   source: z.enum(['content_studio','cultural_evidence_pack']),
   citations:z.array(z.strictObject({sourceId:z.string().max(180),passageId:z.string().max(180),url:z.url().max(2048),publication:z.string().max(160).nullable()})).max(6).optional(),
 }).refine(value=>(value.authority==='owner_supplied_mockup')===(value.source==='content_studio')&&(value.kind==='cultural_claim')===(value.authority==='operator_reviewed_cultural')&&(value.kind==='cultural_claim'||!value.citations),{message:'Editorial source authority mismatch'})
-export const editorialSources = z.array(editorialSource).max(120)
+export const editorialSources = z.array(editorialSource).max(300)
 export type EditorialSource = z.infer<typeof editorialSource>
 
 export function sourcesForAsset(sources: readonly EditorialSource[], assetId: string) {
