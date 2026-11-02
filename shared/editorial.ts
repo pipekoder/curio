@@ -48,6 +48,7 @@ const prose = z
 export const editorialPlan = z
   .strictObject({
     qualityVersion: z.union([z.literal(2),z.literal(3)]).optional(),
+    culturalEvidenceVersion:z.literal('curio-cultural-evidence-v3.0.0').optional(),
     title: prose,
     deck: prose,
     connections: z
@@ -68,6 +69,7 @@ export const editorialPlan = z
           observationKeys: z.array(observationKey).min(1).max(5).optional(),
           discoveryQuestion: prose.optional(),
           sourceIds: z.array(z.string().regex(/^[a-z0-9:_-]+$/).max(180)).min(1).max(12).optional(),
+          culturalClaims:z.array(z.strictObject({sourceId:z.string().regex(/^[a-z0-9:_-]+$/).max(180),narrativeText:z.string().trim().min(5).max(200)})).max(4).optional(),
           headline: prose,
           narrative: prose,
           layout: z.enum(["hero", "split", "layered", "horizontal", "essay"]),
@@ -79,7 +81,8 @@ export const editorialPlan = z
       .max(6),
   })
   .superRefine((p, ctx) => {
-    if (p.qualityVersion !== 2 && p.qualityVersion !== 3 && p.features.some(f=>f.observationKeys || f.discoveryQuestion || f.sourceIds)) ctx.addIssue({code:"custom",message:"Versioned editorial grounding required."});
+    if (p.qualityVersion !== 2 && p.qualityVersion !== 3 && p.features.some(f=>f.observationKeys || f.discoveryQuestion || f.sourceIds||f.culturalClaims)) ctx.addIssue({code:"custom",message:"Versioned editorial grounding required."});
+    if(p.culturalEvidenceVersion&&p.qualityVersion!==3||!p.culturalEvidenceVersion&&p.features.some(f=>f.culturalClaims?.length))ctx.addIssue({code:'custom',message:'Cultural evidence version required.'})
     if (p.qualityVersion === 3 && p.features.some(f=>!f.sourceIds?.length)) ctx.addIssue({code:'custom',message:'Chief Editor sources required.'});
     if (new Set(p.features.map((f) => f.assetId)).size !== p.features.length)
       ctx.addIssue({ code: "custom", message: "Duplicate assets." });
@@ -103,6 +106,10 @@ export function validatePlan(input: unknown, pool: readonly CatalogItem[], appro
     )
       throw Error("Unreviewed editorial copy");
     if(p.qualityVersion===3&&(!f.sourceIds?.length||f.sourceIds.some(id=>!sources.some(source=>source.id===id&&source.assetId===f.assetId))))throw Error('Unreviewed editorial source')
+    const cultural=f.sourceIds?.filter(id=>sources.some(source=>source.id===id&&source.assetId===f.assetId&&source.kind==='cultural_claim'))??[]
+    if(cultural.length||f.culturalClaims?.length){
+      if(p.culturalEvidenceVersion!=='curio-cultural-evidence-v3.0.0'||!f.culturalClaims?.length||new Set(f.culturalClaims.map(row=>row.sourceId)).size!==f.culturalClaims.length||cultural.some(id=>!f.culturalClaims!.some(row=>row.sourceId===id))||f.culturalClaims.some(row=>!cultural.includes(row.sourceId)||!f.narrative.includes(row.narrativeText)))throw Error('Cultural claim reference mismatch')
+    }
   }
   for (const connection of p.connections ?? []) {
     if (

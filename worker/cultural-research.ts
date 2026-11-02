@@ -3,7 +3,7 @@ import {isSafeHttpsUrl} from '../shared/url-policy'
 
 const researchInput=z.strictObject({query:z.string().trim().min(3).max(160),urls:z.array(z.url().max(2048)).min(1).max(3),quote:z.string().trim().min(3).max(200).optional()})
 export type ResearchInput=z.infer<typeof researchInput>
-export type ResearchSource={id:string;url:string;origin:string;retrievedAt:string;sha256:string;excerpt:string;passage:{id:string;start:number;end:number;documentSha256:string;textSha256:string};relevance:number;sourceQuality:number;rank:number;quoteMatch:'text_match_only_not_rights_verified'|'not_found'|null;verification:'pending';rights:'pending';attribution:{author:null;publishedAt:null}}
+export type ResearchSource={id:string;url:string;origin:string;retrievedAt:string;sha256:string;excerpt:string;passage:{id:string;start:number;end:number;documentSha256:string;textSha256:string};relevance:number;sourceQuality:number;quoteMatch:'text_match_only_not_rights_verified'|'not_found'|null;verification:'pending';rights:'pending';attribution:{author:null;publishedAt:null}}
 type Cache={match(request:Request):Promise<Response|undefined>;put(request:Request,response:Response):Promise<void>}
 const normalize=(value:string)=>value.replace(/\s+/g,' ').trim()
 const safeUrl=(raw:string,allowlist:ReadonlySet<string>)=>{
@@ -46,8 +46,8 @@ export async function researchPublicSources(input:unknown,origins:string,depende
   const textSha256=await digest(excerpt)
   await dependencies.onPassage?.({id:passageId,sourceId:id,documentSha256:sha256,textSha256,start,end,url})
   const origin=new URL(url).origin,configuredQuality=dependencies.sourceQuality?.[origin],sourceQuality=typeof configuredQuality==='number'&&configuredQuality>=0&&configuredQuality<=1?configuredQuality:0.5
-  results.push({id,url,origin,retrievedAt,sha256,excerpt,passage:{id:passageId,start,end,documentSha256:sha256,textSha256},relevance,sourceQuality,rank:0.8*relevance+0.2*sourceQuality,quoteMatch:request.quote?(text.includes(normalize(request.quote))?'text_match_only_not_rights_verified':'not_found'):null,verification:'pending',rights:'pending',attribution:{author:null,publishedAt:null}})
+  results.push({id,url,origin,retrievedAt,sha256,excerpt,passage:{id:passageId,start,end,documentSha256:sha256,textSha256},relevance,sourceQuality,quoteMatch:request.quote?(text.includes(normalize(request.quote))?'text_match_only_not_rights_verified':'not_found'):null,verification:'pending',rights:'pending',attribution:{author:null,publishedAt:null}})
  }
  const seen=new Set<string>()
- return {sources:results.sort((a,b)=>b.rank-a.rank).filter(item=>!seen.has(item.sha256)&&Boolean(seen.add(item.sha256))),modelCalls:0 as const,mode:'lexical_only' as const}
+ return {sources:results.sort((a,b)=>b.relevance-a.relevance||a.id.localeCompare(b.id)).filter(item=>!seen.has(item.sha256)&&Boolean(seen.add(item.sha256))),modelCalls:0 as const,mode:'lexical_only' as const}
 }

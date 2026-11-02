@@ -4,13 +4,13 @@ const source=z.strictObject({id:z.string().min(1).max(180),kind:z.enum(['brand_p
 export const longformInput=z.strictObject({prompt:z.string().trim().min(3).max(500),voice:z.string().trim().min(1).max(40),knowledgeVersion:z.string().min(1).max(100),sources:z.array(source).min(4).max(24)})
 export type LongformInput=z.infer<typeof longformInput>
 const section=z.strictObject({id:z.string().regex(/^section-[1-4]$/),heading:z.string().min(4).max(100),purpose:z.string().min(20).max(300),sourceIds:z.array(z.string()).min(1).max(8)})
-const outline=z.strictObject({title:z.string().min(8).max(140),thesis:z.string().min(30).max(500),sections:z.tuple([section,section,section,section])})
+export const outline=z.strictObject({title:z.string().min(8).max(140),thesis:z.string().min(30).max(500),sections:z.tuple([section,section,section,section])})
 export type LongformOutline=z.infer<typeof outline>
-const draft=z.strictObject({text:z.string().min(1200).max(9000),sourceIds:z.array(z.string()).min(1).max(8)})
-const review=z.strictObject({decision:z.enum(['PASS','REVISE','REJECT']),hardFailure:z.boolean(),findings:z.array(z.string().min(5).max(260)).max(8)})
+export const draft=z.strictObject({text:z.string().min(1200).max(9000),sourceIds:z.array(z.string()).min(1).max(8)})
+export const review=z.strictObject({decision:z.enum(['PASS','REVISE','REJECT']),hardFailure:z.boolean(),findings:z.array(z.string().min(5).max(260)).max(8)})
 export type LongformReview=z.infer<typeof review>
 type SectionState={id:string;text:string|null;sourceIds:string[];approved:boolean;reviewed:boolean;revisionCount:number;findings:string[]}
-export type LongformState={phase:'outline'|'sections'|'whole_review'|'complete'|'failed';outline:LongformOutline|null;sections:SectionState[];cursor:number;modelCalls:number;failure:string|null;wordCount:number|null}
+export type LongformState={phase:'outline'|'sections'|'whole_review'|'complete'|'failed';outline:LongformOutline|null;sections:SectionState[];cursor:number;modelCalls:number;failure:string|null;wordCount:number|null;lastTransientError?:string|null}
 export type LongformJob={id:string;cacheKey:string;input:LongformInput;state:LongformState;revision:number}
 export type LongformModel={outline(input:LongformInput):Promise<unknown>;draft(input:LongformInput,outline:LongformOutline,section:LongformOutline['sections'][number]):Promise<unknown>;reviewSection(input:LongformInput,outline:LongformOutline,section:SectionState):Promise<unknown>;revise(input:LongformInput,outline:LongformOutline,section:SectionState):Promise<unknown>;reviewWhole(input:LongformInput,outline:LongformOutline,sections:SectionState[]):Promise<unknown>}
 const words=(text:string)=>text.trim().split(/\s+/).filter(Boolean).length
@@ -55,7 +55,7 @@ export async function advanceLongform(store:LongformJobStore,id:string,model:Lon
  const lease=await store.claim(job),state=structuredClone(job.state),allowed=sourceSet(job.input)
  try{
   if(state.modelCalls>=18)throw Error('Article call ceiling reached')
-  if(!await reserve())throw Error('Article budget unavailable')
+  if(!await reserve())throw new LongformTransientError('Article budget unavailable')
   state.modelCalls++
   if(state.phase==='outline'){
    const value=outline.parse(await model.outline(job.input))
@@ -84,9 +84,12 @@ export async function advanceLongform(store:LongformJobStore,id:string,model:Lon
    if(value.decision!=='PASS'||value.hardFailure)throw Error('Whole-article review rejected')
    state.phase='complete';state.wordCount=total
   }
+  state.lastTransientError=null
   return await store.save(job,lease,state)
  }catch(error){
+  if(error instanceof LongformTransientError){state.lastTransientError=error.message;return store.save(job,lease,state)}
   state.phase='failed';state.failure=error instanceof Error?error.message:'Article processing failed'
   return store.save(job,lease,state)
  }
 }
+export class LongformTransientError extends Error{}
