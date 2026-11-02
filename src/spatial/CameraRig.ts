@@ -8,6 +8,7 @@ export type RigOptions={
   docks:readonly number[]
   reducedMotion:boolean
   onArrive?:(index:number)=>void
+  lateralBias?:(d:number)=>number
 }
 
 const DOCK_RADIUS=14
@@ -33,8 +34,8 @@ export class CameraRig{
     return {distance:this.distance,cameraZ:this.camera.position.z,cameraY:this.camera.position.y,nearest:this.nearestDock()}
   }
 
-  setPath(waypoints:readonly Waypoint[],docks:readonly number[]):void{
-    this.opts={...this.opts,waypoints,docks}
+  setPath(waypoints:readonly Waypoint[],docks:readonly number[],lateralBias?:(d:number)=>number):void{
+    this.opts={...this.opts,waypoints,docks,lateralBias}
     this.arrived=-1
   }
 
@@ -77,15 +78,17 @@ export class CameraRig{
   private apply(d:number):void{
     const [x,y,z]=splinePosition(d,this.opts.waypoints)
     const look=splinePosition(d+this.lookAhead,this.opts.waypoints)
+    const bias=this.opts.lateralBias?.(d)??0
     if(this.focus&&this.focusBlend>0.001){
       const t=this.focusBlend
       const ix=this.focus.mountX,iy=2.4,iz=this.focus.mountZ+6
-      this.camera.position.set(x+(ix-x)*t,y+(iy-y)*t,z+(iz-z)*t)
+      const bx=x+bias
+      this.camera.position.set(bx+(ix-bx)*t,y+(iy-y)*t,z+(iz-z)*t)
       this.camera.lookAt(look[0]+(ix-look[0])*t,look[1]+(2.6-look[1])*t,look[2]+(this.focus.mountZ-look[2])*t)
       return
     }
-    this.camera.position.set(x,y,z)
-    this.camera.lookAt(look[0],look[1],look[2])
+    this.camera.position.set(x+bias,y,z)
+    this.camera.lookAt(look[0]+bias,look[1],look[2])
   }
 
   resize(aspect:number):void{
