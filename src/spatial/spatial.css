@@ -77,7 +77,7 @@
 .spatial-suggestions-label{margin:14px 0 6px!important;font-size:12px!important;letter-spacing:.04em}
 .spatial-seed-row{display:flex;align-items:center;gap:10px}
 .spatial-seed{flex:1;min-width:0;min-height:40px;padding:9px 16px;border:1px solid #d8dee8;border-radius:9999px;background:linear-gradient(180deg,#fffffff2,#f2f6fce6);color:#3c4350;cursor:pointer;font:inherit;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:inset 0 1px 0 #ffffff}
-.spatial-circle{flex:none;width:40px;height:40px;padding:0;border:1px solid #d8dee8;border-radius:50%;background:linear-gradient(180deg,#fffffff2,#edf2f9e6);color:#3c4350;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 #ffffff}
+.spatial-circle{flex:none;min-width:40px;min-height:40px;width:40px;height:40px;padding:0;border:1px solid #d8dee8;border-radius:50%;background:linear-gradient(180deg,#fffffff2,#edf2f9e6);color:#3c4350;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 #ffffff}
 /* Compact mode switch: one glass pill with an adjacent description. */
 .spatial-mode-row{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;margin-top:14px}
 .spatial-mode-row .spatial-fine{margin:0;max-width:250px;text-align:left}

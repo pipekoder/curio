@@ -235,6 +235,8 @@ test('the inspiration row fills the prompt with a sentence without generating',a
   await page.goto('/spatial')
   await expect(page.locator('.spatial-canvas')).toBeVisible()
   await expect(page.locator('.spatial-suggestions-label')).toContainText('Need a little inspiration?')
+  // Measure at steady state: the dock entrance scales from .55 to 1 over 1.6s.
+  await page.locator('.spatial-dock').evaluate(el=>Promise.all(el.getAnimations().map(animation=>animation.finished)))
   const row=page.locator('.spatial-seed-row')
   const seed=row.locator('.spatial-seed')
   await expect(seed).toHaveCount(1)
