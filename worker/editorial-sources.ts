@@ -11,7 +11,7 @@ const source=(row:SourceRow,kind:EditorialSource['kind'],label:string,value:stri
 // Content Studio input is owner-supplied mockup context, never independent
 // verification. The model receives it separately from visual observations and
 // may only cite these stable IDs; the UI renders the stored values verbatim.
-export async function loadEditorialSources(db:D1Database,versionIds:readonly string[]){
+export async function loadEditorialSources(db:D1Database,versionIds:readonly string[],bounds:{maxSources:number;maxBytes:number}={maxSources:120,maxBytes:48_000}){
   if(!versionIds.length)return[]
   const rows=(await db.prepare(`SELECT m.version_id,b.name AS brand_name,b.story AS brand_story,b.description AS brand_description,b.country,
     p.name AS product_name,p.description AS product_description,p.category,p.materials_json,p.price_minor,p.currency,
@@ -45,7 +45,7 @@ export async function loadEditorialSources(db:D1Database,versionIds:readonly str
   // Keep owner-supplied context bounded before it can become model input. A
   // catalog record that exceeds this limit is excluded from the pilot rather
   // than truncated into a misleading factual source.
-  if(new TextEncoder().encode(JSON.stringify(parsed)).byteLength>48_000)throw Error('Editorial sources exceed the pilot input limit.')
+  if(parsed.length>bounds.maxSources||new TextEncoder().encode(JSON.stringify(parsed)).byteLength>bounds.maxBytes)throw Error('Editorial sources exceed the input limit.')
   return parsed
 }
 

@@ -38,17 +38,22 @@ export class D1AssetRetriever implements AssetRetriever {
       LEFT JOIN asset_intelligence i ON i.id=job.intelligence_id
       WHERE a.archived_at IS NULL ${publicationFilter}
     ), components AS (
-      SELECT pool.*,
+      SELECT components_version.*,
         CASE WHEN intelligence_json IS NOT NULL THEN (SELECT COALESCE(SUM(CAST(c.value AS REAL)*COALESCE(json_extract(?1,'$.allocations.'||c.key),0)/100),0) FROM json_each(intelligence_json,'$.categoryScores') c)
           ELSE (SELECT COALESCE(SUM(COALESCE(json_extract(?1,'$.allocations.'||c.value),0)/100),0) FROM json_each(hints_json,'$.categories') c) END AS category_score,
         CASE WHEN intelligence_json IS NOT NULL THEN (SELECT COALESCE(AVG(COALESCE(json_extract(intelligence_json,'$.aestheticScores."'||q.value||'"'),0)),0) FROM json_each(?1,'$.aesthetics') q)
           ELSE (SELECT COALESCE(AVG(EXISTS(SELECT 1 FROM json_each(hints_json,'$.aesthetics') h WHERE h.value=q.value)),0) FROM json_each(?1,'$.aesthetics') q) END AS aesthetic_score,
-        (SELECT COALESCE(AVG(EXISTS(SELECT 1 FROM json_each(COALESCE(intelligence_json,hints_json),'$.tags') t WHERE lower(trim(t.value))=q.value)),0) FROM json_each(?1,'$.tags') q) AS tag_score
-      FROM pool WHERE (json_extract(?1,'$.scope')='review' OR reader_eligible=1 AND editorial_ready=1) AND
+        (SELECT COALESCE(AVG(EXISTS(SELECT 1 FROM json_each(COALESCE(intelligence_json,hints_json),'$.tags') t WHERE lower(trim(t.value))=q.value)),0) FROM json_each(?1,'$.tags') q) AS tag_score,
+        (SELECT COALESCE(AVG(EXISTS(SELECT 1 FROM media_product_images link JOIN media_products product ON product.id=link.product_id JOIN media_brands brand ON brand.id=product.brand_id
+          WHERE link.version_id=components_version.version_id AND lower(product.name||' '||product.description||' '||brand.name||' '||COALESCE(brand.story,'')||' '||COALESCE(brand.description,'')) LIKE '%'||q.value||'%')),0)
+          FROM json_each(?1,'$.editorialTerms') q) AS editorial_score
+      FROM pool AS components_version WHERE (json_extract(?1,'$.scope')='review' OR reader_eligible=1 AND editorial_ready=1) AND
         (json_extract(?1,'$.categoryFilter') IS NULL OR COALESCE(json_extract(intelligence_json,'$.categoryScores.'||json_extract(?1,'$.categoryFilter')),0)>=0.5 OR intelligence_json IS NULL AND EXISTS(SELECT 1 FROM json_each(hints_json,'$.categories') h WHERE h.value=json_extract(?1,'$.categoryFilter')))
         AND (json_extract(?1,'$.aestheticFilter') IS NULL OR COALESCE(json_extract(intelligence_json,'$.aestheticScores."'||json_extract(?1,'$.aestheticFilter')||'"'),0)>=0.5 OR intelligence_json IS NULL AND EXISTS(SELECT 1 FROM json_each(hints_json,'$.aesthetics') h WHERE h.value=json_extract(?1,'$.aestheticFilter')))
     ), scores AS (
-      SELECT components.*,0.6*category_score+0.3*aesthetic_score+0.1*tag_score AS relevance,
+      SELECT components.*,CASE WHEN json_array_length(json_extract(?1,'$.editorialTerms'))>0
+          THEN 0.45*category_score+0.25*aesthetic_score+0.1*tag_score+0.2*editorial_score
+          ELSE 0.6*category_score+0.3*aesthetic_score+0.1*tag_score END AS relevance,
         ((sequence%2147483647)*1103515245+json_extract(?1,'$.seed')*12345)%2147483647/2147483647.0 AS exploration FROM components
     ), varied AS (
       SELECT scores.*,(1-json_extract(?1,'$.serendipity'))*relevance+json_extract(?1,'$.serendipity')*exploration AS score,
