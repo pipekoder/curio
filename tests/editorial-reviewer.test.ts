@@ -3,7 +3,7 @@ import {EDITORIAL_STANDARD_VERSION,editorialDimensions,editorialStandard,editori
 import type {EditorialSource} from '../shared/editorial-sources'
 import type {VisualContext} from '../shared/visual-observations'
 import type {ExternalAssetApprovals} from '../shared/url-policy'
-import {defaultPreferences,type EditorialPlan} from '../shared/editorial'
+import {defaultPreferences,validatePlan,type EditorialPlan} from '../shared/editorial'
 import {InferenceReservation} from '../worker/inference-budget'
 import {EditorialReviewError,reviewEditorialPlan,reviseEditorialPlan} from '../worker/editorial-reviewer'
 import {EditorialGenerationError,EditorialWorkflowBudgetError,generateEditorialResult,runEditorialWorkflow} from '../worker/editorial'
@@ -20,6 +20,15 @@ const item={...externalFixture,id:'catalog-test',image:{...externalFixture.image
 const approvals:ExternalAssetApprovals={[asset]:{url:item.image.externalUrl!,sourcePage:item.provenance.originalSourcePage!,displayEvidence:item.permissions.display.evidence!}}
 const prefs={...defaultPreferences,interests:'light and attention',allocations:{home:100,fashion:0,travel:0},mode:'Focused' as const,consent:true}
 const response=(content:unknown)=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(content)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
+it('binds every cultural claim to an exact same-asset source and narrative span',()=>{
+ const culturalId=`${asset}:cultural_claim:ritual`,cultural:EditorialSource={id:culturalId,assetId:asset,kind:'cultural_claim',label:'Reviewed cultural fact',value:'A documented practice connects this object to daily rituals.',authority:'operator_reviewed_cultural',source:'cultural_evidence_pack',citations:[{sourceId:'source:ritual',passageId:'passage:ritual',url:'https://example.org/ritual',publication:null}]}
+ const narrative='A documented practice connects this object to daily rituals. The image leaves room for another question.'
+ const feature={...plan.features[0],sourceIds:[...plan.features[0].sourceIds!,culturalId],narrative,culturalClaims:[{sourceId:culturalId,narrativeText:'A documented practice connects this object to daily rituals.'}]}
+ const withClaim={...plan,culturalEvidenceVersion:'curio-cultural-evidence-v3.0.0' as const,features:[feature]}
+ expect(validatePlan(withClaim,[item],approvals,[...sources,cultural],true).features[0].culturalClaims).toHaveLength(1)
+ expect(()=>validatePlan({...withClaim,features:[{...feature,culturalClaims:[{sourceId:culturalId,narrativeText:'An unsupported historical claim.'}]}]},[item],approvals,[...sources,cultural],true)).toThrow('Cultural claim reference mismatch')
+ expect(()=>validatePlan({...withClaim,features:[{...feature,sourceIds:sources.map(source=>source.id)}]},[item],approvals,[...sources,cultural],true)).toThrow('Cultural claim reference mismatch')
+})
 const review=(score:number):EditorialReviewOutput=>({rubricVersion:EDITORIAL_STANDARD_VERSION,dimensions:Object.fromEntries(editorialDimensions.map(dimension=>[dimension,{score,reason:'The edition uses concrete visual evidence and a clear editorial sequence.',evidenceRefs:[`feature:${asset}`]}])) as EditorialReviewOutput['dimensions'],magazineFeedback:'The visual argument remains coherent and gives the reader a useful path through the selected details.',featureFeedback:[{assetId:asset,strengths:['The feature connects light to spatial attention.'],issues:score>=4?[]:[{severity:'medium',code:'weak_discovery',evidenceRefs:[`feature:${asset}`],instruction:'Make the discovery question more specific to the observed curve.'}]}],revisionInstructions:score>=4?[]:['Strengthen the question using the cited curve-and-space relationship.']})
 afterEach(()=>vi.unstubAllGlobals())
 
