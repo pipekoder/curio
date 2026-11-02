@@ -23,6 +23,9 @@ export type Bindings = CatalogBindings & {
   DECODER_COMMENTARY_ENABLED?: string
   META_API_KEY?: string
   META_SPARK_MODEL?: string
+  META_WONDER_MODEL?: string
+  EDITORIAL_HYBRID_ENABLED?: string
+  EDITORIAL_WONDER_PROVIDER_VERIFIED?: string
   MAGAZINE_AI_ENABLED?: string
   LEGACY_MAGAZINE_AI_ENABLED?: string
   EDITORIAL_REVIEW_ENABLED?: string
