@@ -11,45 +11,79 @@ import {observationAssetMatches,retrievedVisualContext} from './editorial-visual
 import {loadEditorialSources} from './editorial-sources'
 import {resolveR2MediaPermit} from './media-ai-adapter'
 import {loadApprovedCulturalEvidence,culturalSourcesForEditorial} from './cultural-evidence-store'
+import {ANALYSIS_SPEC} from './asset-classifier'
 
-export type ArticlePool={items:CatalogItem[];sources:EditorialSource[];visualContexts:VisualContext[];eligibleCount:number}
+type Exclusion='relevance_or_window'|'publication'|'permissions'|'metadata'|'sources'|'image_integrity'|'observations'|'analysis_processing'|'analysis_failed'|'invalid_observations'|'duplicate_image'
+export type ArticlePool={items:CatalogItem[];sources:EditorialSource[];visualContexts:VisualContext[];eligibleCount:number;
+  preparation?:{pendingVersionIds:string[];processing:number;failed:number;exclusions:Record<Exclusion,number>;rankedCount:number;evaluatedCount:number;activeMediaCount?:number;publishedInPromptWindow?:number}}
+const emptyExclusions=():Record<Exclusion,number>=>({relevance_or_window:0,publication:0,permissions:0,metadata:0,sources:0,image_integrity:0,observations:0,analysis_processing:0,analysis_failed:0,invalid_observations:0,duplicate_image:0})
 
-// The D1 query scores the full eligible published catalog before limiting its
-// ranked hydration window. We verify up to 96 versions, then send at most 24
-// distinct images to Muse. This bounds prompt size and R2 HEAD requests, not
-// the catalog's publication eligibility or a six-version pilot allowlist.
+// Review scope preserves relevance ranking while retaining not-yet-analyzed
+// assets for preflight. Publication, rights and R2 identity are rechecked
+// before a version can be scheduled or sent to the Chief Editor.
 export async function editorialArticlePool(env:Bindings,p:EditorialPreferences):Promise<ArticlePool>{
-  if(!env.CATALOG_DB||!env.MEDIA_BUCKET||env.CATALOG_PUBLIC_ENABLED!=='true')return {items:[],sources:[],visualContexts:[],eligibleCount:0}
+  const exclusions=emptyExclusions()
+  const unavailable={items:[],sources:[],visualContexts:[],eligibleCount:0,preparation:{pendingVersionIds:[],processing:0,failed:0,exclusions,rankedCount:0,evaluatedCount:0,activeMediaCount:0,publishedInPromptWindow:0}}
+  if(!env.CATALOG_DB||!env.MEDIA_BUCKET||env.CATALOG_PUBLIC_ENABLED!=='true')return unavailable
   const ranked=await new D1AssetRetriever(env.CATALOG_DB).retrieve({
     allocations:p.allocations,aesthetics:p.aesthetics,tags:interestTags(p.interests),
     editorialTerms:[...new Set((p.interests.toLowerCase().match(/[a-z]{4,24}/g)??[]).filter(term=>!['about','with','from','that','this','what','where','their','through','explore','story','stories'].includes(term)))].slice(0,12),
     brandDiversity:true,serendipity:p.mode==='Surprise Me'?0.15:0,
-    seed:(await catalogDigest(p.interests)).slice(0,40),scope:'reader',publishedOnly:true,limit:96,
+    seed:(await catalogDigest(p.interests)).slice(0,40),scope:'review',includeUnscored:true,publishedOnly:false,limit:96,
   })
+  const activeCount=(await env.CATALOG_DB.prepare('SELECT COUNT(*) AS n FROM media_objects WHERE active=1 AND deleted_at IS NULL').first<{n:number}>())?.n??0
+  exclusions.relevance_or_window=Math.max(0,activeCount-ranked.items.length)
   const ids=ranked.items.map(row=>String(row.version_id))
   const published=(await new CatalogPublications(env.CATALOG_DB).list('',96,ids)).items
+  const byVersion=new Map(published.map(item=>[item.image.id,item]))
   const approvals=publicationApprovals(published)
-  const candidates=ranked.items.flatMap(row=>{
-    const item=published.find(value=>observationAssetMatches(row,value,approvals))
-    if(!item||p.allocations[item.category]<=0||row.editorial_ready!==1||row.classification_source!=='meta'||item.permissions.aiAnalysis.status!=='approved'||!item.permissions.aiAnalysis.evidence)return []
-    const context=retrievedVisualContext(row,item,approvals)
-    return context?.source==='meta_image_observation'?[{item,context,sha:String(row.image_sha256)}]:[]
-  })
-  const verified=[] as typeof candidates
+  const verified:{item:CatalogItem;row:Record<string,unknown>;context:VisualContext|null}[]=[]
   const seenSha=new Set<string>()
-  for(const candidate of candidates){
-    if(verified.length>=24)break
-    if(!/^[a-f0-9]{64}$/.test(candidate.sha)||seenSha.has(candidate.sha))continue
-    const permit=await resolveR2MediaPermit(env.CATALOG_DB,candidate.item.image.id)
-    if(!permit||permit.sha256!==candidate.sha)continue
+  let evaluatedCount=0,r2Checks=0
+  for(const row of ranked.items){
+    if(verified.length>=24||r2Checks>=32)break
+    evaluatedCount++
+    const item=byVersion.get(String(row.version_id))
+    if(!item){exclusions.publication++;continue}
+    if(row.reader_eligible!==1||!observationAssetMatches(row,item,approvals)||item.permissions.aiAnalysis.status!=='approved'||!item.permissions.aiAnalysis.evidence){exclusions.permissions++;continue}
+    if(row.editorial_ready!==1||p.allocations[item.category]<=0){exclusions.metadata++;continue}
+    const sha=String(row.image_sha256)
+    if(!/^[a-f0-9]{64}$/.test(sha)){exclusions.image_integrity++;continue}
+    if(seenSha.has(sha)){exclusions.duplicate_image++;continue}
+    r2Checks++
+    const permit=await resolveR2MediaPermit(env.CATALOG_DB,item.image.id)
+    if(!permit||permit.sha256!==sha){exclusions.image_integrity++;continue}
     const object=await env.MEDIA_BUCKET.head(permit.r2Key)
-    if(object?.size!==permit.byteSize||object.customMetadata?.sha256!==candidate.sha||object.customMetadata?.versionId!==candidate.item.image.id)continue
-    verified.push(candidate);seenSha.add(candidate.sha)
+    if(object?.size!==permit.byteSize||object.customMetadata?.sha256!==sha||object.customMetadata?.versionId!==item.image.id){exclusions.image_integrity++;continue}
+    seenSha.add(sha)
+    verified.push({item,row,context:retrievedVisualContext(row,item,approvals)})
   }
   const allSources=await loadEditorialSources(env.CATALOG_DB,verified.map(row=>row.item.image.id),{maxSources:300,maxBytes:96_000})
-  const ready=verified.filter(row=>allSources.some(source=>source.assetId===row.item.image.id&&source.kind==='brand_name')&&allSources.some(source=>source.assetId===row.item.image.id&&source.kind==='product_description'))
+  const sourced=verified.filter(row=>{
+    const found=allSources.some(source=>source.assetId===row.item.image.id&&source.kind==='brand_name')&&allSources.some(source=>source.assetId===row.item.image.id&&source.kind==='product_description')
+    if(!found)exclusions.sources++
+    return found
+  })
+  const pending=sourced.filter(row=>!row.context)
+  const jobRows=pending.length?(await env.CATALOG_DB.prepare(`SELECT j.version_id,j.state,j.lease_until FROM asset_analysis_jobs j JOIN asset_permissions p ON p.version_id=j.version_id AND p.purpose='ai_analysis'
+    WHERE j.version_id IN(SELECT value FROM json_each(?)) AND j.origin='meta' AND j.model='muse-spark-1.3' AND j.spec=?
+    AND j.permission_revision=p.revision AND j.image_sha256=(SELECT sha256 FROM asset_versions WHERE id=j.version_id)
+    ORDER BY j.updated_at DESC`).bind(JSON.stringify(pending.map(row=>row.item.image.id)),ANALYSIS_SPEC).all<{version_id:string;state:string;lease_until:number|null}>()).results:[]
+  const jobByVersion=new Map<string,string>()
+  for(const job of jobRows)if(!jobByVersion.has(job.version_id))jobByVersion.set(job.version_id,job.state==='processing'&&Number(job.lease_until)<Date.now()?'failed':job.state)
+  const pendingVersionIds:string[]=[]
+  let processing=0,failed=0
+  for(const row of pending){
+    const state=jobByVersion.get(row.item.image.id)
+    if(state==='processing'){processing++;exclusions.analysis_processing++}
+    else if(state==='failed'){failed++;exclusions.analysis_failed++}
+    else if(state==='succeeded')exclusions.invalid_observations++
+    else{pendingVersionIds.push(row.item.image.id);exclusions.observations++}
+  }
+  const ready=sourced.filter(row=>row.context)
   const activeIds=ready.map(row=>row.item.image.id)
   const culturalPack=env.CULTURAL_INTELLIGENCE_V3_ENABLED==='true'?await loadApprovedCulturalEvidence(env.MEDIA_BUCKET,activeIds).catch(()=>null):null
   const cultural=culturalPack?culturalSourcesForEditorial(culturalPack,activeIds):[]
-  return {items:ready.map(row=>row.item),visualContexts:ready.map(row=>row.context),sources:[...allSources.filter(source=>activeIds.includes(source.assetId)),...cultural],eligibleCount:ready.length}
+  return {items:ready.map(row=>row.item),visualContexts:ready.map(row=>row.context!),sources:[...allSources.filter(source=>activeIds.includes(source.assetId)),...cultural],eligibleCount:ready.length,
+    preparation:{pendingVersionIds,processing,failed,exclusions,rankedCount:ranked.items.length,evaluatedCount,activeMediaCount:activeCount,publishedInPromptWindow:published.length}}
 }

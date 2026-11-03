@@ -9,6 +9,7 @@ export default ts.config(
   {
     files: [
       "shared/editorial*.ts",
+      "shared/article-evidence.ts",
       "shared/cultural-evidence.ts",
       "shared/public-citations.ts",
       "worker/cultural-*.ts",
@@ -45,6 +46,10 @@ export default ts.config(
       "src/LivingAdvertisement.tsx",
       "tests/visual*.ts",
       "worker/editorial*.ts",
+      "worker/article-*.ts",
+      "tests/article-*.test.ts",
+      "src/spatial/articles.ts",
+      "tests/spatial-articles.test.ts",
       "scripts/editorial-live-check.mjs",
       "scripts/editorial-validation-smoke.mjs",
       "scripts/production-review.mjs",

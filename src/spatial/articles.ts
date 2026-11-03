@@ -9,7 +9,7 @@ import {EDITORIAL_TIMEOUT_MS,type HonestState} from './edition'
 // edition. Image URLs always come from joined items; nothing is constructed
 // from IDs. Every non-AI state stays machine-readable so the UI can disclose
 // it instead of implying a model succeeded.
-export type ArticleStatus='disabled'|'consent_required'|'unavailable'|'insufficient_content'|'fallback'
+export type ArticleStatus='disabled'|'consent_required'|'unavailable'|'insufficient_content'|'fallback'|'preparing'
 export type StagedArticleEdition={
   articleEdition:EditorialArticleEdition;items:CatalogItem[];
   source:'meta'|'deterministic';retrieval:'d1'|'fictional';cached:boolean
@@ -32,10 +32,11 @@ const envelope=z.object({
 })
 
 const failure=z.object({
-  status:z.enum(['disabled','consent_required','unavailable','insufficient_content','fallback']).optional(),
+  status:z.enum(['disabled','consent_required','unavailable','insufficient_content','fallback','preparing']).optional(),
   fallbackReason:z.string().max(80).optional(),
   eligibleImages:z.number().int().min(0).optional(),
   requiredImages:z.number().int().min(0).optional(),
+  preparation:z.object({retryAfterMs:z.number().int().min(0).max(60000)}).passthrough().optional(),
 })
 
 export function articleStatusCopy(fetch:ArticleFetch):{title:string;detail:string}{
@@ -49,23 +50,38 @@ export function articleStatusCopy(fetch:ArticleFetch):{title:string;detail:strin
         ?'The standard edition below remains available.'
         :`${have} of ${fetch.requiredImages??15} required images are currently eligible. The standard edition below remains available.`}
     }
+    case 'preparing':return {title:'Preparing approved images for this edition.',detail:'Curio is checking saved visual evidence and analyzing only what is needed.'}
     case 'unavailable':return {title:'Article editions are currently unavailable.',detail:'The standard edition below remains available.'}
     default:return {title:'The article edition could not be composed.',detail:'Nothing was staged. The standard edition below remains available.'}
   }
 }
 
 export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImpl:typeof fetch=fetch,events:{onResponse?:()=>void;signal?:AbortSignal;timeoutMs?:number;editorialMode?:EditorialMode}={}):Promise<ArticleFetch>{
-  const bound=AbortSignal.timeout(events.timeoutMs??EDITORIAL_TIMEOUT_MS)
-  const signal=events.signal?AbortSignal.any([bound,events.signal]):bound
+  const bound=AbortSignal.timeout(events.timeoutMs??300000)
   const failed=(status:ArticleFetch['status'],extra:Partial<ArticleFetch>&{timedOut?:boolean}={}):ArticleFetch=>({
     edition:null,honest:'authored-fallback',status,timedOut:false,generation:null,...extra,
   })
   try{
+   for(let attempt=0;attempt<20;attempt++){
+    const requestBound=AbortSignal.timeout(EDITORIAL_TIMEOUT_MS)
+    const signal=AbortSignal.any([bound,requestBound,...(events.signal?[events.signal]:[])])
     const response=await fetchImpl('/api/editorial',{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({prompt,consent,editionFormat:ARTICLE_CONTRACT_VERSION,...(events.editorialMode?{editorialMode:events.editorialMode}:{})}),
       signal,
     })
+    if(response.status===202){
+      const parsed=failure.safeParse(await response.json())
+      if(!parsed.success||parsed.data.status!=='preparing')return failed('fallback')
+      const wait=parsed.data.preparation?.retryAfterMs??16000
+      if(wait)await new Promise<void>((resolve,reject)=>{
+        if(bound.aborted||events.signal?.aborted){reject(new Error('Interrupted'));return}
+        const timer=setTimeout(()=>{bound.removeEventListener('abort',abort);events.signal?.removeEventListener('abort',abort);resolve()},wait)
+        const abort=()=>{clearTimeout(timer);bound.removeEventListener('abort',abort);events.signal?.removeEventListener('abort',abort);reject(new Error('Interrupted'))}
+        bound.addEventListener('abort',abort,{once:true});events.signal?.addEventListener('abort',abort,{once:true})
+      })
+      continue
+    }
     events.onResponse?.()
     if(!response.ok){
       // Non-AI states stay explicit: never synthesize articles or imply a
@@ -94,6 +110,8 @@ export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImp
       edition:{articleEdition,items:data.items,source:data.source,retrieval:data.retrieval,cached:data.cached},
       honest,status:null,timedOut:false,generation:parseGenerationMetadata(data.generation),
     }
+   }
+   return failed('preparing',{timedOut:true})
   }catch{
     return failed(bound.aborted?'fallback':'request_failed',{timedOut:bound.aborted})
   }
