@@ -1,5 +1,24 @@
 # Reviewed SAM object discovery MVP
 
+## Addendum — Automatic Product Hotspots (system-validated, never human-reviewed)
+
+After an Article Edition passes validation with locked image selections, the
+worker schedules a cache-first hotspot sweep (`ctx.waitUntil`, never blocking
+publication) over deduplicated edition images × exact product associations.
+Each unique (version, fingerprint, product, prompt) key runs at most one
+bounded SAM 3.1 job with durable `pending/processing/ready/no-match/failed`
+states; terminal states never re-run and failures never retry. Results persist
+in `sam_hotspot_jobs` (migration `0010`); the Reader only fetches stored rows.
+
+`GET /api/catalog/object-regions/:versionId` may additionally return hotspot
+regions: `provenance.origin` is `'sam_hotspot'` (paired with
+`reviewed:false`), `label` is the Catalog Product Name, and `editorialDetail`
+is one deterministic sentence from the Catalog Product Description. Hotspot
+rows re-verify the live fingerprint, active media and the exact product
+association on every read; stale, revoked or malformed rows stay invisible.
+The Reader displays only the product name and that sentence, and issues no
+SAM inference requests.
+
 This backend change is default-off: it does not enable `SAM_DECODER_ENABLED` or run Meta. Migration `0005_sam_object_reviews.sql` must be applied **before** deploying code that enables live Decoder capture. No Production migration or flag change is included in this PR.
 
 The existing authenticated, consented `POST /api/decoder` remains the only inference route. For an eligible private R2 version it now checks for a matching persisted capture first. A cache hit returns the existing segmentation with `reused: true` and consumes no new model reservation. A new successful SAM response is persisted as `sam_detection` with the exact image SHA-256, dimensions, model, concept and normalized boxes; its regions start `pending`. The response adds `captureId` and `reused`, preserving `segmentation` and `commentary`. Failed inference is never retried automatically. The server cannot infer product identity from a box.

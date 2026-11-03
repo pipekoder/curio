@@ -6,9 +6,9 @@ import {fetchObjectRegions,mergeHotspots,type ObjectRegion} from './object-regio
 // approved SAM regions merged with exact authored points, and one compact
 // anchored popover. Selection never refetches and never infers; anything
 // unreviewed, revoked or failed simply leaves no marker behind.
-export default function ObjectDiscovery({assetId,image,alt,authored,caption,initialSelectedId=null,onConsumeSpotlight}:{
+export default function ObjectDiscovery({assetId,image,alt,authored,caption,initialSelectedId=null,onConsumeSpotlight,className,loading,width,height}:{
   assetId:string;image:string;alt:string;authored:readonly StagedHotspot[];caption?:{brand:string;fine:string};
-  initialSelectedId?:string|null;onConsumeSpotlight?:()=>void
+  initialSelectedId?:string|null;onConsumeSpotlight?:()=>void;className?:string;loading?:'lazy'|'eager';width?:number;height?:number
 }){
   const [regions,setRegions]=useState<ObjectRegion[]|null>(null)
   const [selected,setSelected]=useState<string|null>(initialSelectedId)
@@ -44,9 +44,9 @@ export default function ObjectDiscovery({assetId,image,alt,authored,caption,init
   const sam=mark&&!mark.authored?bySam.get(mark.id)??null:null
   const authoredDetail=mark?.authored?byAuthored.get(mark.id)??null:null
   const detail=sam??authoredDetail
-  return <figure className="object-figure">
+  return <figure className={`object-figure${className?` ${className}`:''}`}>
     <div className="object-frame">
-    <img src={image} alt={alt} onError={()=>setFailed(true)}/>
+    <img src={image} alt={alt} loading={loading} width={width} height={height} onError={()=>setFailed(true)}/>
     {placed.map(candidate=>{
       const pressed=candidate.id===selected
       const point=byAuthored.get(candidate.id)
@@ -66,12 +66,14 @@ export default function ObjectDiscovery({assetId,image,alt,authored,caption,init
           onClick={()=>{setSelected(null);markers.current.get(mark.id)?.focus()}}>×</button>
         <p className="spatial-eyebrow">Object</p>
         {sam
-          ?<><h3>{sam.label}</h3>
-            <p>{sam.editorialDetail}</p>
-            {sam.product
-              ?<p className="spatial-fine">{sam.product.name} · fictional mockup, not for sale</p>
-              :<p className="spatial-fine">No product link · visual note only</p>}
-            <p className="spatial-fine">Reviewed detection · approximate area, not verified product identity.</p></>
+          ?sam.provenance.origin==='sam_hotspot'
+            ?<><h3>{sam.product?.name??sam.label}</h3><p>{sam.editorialDetail}</p></>
+            :<><h3>{sam.label}</h3>
+              <p>{sam.editorialDetail}</p>
+              {sam.product
+                ?<p className="spatial-fine">{sam.product.name} · fictional mockup, not for sale</p>
+                :<p className="spatial-fine">No product link · visual note only</p>}
+              <p className="spatial-fine">Reviewed detection · approximate area, not verified product identity.</p></>
           :<><h3>{authoredDetail!.productName}</h3>
             <p>{authoredDetail!.brandName} · unverified · fictional, not for sale</p>
             <p className="spatial-fine">Demo price: ${authoredDetail!.priceUsd.toLocaleString('en-US')} USD</p>

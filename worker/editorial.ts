@@ -159,7 +159,7 @@ editorialApi.post("/", async (c) => {
   )
     return c.json({ error: "Origin or content type not allowed." }, 403);
   if(editorialMode==='hybrid'&&!hybridConfigured(env))return c.json({error:'Hybrid editorial mode is currently unavailable.',code:'hybrid_unavailable'},503);
-  if(articleCount!==null)return env.EDITORIAL_ARTICLE_PREPARATION_ENABLED==='true'?articleJobResponse(c.req.raw,env,p,editorialMode,articleCount):articleEditorialResponse(c.req.raw,env,p,editorialMode,undefined,articleCount);
+  if(articleCount!==null){const schedule=(task:Promise<unknown>)=>c.executionCtx.waitUntil(task);return env.EDITORIAL_ARTICLE_PREPARATION_ENABLED==='true'?articleJobResponse(c.req.raw,env,p,editorialMode,articleCount,schedule):articleEditorialResponse(c.req.raw,env,p,editorialMode,undefined,articleCount,undefined,schedule);}
   const pilot=parsePilotVersions(env.EDITORIAL_PILOT_VERSION_IDS)
   const dynamicCatalog=env.EDITORIAL_PUBLIC_AI_ENABLED==='true'&&env.EDITORIAL_DYNAMIC_CATALOG_ENABLED==='true'
   const selectedPilot=dynamicCatalog?null:pilot

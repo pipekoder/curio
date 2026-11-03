@@ -63,12 +63,12 @@ async function jobIdentity(request:Request,env:Bindings,p:EditorialPreferences,m
 
 // The orchestration is deterministic: no additional model agent. D1 leases
 // serialize pollers; asset-analysis claims deduplicate exact image work.
-export async function articleJobResponse(request:Request,env:Bindings,p:EditorialPreferences,mode:EditorialMode,articleCount:1|3=3):Promise<Response>{
+export async function articleJobResponse(request:Request,env:Bindings,p:EditorialPreferences,mode:EditorialMode,articleCount:1|3=3,schedule?:(task:Promise<unknown>)=>void):Promise<Response>{
   const {format,minEligible}=limitsFor(articleCount)
   const leaseMs=articleCount===1&&env.EDITORIAL_WORKFLOW_V3_ENABLED==='true'?230_000:LEASE_MS
   const base={format,source:'deterministic' as const,retrieval:'d1' as const,cached:false,articleEdition:null}
   if(env.EDITORIAL_ARTICLE_PREPARATION_ENABLED!=='true'||!p.consent||env.EDITORIAL_ARTICLES_ENABLED!=='true'||env.MAGAZINE_AI_ENABLED!=='true'||env.EDITORIAL_REVIEW_ENABLED!=='true'||env.EDITORIAL_PUBLIC_AI_ENABLED!=='true'||!env.CATALOG_DB||!env.MEDIA_BUCKET||!env.META_API_KEY||!env.INFERENCE_BUDGET)
-    return articleEditorialResponse(request,env,p,mode,undefined,articleCount)
+    return articleEditorialResponse(request,env,p,mode,undefined,articleCount,undefined,schedule)
   let policy:ReturnType<typeof resolveArticlePreparationPolicy>
   try{policy=resolveArticlePreparationPolicy(env)}catch{return Response.json({...base,status:'unavailable',fallbackReason:'configuration'},{status:503})}
   const db=env.CATALOG_DB,now=Date.now()
@@ -147,7 +147,7 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
       const reportGenerationStage=async(stage:ArticleGenerationStage)=>{
         await db.prepare(`UPDATE article_edition_jobs SET result_json=?,updated_at=? WHERE id=? AND lease_token=?`).bind(JSON.stringify({progress,stage}),Date.now(),identity.id,token).run()
       }
-      const result=await articleEditorialResponse(request,env,p,mode,pool,articleCount,reportGenerationStage)
+      const result=await articleEditorialResponse(request,env,p,mode,pool,articleCount,reportGenerationStage,schedule)
       const payload=await result.clone().json() as {source?:string;articleEdition?:unknown;generation?:unknown;evidence?:{interpretations:number}|null;researchReferences?:unknown;aiDisclosure?:string}
       if(payload.source==='meta'&&payload.articleEdition){
         const research=editorialSources.parse(payload.researchReferences??[])

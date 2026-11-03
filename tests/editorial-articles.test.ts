@@ -576,6 +576,23 @@ it('reports revision and confirmation entries when review requests changes',asyn
   expect(response.status).toBe(200)
   expect(seen).toEqual(['chief_editor','reviewer','revision','confirmation'])
 })
+it('schedules hotspot processing only after validated editions lock images',async()=>{
+  mockPool()
+  vi.stubGlobal('fetch',provider())
+  const tasks:Promise<unknown>[]=[]
+  const request=new Request(origin,{method:'POST',headers:{Origin:origin,'CF-Connecting-IP':'192.0.2.9'}})
+  const response=await articleEditorialResponse(request,environment(),{...preferences,interests:'A hotspot-scheduling study in quiet interiors'},'lite',undefined,3,undefined,task=>{tasks.push(task)})
+  expect(response.status).toBe(200)
+  expect(tasks).toHaveLength(1)
+  await expect(tasks[0]).resolves.toBeUndefined()
+  mockPool()
+  const bad=edition(3,2)
+  bad.articles[0].images[0].catalogId='wrong'
+  vi.stubGlobal('fetch',vi.fn(async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(bad)}}]})))
+  const failed=await articleEditorialResponse(new Request(origin,{method:'POST',headers:{Origin:origin,'CF-Connecting-IP':'192.0.2.9'}}),environment(),{...preferences,interests:'An identity-breaking study in quiet interiors'},'lite',undefined,3,undefined,task=>{tasks.push(task)})
+  expect(await failed.json()).toMatchObject({fallbackReason:'provider_or_validation'})
+  expect(tasks).toHaveLength(1)
+})
 it('reports a null evidence summary when the direct path builds no pack',async()=>{
   mockPool()
   vi.stubGlobal('fetch',provider())
