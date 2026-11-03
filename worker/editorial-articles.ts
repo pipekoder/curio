@@ -8,7 +8,7 @@ import type {EditorialPreferences} from '../shared/editorial'
 import type {EditorialMode} from './editorial-model-routing'
 import type {Bindings} from './index'
 import {chiefModel,generationMetadata} from './editorial-model-routing'
-import {editorialArticlePool,type ArticlePool} from './editorial-article-pool'
+import {editorialArticlePool,reportArticlePoolFailure,type ArticlePool} from './editorial-article-pool'
 import {reserveInference,finishInference,InferenceReservation} from './inference-budget'
 import {demoIdentity} from './demo-access'
 import {boundedText} from './meta'
@@ -79,7 +79,13 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
   if(env.MAGAZINE_AI_ENABLED!=='true'||env.EDITORIAL_REVIEW_ENABLED!=='true'||env.EDITORIAL_PUBLIC_AI_ENABLED!=='true')return Response.json({...base,status:'unavailable',fallbackReason:'configuration'},{status:503})
   if(!env.CATALOG_DB||!env.MEDIA_BUCKET||!env.META_API_KEY||env.META_SPARK_MODEL!=='muse-spark-1.3'||!env.INFERENCE_BUDGET)return Response.json({...base,status:'unavailable',fallbackReason:'configuration'},{status:503})
   let pool:ArticlePool
-  try{pool=preparedPool??await editorialArticlePool(env,p)}catch{return Response.json({...base,status:'unavailable',fallbackReason:'catalog_unavailable'},{status:503})}
+  try{pool=preparedPool??await editorialArticlePool(env,p)}catch(error){
+    const requestId=crypto.randomUUID()
+    reportArticlePoolFailure(requestId,error)
+    const failed=Response.json({...base,status:'unavailable',fallbackReason:'catalog_unavailable'},{status:503})
+    failed.headers.set('X-Curio-Request-Id',requestId)
+    return failed
+  }
   if(pool.eligibleCount<15)return Response.json({...base,status:'insufficient_content',eligibleImages:pool.eligibleCount,requiredImages:15,fallbackReason:'insufficient_content'},{status:409})
   const sources=factualSources(pool),count=Math.min(8,Math.floor(pool.items.length/3))
   const evidencePack=env.EDITORIAL_ARTICLE_PREPARATION_ENABLED==='true'?await articleEvidenceForPrompt(env,p,pool).catch(()=>null):null
