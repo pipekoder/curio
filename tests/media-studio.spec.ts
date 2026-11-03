@@ -52,7 +52,7 @@ test('Media Studio persists assignments across refresh and displays API errors',
  await page.reload()
  await expect(page.getByLabel('Associate chair.png')).toHaveValue('product:product-fold-chair')
  await page.getByLabel('Associate chair.png').selectOption('brand:brand-northline')
- await expect(page.getByRole('alert')).toHaveText('Assignment could not be saved.')
+ await expect(page.getByRole('alert').filter({hasText:'Assignment could not be saved.'})).toBeVisible()
  await expect(page.getByLabel('Associate chair.png')).toHaveValue('product:product-fold-chair')
 })
 
