@@ -11,7 +11,7 @@ import type {CatalogNode} from './contracts'
 import {editionStatusCopy,fetchEdition,type HonestState,type StagedPlan} from './edition'
 import {fetchCapabilities,type EditorialCapabilities,type EditorialMode,type GenerationMetadata} from './editorial-mode'
 import {INTEREST_SEEDS,SEED_DISPLAY,drawSurprise,pickSuggestions,type InterestSeed} from './prompt-library'
-import StoryReader from './StoryReader'
+import ArticleCard from './ArticleCard'
 import {stageArticleEdition,stageEdition,type StagedExhibit} from './staging'
 import {AssemblyDirector} from './assembly'
 import {AssemblyField} from './AssemblyField'
@@ -21,11 +21,9 @@ import {NetworkChamber} from './NetworkChamber'
 import {SPATIAL_SESSION_KEY,clearSpatialSession} from './clear'
 import type {NodeSource} from './nodes'
 import DiscoverDecor from './DiscoverDecor'
-import ObjectDiscovery from './ObjectDiscovery'
 import './spatial.css'
 
 type DebugSnapshot={distance:number;cameraZ:number;cameraY:number;current:number;exhibits:number;nodes:number;source:NodeSource|'pending';assembly:string;mode:string;orbit:{yaw:number;pitch:number;radius:number};selected:number;staged:string[];nodeIds:string[];honest:HonestState|null}
-type Inspect={assetId:string;hotspotId?:string}
 type Transit={t0:number;dur:number;fromPos:THREE.Vector3;fromLook:THREE.Vector3;toPos:THREE.Vector3;toLook:THREE.Vector3;onFrame?:(k:number)=>void;onDone:()=>void}
 
 // Honest edition provenance, always visible once staged. A cached Meta plan
@@ -78,8 +76,9 @@ export default function SpatialApp(){
   const modeErrorRef=useRef<HTMLDivElement>(null)
   const [showDock,setShowDock]=useState(true)
   const [current,setCurrent]=useState(-1)
-  const [inspect,setInspect]=useState<Inspect|null>(null)
-  const [story,setStory]=useState<{assetId:string}|null>(null)
+  const [expanded,setExpanded]=useState(false)
+  const [spotlight,setSpotlight]=useState<{assetId:string;hotspotId:string}|null>(null)
+  const articleScroll=useRef(0)
   // Complete validated edition plan for the read-only Sources lookup; set
   // wherever exhibits stage, cleared with the visit.
   const planRef=useRef<StagedPlan|null>(null)
@@ -127,8 +126,6 @@ export default function SpatialApp(){
   nodesRef.current=nodes
   const sourceRef=useRef(source)
   sourceRef.current=source
-  const inspectRef=useRef(inspect)
-  inspectRef.current=inspect
   // Guards the async revalidation window on journey/exhibit transitions so
   // a second transition cannot interleave before the first settles.
   const verifyingRef=useRef(false)
@@ -215,7 +212,13 @@ export default function SpatialApp(){
       const pick=mounts.pick(event.clientX,event.clientY,rig.camera,rect)
       if(!pick)return
       bridgeRef.current!.emit({type:'pick',assetId:pick.assetId})
-      setInspect({assetId:pick.assetId,hotspotId:pick.hotspotId})
+      const picked=exhibitsRef.current.findIndex(e=>e.assetId===pick.assetId)
+      if(picked>=0){
+        const maxScroll=document.documentElement.scrollHeight-window.innerHeight
+        const dock=layoutRef.current.docks[picked]??layoutRef.current.pathLength/2
+        if(maxScroll>0)window.scrollTo(0,dock/layoutRef.current.pathLength*maxScroll)
+      }
+      setSpotlight(pick.hotspotId?{assetId:pick.assetId,hotspotId:pick.hotspotId}:null)
     }
     const onWheel=(event:WheelEvent)=>{
       if(modeRef.current!=='network')return
@@ -361,16 +364,6 @@ export default function SpatialApp(){
   },[exhibits])
 
   useEffect(()=>{
-    // Inspection dollies the camera toward the picked mount.
-    const rig=rigRef.current
-    if(!rig)return
-    if(!inspect){rig.setFocus(null);return}
-    const index=exhibitsRef.current.findIndex(e=>e.assetId===inspect.assetId)
-    if(index<0){rig.setFocus(null);return}
-    rig.setFocus({dock:layoutRef.current.docks[index],mountX:layoutRef.current.mounts[index].x,mountZ:layoutRef.current.mounts[index].z})
-  },[inspect])
-
-  useEffect(()=>{
     if(entered||!supported)return
     const dock=()=>setEntered(true)
     window.addEventListener('pointerdown',dock,{once:true})
@@ -382,13 +375,6 @@ export default function SpatialApp(){
       window.removeEventListener('wheel',dock)
     }
   },[entered,supported])
-
-  useEffect(()=>{
-    if(!inspect)return
-    const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape')setInspect(null)}
-    window.addEventListener('keydown',onKey)
-    return ()=>window.removeEventListener('keydown',onKey)
-  },[inspect])
 
   useEffect(()=>{
     // Network owns every touch gesture for orbit/pinch; the promenade
@@ -424,6 +410,9 @@ export default function SpatialApp(){
     window.addEventListener('keydown',onKey)
     return ()=>window.removeEventListener('keydown',onKey)
   },[mode])
+
+  const activeId=current>=0?exhibits[current]?.assetId??null:null
+  useEffect(()=>{setExpanded(false);articleScroll.current=0},[activeId,mode])
 
   if(!supported){
     return <SpatialFallback/>
@@ -582,9 +571,9 @@ export default function SpatialApp(){
     setExhibits([])
     setEditionLabel(null)
     setFallbackReason(null)
+    setExpanded(false)
+    setSpotlight(null)
     setBudgetMessage(null)
-    setInspect(null)
-    setStory(null)
     setModeError(null)
     setArticleError(null)
     setGenerationMode(null)
@@ -597,13 +586,14 @@ export default function SpatialApp(){
 
   const reopen=()=>{
     setShowDock(true)
-    setInspect(null)
+    setExpanded(false)
     window.scrollTo({top:0,behavior:reduced.current?'auto':'smooth'})
   }
 
   const lockScroll=(locked:boolean)=>{document.documentElement.style.overflow=locked?'hidden':''}
-  const closeStory=useCallback(()=>setStory(null),[])
-  const inspectFromStory=useCallback((assetId:string)=>{setStory(null);setInspect({assetId})},[])
+  const expandStory=useCallback(()=>{setExpanded(true);setAnnounce('Story expanded.')},[])
+  const collapseStory=useCallback(()=>{setExpanded(false);setAnnounce('Story collapsed.')},[])
+  const consumeSpotlight=useCallback(()=>setSpotlight(null),[])
 
   const scrollToDock=(dock:number)=>{
     const maxScroll=document.documentElement.scrollHeight-window.innerHeight
@@ -637,8 +627,7 @@ export default function SpatialApp(){
     if(kept.length===before.length)return before
     const removed=before.length-kept.length
     setExhibits(kept)
-    const viewing=inspectRef.current
-    if(viewing&&!kept.some(exhibit=>exhibit.assetId===viewing.assetId))setInspect(null)
+    setSpotlight(current=>current&&kept.some(exhibit=>exhibit.assetId===current.assetId)?current:null)
     if(!kept.length){setShowDock(true);setEditionLabel(null);setFallbackReason(null)}
     setStatus(reason==='unverified'
       ?'The exhibition could not be verified; unverified exhibits were removed.'
@@ -687,7 +676,7 @@ export default function SpatialApp(){
       }
       if(!current.length)return
     }
-    setInspect(null)
+    setExpanded(false)
     setSelected(-1)
     setShowDock(false)
     setMode('network')
@@ -817,9 +806,6 @@ export default function SpatialApp(){
   const staged=exhibits.length>0
   const stagedIds=new Set(exhibits.map(e=>e.assetId))
   const active=current>=0?exhibits[current]:null
-  const inspected=inspect?exhibits.find(e=>e.assetId===inspect.assetId)??null:null
-  const storyExhibit=story?exhibits.find(e=>e.assetId===story.assetId)??null:null
-  const inspectedHotspot=inspected?.hotspots.find(h=>h.id===inspect?.hotspotId)??inspected?.hotspots[0]
   const selectedNode=selected>=0?nodes[selected]??null:null
   const selectedStaged=selectedNode?stagedIds.has(selectedNode.assetId):false
   const sourceLabel=nodes.length?`${nodes.length} records (${source==='published'?'live catalog':'local manifest'})`:'loading…'
@@ -917,30 +903,13 @@ export default function SpatialApp(){
         Visit cleared from this browser{cleared.length?`: ${cleared.join(', ')}`:'. No visit data was found in this browser.'} Server data handling: pending confirmation.
       </p>}
     </section>}
-    {active&&!inspect&&mode==='promenade'&&<section id="spatial-rail" tabIndex={-1} className="spatial-rail" aria-label={`Contents of ${active.title}`}>
-      <article className="spatial-rail-card rail-story">
-        <p className="spatial-eyebrow">Story</p>
-        <h2>{active.title}</h2>
-        <p>{active.article?active.article.deck:active.narrative}</p>
-        <button type="button" id="spatial-read-story" onClick={()=>setStory({assetId:active.assetId})}>Read story →</button>
-        <button type="button" onClick={()=>setInspect({assetId:active.assetId})}>Inspect exhibit →</button>
-        <p className="spatial-fine">Read the story, or scroll to explore.{active.hotspots.length>0?' Select an object in Inspect to explore details.':''}</p>
-      </article>
+    {active&&mode==='promenade'&&<section id="spatial-rail" tabIndex={-1} className="spatial-rail" aria-label={`Contents of ${active.title}`}>
+      <ArticleCard key={active.assetId} exhibit={active} plan={planRef.current} index={current} total={exhibits.length}
+        expanded={false} onToggle={expandStory} scrollTop={articleScroll}
+        spotlightId={spotlight?.assetId===active.assetId?spotlight.hotspotId:null} onConsumeSpotlight={consumeSpotlight}/>
     </section>}
-    {storyExhibit&&mode==='promenade'&&<StoryReader exhibit={storyExhibit} plan={planRef.current} index={exhibits.indexOf(storyExhibit)} total={exhibits.length} onClose={closeStory} onInspect={inspectFromStory}/>}
-    {inspected&&<aside className="spatial-inspect" aria-label={`Inspecting ${inspected.title}`}>
-      <button type="button" className="spatial-inspect-close" onClick={()=>setInspect(null)} aria-label="Close inspection">×</button>
-      <ObjectDiscovery key={inspected.assetId} assetId={inspected.assetId} image={inspected.image} alt={`Artwork for ${inspected.title}`}/>
-      <p className="spatial-eyebrow">Inspection</p>
-      <h2>{inspectedHotspot?.productName??inspected.title}</h2>
-      {inspectedHotspot
-        ?<><p>{inspectedHotspot.brandName} · unverified · fictional, not for sale</p>
-          <p className="spatial-fine">Demo price: ${inspectedHotspot.priceUsd.toLocaleString('en-US')} USD</p>
-          <ul>{inspectedHotspot.assumptions.map(a=><li key={a}>{a}</li>)}</ul>
-          <p className="spatial-fine">Manually authored hotspot · no SAM inference. Material and specifications unverified.</p>
-          <p className="spatial-fine">{inspected.attribution} · {inspected.rights}</p></>
-        :<><p>{inspected.narrative}</p><p className="spatial-fine">{inspected.attribution} · {inspected.rights}</p></>}
-    </aside>}
+    {expanded&&active&&mode==='promenade'&&<ArticleCard key={`expanded-${active.assetId}`} exhibit={active} plan={planRef.current} index={current} total={exhibits.length}
+      expanded onToggle={collapseStory} scrollTop={articleScroll} spotlightId={null} onConsumeSpotlight={consumeSpotlight}/>}
     {mode==='network'&&<nav id="spatial-journey" tabIndex={-1} className="spatial-journey-bar" aria-label="Journey network">
       <button type="button" onClick={backToPromenade}>← Promenade</button>
       <button type="button" onClick={surprise}>Surprise me</button>
