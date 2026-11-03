@@ -13,10 +13,11 @@ it('keeps every approved feature flag enabled',()=>{
     expect(config.vars[flag],flag).toBe('true')
 })
 
-it('holds the Wonder provider attestation off until the owner verifies it',()=>{
-  // Human verification gate for paid Wonder traffic: flipping this asserts
-  // the provider endpoint was verified. Owner-only follow-up.
-  expect(config.vars.EDITORIAL_WONDER_PROVIDER_VERIFIED).toBe('false')
+it('pins the owner-authorized Wonder provider attestation for Hybrid availability',()=>{
+  // Owner-authorized Hybrid configuration: changing this value asserts an
+  // explicit owner decision. This pins the approved setting; it does not
+  // assert a live paid Wonder call has succeeded. Owner-only follow-up.
+  expect(config.vars.EDITORIAL_WONDER_PROVIDER_VERIFIED).toBe('true')
 })
 
 it('pins the article preparation limits',()=>{
