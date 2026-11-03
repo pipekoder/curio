@@ -1,40 +1,86 @@
-import {useEffect,useState} from 'react'
-import {boxToPercent,fetchObjectRegions,isVersionId,type ObjectRegion} from './object-regions'
+import {useEffect,useId,useRef,useState} from 'react'
+import type {StagedHotspot} from './staging'
+import {fetchObjectRegions,mergeHotspots,type ObjectRegion} from './object-regions'
 
-// Verified-object discovery for one exhibit image: approved SAM regions
-// only, fetched for exact version IDs. Renders nothing while loading and
-// nothing for ineligible, revoked, empty or failed responses, so exhibits
-// without published objects keep their exact current inspection.
-export default function ObjectDiscovery({assetId,image,alt}:{assetId:string;image:string;alt:string}){
+// Verified-object discovery on one editorial image: dot markers for
+// approved SAM regions merged with exact authored points, and one compact
+// anchored popover. Selection never refetches and never infers; anything
+// unreviewed, revoked or failed simply leaves no marker behind.
+export default function ObjectDiscovery({assetId,image,alt,authored,caption,initialSelectedId=null,onConsumeSpotlight}:{
+  assetId:string;image:string;alt:string;authored:readonly StagedHotspot[];caption?:{brand:string;fine:string};
+  initialSelectedId?:string|null;onConsumeSpotlight?:()=>void
+}){
   const [regions,setRegions]=useState<ObjectRegion[]|null>(null)
-  const [selected,setSelected]=useState<string|null>(null)
+  const [selected,setSelected]=useState<string|null>(initialSelectedId)
   const [failed,setFailed]=useState(false)
+  const popoverId=useId()
+  const closeRef=useRef<HTMLButtonElement>(null)
+  const markers=useRef(new Map<string,HTMLButtonElement>())
   useEffect(()=>{
-    if(!isVersionId(assetId))return
     let alive=true
-    void fetchObjectRegions(assetId).then(data=>{if(alive&&data)setRegions(data.regions)})
+    void fetchObjectRegions(assetId).then(data=>{if(alive)setRegions(data?.regions??[])})
     return ()=>{alive=false}
   },[assetId])
-  if(failed||!regions)return null
-  const active=regions.find(region=>region.id===selected)??null
-  return <section className="object-discovery" aria-label="Discovered objects">
-    <div className="object-figure">
-      <img src={image} alt={alt} onError={()=>setFailed(true)}/>
-      {regions.map(region=>{
-        const pressed=region.id===selected
-        return <button key={region.id} type="button" className={`object-region${pressed?' is-selected':''}`}
-          style={boxToPercent(region.box)} aria-pressed={pressed} aria-label={`Inspect ${region.label}`}
-          onClick={()=>setSelected(pressed?null:region.id)}/>
-      })}
+  useEffect(()=>{
+    if(initialSelectedId){setSelected(initialSelectedId);onConsumeSpotlight?.()}
+  },[initialSelectedId,onConsumeSpotlight])
+  useEffect(()=>{
+    if(!selected)return
+    closeRef.current?.focus()
+    const onKey=(event:KeyboardEvent)=>{
+      if(event.key!=='Escape')return
+      event.stopImmediatePropagation()
+      setSelected(null)
+      markers.current.get(selected)?.focus()
+    }
+    window.addEventListener('keydown',onKey)
+    return ()=>window.removeEventListener('keydown',onKey)
+  },[selected])
+  if(failed)return null
+  const placed=mergeHotspots(authored,regions??[])
+  const bySam=new Map((regions??[]).map(region=>[region.id,region]))
+  const byAuthored=new Map(authored.map(point=>[point.id,point]))
+  const mark=placed.find(candidate=>candidate.id===selected)??null
+  const sam=mark&&!mark.authored?bySam.get(mark.id)??null:null
+  const authoredDetail=mark?.authored?byAuthored.get(mark.id)??null:null
+  const detail=sam??authoredDetail
+  return <figure className="object-figure">
+    <div className="object-frame">
+    <img src={image} alt={alt} onError={()=>setFailed(true)}/>
+    {placed.map(candidate=>{
+      const pressed=candidate.id===selected
+      const point=byAuthored.get(candidate.id)
+      const region=bySam.get(candidate.id)
+      return <button key={candidate.id} ref={el=>{if(el)markers.current.set(candidate.id,el);else markers.current.delete(candidate.id)}}
+        type="button" className={`object-hotspot${pressed?' is-selected':''}`}
+        style={{left:`${candidate.x*100}%`,top:`${candidate.y*100}%`}}
+        aria-label={`Inspect ${point?.label??region?.label??'object'}`} aria-expanded={pressed} aria-controls={pressed?popoverId:undefined}
+        onClick={()=>setSelected(pressed?null:candidate.id)}/>
+    })}
+    {mark&&detail&&<>
+      <div className="object-catcher" aria-hidden="true" onClick={()=>setSelected(null)}/>
+      <div id={popoverId} role="dialog" aria-label={sam?.label??authoredDetail!.productName} className="object-popover"
+        style={{...(mark.x>0.62?{right:`calc(${(1-mark.x)*100}% + 14px)`}:{left:`calc(${mark.x*100}% + 14px)`}),
+          ...(mark.y>0.5?{bottom:`calc(${(1-mark.y)*100}% - 10px)`}:{top:`calc(${mark.y*100}% - 10px)`})}}>
+        <button ref={closeRef} type="button" className="object-popover-close" aria-label="Close object details"
+          onClick={()=>{setSelected(null);markers.current.get(mark.id)?.focus()}}>×</button>
+        <p className="spatial-eyebrow">Object</p>
+        {sam
+          ?<><h3>{sam.label}</h3>
+            <p>{sam.editorialDetail}</p>
+            {sam.product
+              ?<p className="spatial-fine">{sam.product.name} · fictional mockup, not for sale</p>
+              :<p className="spatial-fine">No product link · visual note only</p>}
+            <p className="spatial-fine">Reviewed detection · approximate area, not verified product identity.</p></>
+          :<><h3>{authoredDetail!.productName}</h3>
+            <p>{authoredDetail!.brandName} · unverified · fictional, not for sale</p>
+            <p className="spatial-fine">Demo price: ${authoredDetail!.priceUsd.toLocaleString('en-US')} USD</p>
+            <ul>{authoredDetail!.assumptions.map(a=><li key={a}>{a}</li>)}</ul>
+            <p className="spatial-fine">Manually authored hotspot · no SAM inference. Material and specifications unverified.</p></>}
+      </div>
+    </>}
     </div>
-    {active&&<div className="object-detail" aria-live="polite">
-      <p className="spatial-eyebrow">Object</p>
-      <h3>{active.label}</h3>
-      <p>{active.editorialDetail}</p>
-      {active.product
-        ?<p className="spatial-fine">{active.product.name} · fictional mockup, not for sale</p>
-        :<p className="spatial-fine">No product link · visual note only</p>}
-      <p className="spatial-fine">Reviewed detection · approximate area, not verified product identity.</p>
-    </div>}
-  </section>
+    {caption&&<><figcaption className="article-brand">{caption.brand}</figcaption>
+      <figcaption className="spatial-fine">{caption.fine}</figcaption></>}
+  </figure>
 }

@@ -53,3 +53,34 @@ export function boxToPercent(box:{x:number;y:number;width:number;height:number})
   const percent=(value:number)=>`${Math.min(100,Math.max(0,value*100))}%`
   return {left:percent(box.x),top:percent(box.y),width:percent(box.width),height:percent(box.height)}
 }
+
+// Interactive hotspots: a SAM box collapses to its stable center anchor
+// while authored points keep their exact placement. A SAM anchor landing
+// on an authored point is a duplicate of the same object and is dropped;
+// near neighbors nudge apart so small markers stay tappable. Pure and
+// deterministic for unit coverage.
+export type HotspotAnchor={x:number;y:number}
+export type MergedHotspot={id:string;x:number;y:number;authored:boolean}
+const clampPoint=(value:number)=>Math.min(0.98,Math.max(0.02,value))
+const NEAR_SAME=0.06,NEAR_GAP=0.045
+export function regionAnchor(box:{x:number;y:number;width:number;height:number}):HotspotAnchor{
+  return {x:clampPoint(box.x+box.width/2),y:clampPoint(box.y+box.height/2)}
+}
+export function mergeHotspots(authored:readonly {id:string;x:number;y:number}[],sam:readonly {id:string;box:{x:number;y:number;width:number;height:number}}[]):MergedHotspot[]{
+  const placed:MergedHotspot[]=[]
+  const push=(mark:MergedHotspot)=>{
+    let x=mark.x,y=mark.y
+    for(let attempt=0;attempt<8&&placed.some(other=>Math.hypot(x-other.x,y-other.y)<NEAR_GAP);attempt++){
+      x+=NEAR_GAP
+      if(x>0.98){x=0.02;y=clampPoint(y+NEAR_GAP)}
+    }
+    placed.push({id:mark.id,x,y,authored:mark.authored})
+  }
+  for(const point of authored)push({id:point.id,x:clampPoint(point.x),y:clampPoint(point.y),authored:true})
+  for(const region of sam){
+    const anchor=regionAnchor(region.box)
+    if(placed.some(other=>other.authored&&Math.hypot(anchor.x-other.x,anchor.y-other.y)<NEAR_SAME))continue
+    push({id:region.id,...anchor,authored:false})
+  }
+  return placed
+}
