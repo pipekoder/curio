@@ -1,7 +1,7 @@
 import {useEffect,useState} from 'react'
 import {fetchEdition} from './edition'
 import {loadCatalogNodes} from './nodes'
-import {stageEdition,type StagedExhibit} from './staging'
+import type {StagedExhibit} from './staging'
 import type {CatalogNode} from './contracts'
 
 // Minimal readable Silver Field for browsers without WebGL. Same honest
@@ -25,7 +25,10 @@ export function SpatialFallback(){
       const {edition}=await fetchEdition(trimmed,false)
       // The fallback path never selects Hybrid, so a refusal cannot occur;
       // the guard only satisfies the nullable no-edition result.
-      if(edition)setExhibits(stageEdition(edition).exhibits)
+      if(edition){
+        const {stageEdition}=await import('./staging')
+        setExhibits(stageEdition(edition).exhibits)
+      }
     }finally{
       setBusy(false)
     }
