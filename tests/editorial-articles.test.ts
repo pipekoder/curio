@@ -175,7 +175,7 @@ it('reports accepted non-tester reservation and safe stage-specific provider fai
 it('distinguishes Chief structural validation from Reviewer schema and reference validation',async()=>{
  mockPool(6)
  for(const [name,second,stage,code] of [
-  ['structure',async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({...edition(3,2),articles:edition(3,2).articles.map((article,i)=>i?article:{...article,images:article.images.map((image,j)=>j?image:{...image,catalogId:'wrong'})})})}}]}),'chief_editor','structural_validation'],
+  ['structure',async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({...edition(3,2),articles:edition(3,2).articles.map((article,i)=>i?article:{...article,images:article.images.map((image,j)=>j?image:{...image,catalogId:'wrong'})})})}}]}),'chief_editor','image_identity'],
   ['reviewSchema',async()=>Response.json({choices:[{finish_reason:'stop',message:{content:'{}'}}]}),'reviewer','response_schema'],
   ['reviewReferences',async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({...review(edition(3,2)),featureFeedback:review(edition(3,2)).featureFeedback.map((row,i)=>i?row:{...row,assetId:version(99)})})}}]}),'reviewer','review_validation'],
  ] as const){
