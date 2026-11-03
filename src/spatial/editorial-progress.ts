@@ -46,7 +46,7 @@ export function createArticleTracker(){
     {id:'review',label:'Independent Reviewer — Editorial Assessment',status:'QUEUED',fraction:null,meta:null},
     {id:'revision',label:'Revision Editor',status:'QUEUED',fraction:null,meta:null},
     {id:'confirm',label:'Final Confirmation',status:'QUEUED',fraction:null,meta:null},
-    {id:'story',label:'Story Ready',status:'RUNNING',fraction:null,meta:null},
+    {id:'story',label:'Story Ready',status:'QUEUED',fraction:null,meta:null},
   ]
   const hidden=new Set(['revision','confirm'])
   const seen=new Set<string>()
@@ -93,6 +93,9 @@ export function createArticleTracker(){
         genIndex=order
         for(const [stage,index] of Object.entries(GEN_ORDER)){
           if(index>=order)break
+          // Evidence is optional: a later required stage proves the required
+          // chain ran, but never proves the evidence pack was built.
+          if(stage==='evidence')continue
           complete(GEN_ROWS[stage],`${stage}-done`,GEN_DONE[stage])
         }
         const row=byId(GEN_ROWS[input.generationStage!])
@@ -134,10 +137,11 @@ export function createArticleTracker(){
           complete('revision','revision-done',GEN_DONE.revision)
           complete('confirm','confirm-done',GEN_DONE.confirmation)
         }
-        if(input.staged===false){
+        if(input.staged===true)complete('story','story-done','Your story is ready.')
+        else{
           const story=byId('story');story.status='FAILED'
           emit('staging-failed','Story staging failed.')
-        }else complete('story','story-done','Your story is ready.')
+        }
         return snapshot()
       }
       const fail=(id:string)=>{hidden.delete(id);const row=byId(id);if(row.status!=='COMPLETE'){row.status='FAILED'}}
@@ -158,7 +162,12 @@ export function createArticleTracker(){
         const failed=rowFor(input.failureStage)!
         complete('verify','verify-done','Approved imagery verified.')
         complete('analyze','analyze-done','Visual observations ready.')
-        complete('evidence','evidence-done',GEN_DONE.evidence)
+        const failedEvidence=byId('evidence')
+        if(input.evidence!==undefined&&input.evidence!==null){
+          failedEvidence.status='COMPLETE';failedEvidence.fraction=1
+          failedEvidence.meta=input.evidence.interpretations===1?'1 observation':`${input.evidence.interpretations} observations`
+          emit('evidence-done',GEN_DONE.evidence)
+        }else failedEvidence.status='SKIPPED'
         for(const id of ['chief','review','revision','confirm']){
           if(id===failed)break
           complete(id,`${id}-done`,id==='chief'?GEN_DONE.chief_editor:id==='review'?GEN_DONE.reviewer:GEN_DONE.revision)
