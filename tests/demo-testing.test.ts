@@ -117,3 +117,67 @@ it('operator status shows the authenticated window without private counter keys 
   expect((await inferenceBudgetStatus(env as never,new Request(path,{headers:{...headers,Cookie:cookie}}))).demoTesting).toMatchObject({active:true})
  }finally{db.close()}
 })
+
+it('atomically resets only current short-term counters while retaining global use, SAM history, leases and audit events',async()=>{
+ vi.useFakeTimers();vi.setSystemTime(new Date('2026-11-01T08:00:00Z'))
+ const {db,value}=budget()
+ try{
+  const other='c'.repeat(64),otherIp='d'.repeat(64),visitorIp='e'.repeat(64),prep={maxPerHour:16,maxPerDay:24,windowLimit:2,windowSeconds:16,concurrency:2}
+  const first=await (await reserve(value)).json() as {allowed:boolean;reservationId:string}
+  expect(first.allowed).toBe(true)
+  await value.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:address,ceiling:500,daily:160,demo:true,units:4})}))
+  await value.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:address,ceiling:500,daily:160,demo:true,units:1,articlePreparation:true,articlePreparationPolicy:prep})}))
+  await value.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:otherIp,ceiling:500,daily:160,demo:true,units:1,samAssetId:'sample-asset'})}))
+  await value.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:visitorIp,ceiling:500,daily:160,demo:true,units:1})}))
+  await value.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:otherIp,ceiling:500,daily:160,demo:true,demoTester:other,units:4,demoTestingPolicy:testing})}))
+  const before=db.prepare("SELECT count FROM counters WHERE key='lifetime'").get() as {count:number}
+  const reset=await value.fetch(new Request('https://budget/reset-demo',{method:'POST',body:JSON.stringify({ip:address,demoTester:tester,windowSeconds:900,articlePreparation:true})}))
+  expect(await reset.json()).toMatchObject({resetApplied:true,operatorIpReset:true,testerWindowReset:true,articlePreparationReset:true})
+  for(const key of [`hour:${address}:${Math.floor(Date.now()/3600000)}`,`cooldown:${address}`,`tester-hour:${tester}:${Math.floor(Date.now()/3600000)}`,`demo-testing:${tester}:900:${Math.floor(Date.now()/900000)}`,`article-prep-hour:${address}:${Math.floor(Date.now()/3600000)}`,`article-prep-cooldown:${address}`])expect(db.prepare('SELECT count FROM counters WHERE key=?').get(key)).toBeUndefined()
+  expect((db.prepare("SELECT count FROM counters WHERE key='lifetime'").get() as {count:number}).count).toBe(before.count)
+  expect(db.prepare('SELECT count FROM counters WHERE key=?').get(`day:${Math.floor(Date.now()/86400000)}`)).toBeDefined()
+  expect(db.prepare("SELECT count FROM counters WHERE key='sam-once:sample-asset'").get()).toBeDefined()
+  expect(db.prepare('SELECT id FROM demo_leases WHERE id=?').get(first.reservationId)).toBeDefined()
+  expect(db.prepare('SELECT count FROM counters WHERE key=?').get(`demo-testing:${other}:900:${Math.floor(Date.now()/900000)}`)).toBeDefined()
+  expect(db.prepare('SELECT count FROM counters WHERE key=?').get(`hour:${visitorIp}:${Math.floor(Date.now()/3600000)}`)).toBeDefined()
+  expect((db.prepare('SELECT action,scope FROM demo_reset_events').get() as {action:string;scope:string})).toMatchObject({action:'reset_demo_usage',scope:'operator_ip,tester,article_preparation'})
+  expect((db.prepare("SELECT COUNT(*) AS n FROM reservation_events WHERE outcome='reserved'").get() as {n:number}).n).toBe(6)
+  expect(await (await reserve(value)).json()).toMatchObject({allowed:true})
+ }finally{db.close()}
+})
+
+it('serializes a reset with a competing reservation without losing global charges',async()=>{
+ vi.useFakeTimers();vi.setSystemTime(new Date('2026-11-01T08:00:00Z'))
+ const {db,value}=budget()
+ try{
+  const [reset,charged]=await Promise.all([
+   value.fetch(new Request('https://budget/reset-demo',{method:'POST',body:JSON.stringify({ip:address,demoTester:tester,windowSeconds:900,articlePreparation:false})})),
+   reserve(value),
+  ])
+  expect(reset.status).toBe(200)
+  expect(await charged.json()).toMatchObject({allowed:true})
+  expect(db.prepare("SELECT count FROM counters WHERE key='lifetime'").get()).toMatchObject({count:4})
+  expect(db.prepare('SELECT COUNT(*) AS n FROM demo_reset_events').get()).toMatchObject({n:1})
+ }finally{db.close()}
+})
+
+it('operator-only reset rejects bad authorization, cross-origin requests and inactive mode, and discloses global exhaustion',async()=>{
+ vi.useFakeTimers();vi.setSystemTime(new Date('2026-11-01T08:00:00Z'))
+ const {db,namespace}=budget()
+ try{
+  const token='operator-test-token-at-least-32-bytes',origin='https://curio.test'
+  const env={DEMO_TESTING_MODE:'true',EDITORIAL_DEMO_BUDGET_ENABLED:'true',EDITORIAL_DEMO_DAILY_UNITS:'160',EDITORIAL_DEMO_LIFETIME_UNITS:'500',MAGAZINE_AI_ENABLED:'true',EDITORIAL_REVIEW_ENABLED:'true',EDITORIAL_PUBLIC_AI_ENABLED:'true',RATE_LIMIT_SALT:'test-only-32-byte-or-longer-rate-limit-secret',INFERENCE_BUDGET:namespace,CATALOG_OPERATOR_ENABLED:'true',CATALOG_OPERATOR_TOKEN:token,PUBLIC_APP_ORIGIN:origin,CATALOG_DB:{} as D1Database}
+  const path=`${origin}/api/operator/catalog/intelligence/budget/reset-demo`
+  const headers={Origin:origin,'CF-Connecting-IP':'192.0.2.1','Content-Type':'application/json',Authorization:`Bearer ${token}`}
+  const send=(override:Record<string,string>={},settings=env)=>app.request(path,{method:'POST',headers:{...headers,...override},body:'{}'},settings)
+  expect((await send({Authorization:'Bearer incorrect'})).status).toBe(403)
+  expect((await send({Origin:'https://evil.example'})).status).toBe(403)
+  expect((await send({}, {...env,DEMO_TESTING_MODE:'false'})).status).toBe(403)
+  db.prepare('INSERT INTO counters(key,count,expires) VALUES(?,?,?)').run('lifetime',500,0)
+  const response=await send()
+  expect(response.status).toBe(200)
+  expect(await response.json()).toMatchObject({resetApplied:true,operatorIpReset:true,testerWindowReset:false,globalLimitBlocking:'global_lifetime'})
+  expect(db.prepare("SELECT count FROM counters WHERE key='lifetime'").get()).toMatchObject({count:500})
+  expect((await send({}, {...env,DEMO_TESTING_MODE:'invalid'})).status).toBe(403)
+ }finally{db.close()}
+})
