@@ -9,6 +9,17 @@ const err = (status: number, body: unknown) => vi.fn(async () => new Response(JS
 const call = (fetchImpl: unknown) => fetchArticleEdition('quiet rooms', true, fetchImpl as unknown as typeof fetch)
 
 describe('spatial article edition fetch', () => {
+  it('uses an Article-specific request bound while keeping the 300-second overall polling bound',async()=>{
+    const original=AbortSignal.timeout
+    const durations:number[]=[]
+    const spy=vi.spyOn(AbortSignal,'timeout').mockImplementation(ms=>{durations.push(ms);return original(ms)})
+    try{
+      await call(ok(articleResponseFixture()))
+      expect(durations).toContain(180000)
+      expect(durations).toContain(300000)
+      expect(durations).not.toContain(90000)
+    }finally{spy.mockRestore()}
+  })
   it('sends the article format with consent and the selected mode', async () => {
     const seen: string[] = []
     const spy = vi.fn(async (_url: unknown, init: {body: string}) => {seen.push(init.body); return new Response('x', {status: 503})})

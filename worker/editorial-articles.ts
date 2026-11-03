@@ -15,6 +15,7 @@ import {boundedText} from './meta'
 import {catalogDigest} from './catalog-store'
 import {EDITORIAL_KNOWLEDGE_VERSION,editorialKnowledgeInstruction,editorialV21Guidance,selectEditorialVoice} from '../shared/editorial-knowledge-v2'
 import {articleEvidenceForPrompt} from './article-evidence'
+import {ARTICLE_REVIEW_STEP_TIMEOUT_MS,ARTICLE_WORKFLOW_TIMEOUT_MS,articleChiefTimeoutMs} from './article-provider-timeout'
 
 const ARTICLE_WORKFLOW_VERSION='curio-article-workflow-demo-v2'
 const MAX_PROVIDER_INPUT_BYTES=96_000
@@ -57,14 +58,16 @@ export function validateArticleEdition(value:unknown,items:readonly CatalogItem[
   return edition
 }
 
-async function structuredMuse<T>(apiKey:string,model:string,instruction:string,input:unknown,schema:z.ZodType<T>,name:string,maxTokens:number,stage:ArticleStage,onAttempt:()=>void){
+async function structuredMuse<T>(apiKey:string,model:string,instruction:string,input:unknown,schema:z.ZodType<T>,name:string,maxTokens:number,stage:ArticleStage,onAttempt:()=>void,timeoutMs:number,workflowSignal:AbortSignal){
   const body={model,max_completion_tokens:maxTokens,reasoning_effort:'minimal',stream:false,messages:[{role:'developer',content:instruction},{role:'user',content:JSON.stringify(input)}],response_format:{type:'json_schema',json_schema:{name,schema:z.toJSONSchema(schema,{unrepresentable:'any'})}}}
   const payload=JSON.stringify(body)
   if(new TextEncoder().encode(payload).length>MAX_PROVIDER_INPUT_BYTES)throw new ArticleWorkflowError(stage,'context_limit')
   const started=performance.now()
   let response:Response
+  const signal=AbortSignal.any([workflowSignal,AbortSignal.timeout(timeoutMs)])
+  if(signal.aborted)throw new ArticleWorkflowError(stage,'provider_timeout')
   onAttempt()
-  try{response=await fetch('https://api.meta.ai/v1/chat/completions',{method:'POST',redirect:'manual',signal:AbortSignal.timeout(20000),headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},body:payload})}
+  try{response=await fetch('https://api.meta.ai/v1/chat/completions',{method:'POST',redirect:'manual',signal,headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},body:payload})}
   catch(error){throw new ArticleWorkflowError(stage,error instanceof Error&&['AbortError','TimeoutError'].includes(error.name)?'provider_timeout':'provider_transport')}
   if(!response.ok){await response.body?.cancel().catch(()=>{});throw new ArticleWorkflowError(stage,response.status===413?'context_limit':'provider_http')}
   let raw:string
@@ -110,6 +113,8 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
   if(!p.consent)return Response.json({...base,status:'consent_required',fallbackReason:'consent_missing'},{status:403})
   if(env.MAGAZINE_AI_ENABLED!=='true'||env.EDITORIAL_REVIEW_ENABLED!=='true'||env.EDITORIAL_PUBLIC_AI_ENABLED!=='true')return Response.json({...base,status:'unavailable',fallbackReason:'configuration'},{status:503})
   if(!env.CATALOG_DB||!env.MEDIA_BUCKET||!env.META_API_KEY||env.META_SPARK_MODEL!=='muse-spark-1.3'||!env.INFERENCE_BUDGET)return Response.json({...base,status:'unavailable',fallbackReason:'configuration'},{status:503})
+  let chiefTimeoutMs:number
+  try{chiefTimeoutMs=articleChiefTimeoutMs(env)}catch{return Response.json({...base,status:'unavailable',fallbackReason:'configuration'},{status:503})}
   let pool:ArticlePool
   try{pool=preparedPool??await editorialArticlePool(env,p)}catch(error){
     const requestId=crypto.randomUUID()
@@ -147,6 +152,7 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
   const tester=await demoIdentity(request,env,ip)
   let reservationId:string|undefined,outcome:'completed'|'fallback'|'error'='error',called=0,reservedUnits=0,stage:ArticleStage='reservation'
   const started=performance.now(),measurements:Measurement[]=[]
+  const workflowSignal=AbortSignal.timeout(ARTICLE_WORKFLOW_TIMEOUT_MS)
   const fallback=(reason:string,budget?:unknown,failure?:ArticleWorkflowError)=>{
     const requestId=failure?crypto.randomUUID():null
     if(failure)console.error(JSON.stringify({event:'article_editorial_failure',requestId,stage:failure.stage,code:failure.code}))
@@ -163,7 +169,7 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
     const call=async<T>(callStage:ArticleStage,model:string,instruction:string,input:unknown,schema:z.ZodType<T>,name:string,maxTokens:number)=>{
       stage=callStage
       if(!reservation.claim())throw new ArticleWorkflowError(stage,'workflow_limit')
-      const result=await structuredMuse(env.META_API_KEY!,model,instruction,input,schema,name,maxTokens,stage,()=>{called++})
+      const result=await structuredMuse(env.META_API_KEY!,model,instruction,input,schema,name,maxTokens,stage,()=>{called++},stage==='chief_editor'?chiefTimeoutMs:ARTICLE_REVIEW_STEP_TIMEOUT_MS,workflowSignal)
       if(result.usage)measurements.push(result.usage)
       return result.value
     }

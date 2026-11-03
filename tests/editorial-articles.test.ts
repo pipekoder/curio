@@ -12,6 +12,7 @@ import {validateArticleEdition} from '../worker/editorial-articles'
 import {editorialApi} from '../worker/editorial'
 import {editorialArticlePool,ArticlePoolError,reportArticlePoolFailure} from '../worker/editorial-article-pool'
 import {runClassification,AssetAnalysisError} from '../worker/asset-classifier'
+import {articleChiefTimeoutMs} from '../worker/article-provider-timeout'
 
 vi.mock('../worker/editorial-article-pool',async importOriginal=>({...await importOriginal<typeof import('../worker/editorial-article-pool')>(),editorialArticlePool:vi.fn()}))
 vi.mock('../worker/asset-classifier',async importOriginal=>({...await importOriginal<typeof import('../worker/asset-classifier')>(),runClassification:vi.fn()}))
@@ -40,7 +41,7 @@ const mockPool=(length=24)=>vi.mocked(editorialArticlePool).mockResolvedValue({i
 function review(value:EditorialArticleEdition,score=5,high=false){return {rubricVersion:EDITORIAL_STANDARD_VERSION,dimensions:Object.fromEntries(editorialDimensions.map(key=>[key,{score,reason:'Independent assessment against supplied evidence.',evidenceRefs:[`feature:${value.articles[0].heroAssetId}`]}])),magazineFeedback:'The edition is assessed.',featureFeedback:value.articles.map((article,i)=>({assetId:article.heroAssetId,strengths:[],issues:high&&i===0?[{severity:'high',code:'fact_integrity',evidenceRefs:[article.images[0].brandSourceId],instruction:'Remove the unsupported claim.'}]:[]})),revisionInstructions:high?['Remove the unsupported claim.']:[]}}
 function provider(firstScore=5,finalScore=5,high=false){let calls=0;return vi.fn(async(_url:string,init:RequestInit)=>{const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content);calls++;const value=calls===1?edition(input.articleCount,input.catalog.length>=9?3:2):calls===2?review(input.edition,firstScore,high):calls===3?input.edition:review(input.edition,finalScore);return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})})}
 function singleProvider(){const base=provider();let calls=0;return vi.fn(async(url:string,init:RequestInit)=>{const response=await base(url,init) as Response;calls++;if(calls!==1)return response;const raw=await response.json() as {choices:{message:{content:string}}[]};const value={...JSON.parse(raw.choices[0].message.content),version:ARTICLE_SINGLE_CONTRACT_VERSION};return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})})}
-afterEach(()=>{vi.unstubAllGlobals();vi.mocked(editorialArticlePool).mockReset();vi.mocked(runClassification).mockReset()})
+afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();vi.mocked(editorialArticlePool).mockReset();vi.mocked(runClassification).mockReset()})
 
 it('validates exactly three articles with two or three unique exact-version images',()=>{
  const three=edition();expect(validateArticleEdition(three,items,sources,contexts,3)).toEqual(three)
@@ -93,6 +94,53 @@ it('uses one four-unit reservation for Lite Chief and independent Reviewer and s
  expect(send).toHaveBeenCalledTimes(2)
  expect((await post({EDITORIAL_HYBRID_ENABLED:'true',EDITORIAL_WONDER_PROVIDER_VERIFIED:'true',META_WONDER_MODEL:'muse-wonder-1.0'},{editorialMode:'hybrid'})).status).toBe(200)
  expect(JSON.parse(String(send.mock.calls[2][1].body)).model).toBe('muse-wonder-1.0')
+})
+it('uses a bounded 60-second Chief timeout for both one- and three-story editions without lengthening Reviewer calls',async()=>{
+ mockPool(9)
+ const originalTimeout=AbortSignal.timeout
+ const limits:number[]=[]
+ vi.spyOn(AbortSignal,'timeout').mockImplementation(ms=>{limits.push(ms);return originalTimeout(ms===60000?80:ms===20000?20:ms)})
+ for(const count of [1,3] as const){
+  const base=count===1?singleProvider():provider()
+  const send=vi.fn(async(url:string,init:RequestInit)=>{
+   if(send.mock.calls.length===1){
+    await new Promise(resolve=>setTimeout(resolve,40))
+    if((init.signal as AbortSignal).aborted)throw (init.signal as AbortSignal).reason
+   }
+   return base(url,init)
+  })
+  vi.stubGlobal('fetch',send)
+  const result=await post({}, {interests:`Delayed ${count} article Chief Editor test`,...(count===1?{editionFormat:ARTICLE_SINGLE_CONTRACT_VERSION}:{})})
+  expect(await result.json()).toMatchObject({source:'meta',inference:{attempted:true,reservedUnits:4}})
+  expect(send).toHaveBeenCalledTimes(2)
+ }
+ expect(limits.filter(ms=>ms===60000)).toHaveLength(2)
+ expect(limits.filter(ms=>ms===20000)).toHaveLength(2)
+ expect(limits.filter(ms=>ms===150000)).toHaveLength(2)
+})
+it('reports a bounded Chief provider timeout without calling Reviewer or refunding accepted units',async()=>{
+ mockPool(6)
+ const originalTimeout=AbortSignal.timeout
+ vi.spyOn(AbortSignal,'timeout').mockImplementation(ms=>originalTimeout(ms===60000?25:ms))
+ const send=vi.fn(async(_url:string,init:RequestInit)=>new Promise<Response>((_resolve,reject)=>{
+  const signal=init.signal as AbortSignal
+  signal.addEventListener('abort',()=>reject(signal.reason),{once:true})
+ }))
+ vi.stubGlobal('fetch',send)
+ const response=await post({}, {interests:'Bounded delayed Chief Editor timeout test'})
+ expect(await response.json()).toMatchObject({source:'deterministic',fallbackReason:'provider_or_validation',validationDiagnostic:{stage:'chief_editor',code:'provider_timeout'},inference:{attempted:true,reservedUnits:4}})
+ expect(send).toHaveBeenCalledOnce()
+})
+it('rejects unsafe Chief timeout settings before reserving or calling Meta',async()=>{
+ expect(articleChiefTimeoutMs({} as never)).toBe(60000)
+ expect(articleChiefTimeoutMs({ARTICLE_CHIEF_TIMEOUT_MS:'45000'} as never)).toBe(45000)
+ for(const value of ['0','19999','60001','abc','20.5'])expect(()=>articleChiefTimeoutMs({ARTICLE_CHIEF_TIMEOUT_MS:value} as never)).toThrow()
+ mockPool(6)
+ const send=provider();vi.stubGlobal('fetch',send)
+ const response=await post({ARTICLE_CHIEF_TIMEOUT_MS:'90000'})
+ expect(response.status).toBe(503)
+ expect(await response.json()).toMatchObject({fallbackReason:'configuration'})
+ expect(send).not.toHaveBeenCalled()
 })
 it('reports accepted non-tester reservation and safe stage-specific provider failures',async()=>{
  mockPool(6)
@@ -287,6 +335,51 @@ it('caps simultaneous generation claims without blocking existing job status rea
   expect(result.status).toBe(200)
   expect((await result.json() as {source:string}).source).toBe('meta')
   expect(send).toHaveBeenCalledTimes(2)
+ }finally{sqlite.close()}
+})
+it('renews the D1 lease at generation claim and prevents pollers from duplicating a delayed Chief call',async()=>{
+ const {sqlite,db}=preparationDb()
+ try{
+  vi.mocked(editorialArticlePool).mockResolvedValue(prepared(6,[]))
+  let release!:()=>void
+  const gate=new Promise<void>(resolve=>{release=resolve})
+  const base=provider()
+  const send=vi.fn(async(url:string,init:RequestInit)=>{await gate;return base(url,init)})
+  vi.stubGlobal('fetch',send)
+  const config={EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db}
+  const prompt={interests:'A delayed Chief Editor lease study'}
+  const first=post(config,prompt)
+  await vi.waitFor(()=>expect(send).toHaveBeenCalledOnce())
+  const row=sqlite.prepare('SELECT state,lease_until FROM article_edition_jobs').get() as {state:string;lease_until:number}
+  expect(row.state).toBe('generating')
+  expect(row.lease_until-Date.now()).toBeGreaterThan(180000)
+  const poll=await post(config,prompt)
+  expect(poll.status).toBe(202)
+  expect(send).toHaveBeenCalledOnce()
+  release()
+  expect((await (await first).json() as {source:string}).source).toBe('meta')
+  expect(send).toHaveBeenCalledTimes(2)
+ }finally{sqlite.close()}
+})
+it('stores a timed-out generation as failed and does not repeat its paid call on the next poll',async()=>{
+ const {sqlite,db}=preparationDb()
+ const originalTimeout=AbortSignal.timeout
+ vi.spyOn(AbortSignal,'timeout').mockImplementation(ms=>originalTimeout(ms===60000?25:ms))
+ try{
+  vi.mocked(editorialArticlePool).mockResolvedValue(prepared(6,[]))
+  const send=vi.fn(async(_url:string,init:RequestInit)=>new Promise<Response>((_resolve,reject)=>{
+   const signal=init.signal as AbortSignal
+   signal.addEventListener('abort',()=>reject(signal.reason),{once:true})
+  }))
+  vi.stubGlobal('fetch',send)
+  const config={EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db}
+  const prompt={interests:'A timed-out generation must not repeat'}
+  const first=await post(config,prompt)
+  expect(await first.json()).toMatchObject({fallbackReason:'provider_or_validation',validationDiagnostic:{stage:'chief_editor',code:'provider_timeout'},inference:{reservedUnits:4}})
+  expect(sqlite.prepare('SELECT state FROM article_edition_jobs').get()).toMatchObject({state:'failed'})
+  const again=await post(config,prompt)
+  expect(await again.json()).toMatchObject({fallbackReason:'provider_or_validation',validationDiagnostic:{stage:'chief_editor',code:'provider_timeout'}})
+  expect(send).toHaveBeenCalledOnce()
  }finally{sqlite.close()}
 })
 it('stores distinct source-linked perspectives for different curiosity prompts and reuses identical evidence',async()=>{
