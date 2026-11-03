@@ -23,9 +23,27 @@ const modelUsage=z.object({prompt_tokens:z.number().int().min(0).max(10_000_000)
 type Measurement={inputTokens:number;outputTokens:number;totalTokens:number}
 const cache=new Map<string,{expires:number;edition:ArticleEditionBody;generation:ReturnType<typeof generationMetadata>}>()
 type ArticleStage='reservation'|'chief_editor'|'reviewer'|'revision'|'confirmation'
-type ArticleFailureCode='budget_unavailable'|'workflow_limit'|'context_limit'|'provider_http'|'provider_transport'|'provider_timeout'|'provider_response'|'response_json'|'response_schema'|'structural_validation'|'review_validation'
+type ArticleFailureCode='budget_unavailable'|'workflow_limit'|'context_limit'|'provider_http'|'provider_transport'|'provider_timeout'|'provider_response'|'response_json'|'response_schema'|'structural_validation'|'image_identity'|'brand_reference'|'visual_context'|'duplicate_image'|'invalid_source'|'cultural_claim'|'source_limit'|'review_validation'
 class ArticleWorkflowError extends Error{
   constructor(readonly stage:ArticleStage,readonly code:ArticleFailureCode){super(`${stage}:${code}`)}
+}
+class ArticleValidationError extends Error{
+  constructor(readonly code:ArticleFailureCode){super(code)}
+}
+function articleValidationFailure(stage:ArticleStage,error:unknown){return new ArticleWorkflowError(stage,error instanceof ArticleValidationError?error.code:'structural_validation')}
+function articleSchemaCode(error:z.ZodError,content:unknown):ArticleFailureCode{
+  const issue=error.issues[0],path=issue?.path.map(String).join('.')??''
+  if(content&&typeof content==='object'&&'articles' in content&&Array.isArray(content.articles)&&content.articles.some(article=>{
+    if(!article||typeof article!=='object'||!('images' in article)||!Array.isArray(article.images))return false
+    const ids=article.images.flatMap((image:unknown)=>image&&typeof image==='object'&&'assetId' in image&&typeof image.assetId==='string'?[image.assetId]:[])
+    return new Set(ids).size!==ids.length
+  }))return'duplicate_image'
+  if(issue?.message.includes('identities must be unique'))return'duplicate_image'
+  if(path.toLowerCase().includes('sourceids')&&issue?.code==='too_big')return'source_limit'
+  if(path.includes('culturalClaims'))return'cultural_claim'
+  if(path.includes('brandSourceId')||path.includes('brandName'))return'brand_reference'
+  if(path.includes('images')||path.includes('heroAssetId')||path.endsWith('.id')||issue?.message.includes('hero and image identity'))return'image_identity'
+  return'response_schema'
 }
 function workflowFailure(stage:ArticleStage,error:unknown):ArticleWorkflowError{
   if(error instanceof ArticleWorkflowError)return error
@@ -48,13 +66,16 @@ export function validateArticleEdition(value:unknown,items:readonly CatalogItem[
     for(const image of article.images){
       const item=itemByVersion.get(image.assetId)
       const brand=sources.find(source=>source.assetId===image.assetId&&source.kind==='brand_name'&&source.id.toLowerCase()===image.brandSourceId.trim().toLowerCase())
-      if(!item||item.id!==image.catalogId.trim()||!brand||brand.value.trim().toLowerCase()!==image.brandName.trim().toLowerCase()||!contexts.some(context=>context.assetId===image.assetId&&context.source==='meta_image_observation')||used.has(image.assetId))throw Error('Invalid article image reference')
+      if(!item||item.id!==image.catalogId.trim())throw new ArticleValidationError('image_identity')
+      if(used.has(image.assetId))throw new ArticleValidationError('duplicate_image')
+      if(!brand||brand.value.trim().toLowerCase()!==image.brandName.trim().toLowerCase())throw new ArticleValidationError('brand_reference')
+      if(!contexts.some(context=>context.assetId===image.assetId&&context.source==='meta_image_observation'))throw new ArticleValidationError('visual_context')
       image.catalogId=item.id
       image.brandName=brand.value
       image.brandSourceId=brand.id
       article.sourceIds=article.sourceIds.map(id=>id.trim().toLowerCase()===brand.id.toLowerCase()?brand.id:id)
       if(!article.sourceIds.includes(brand.id)){
-        if(article.sourceIds.length>=36)throw Error('Article source limit exceeded')
+        if(article.sourceIds.length>=36)throw new ArticleValidationError('source_limit')
         article.sourceIds.push(brand.id)
       }
       const optional=new Set(image.productSourceIds)
@@ -71,8 +92,9 @@ export function validateArticleEdition(value:unknown,items:readonly CatalogItem[
       const matches=sources.filter(source=>imageIds.has(source.assetId)&&source.id.toLowerCase()===id.trim().toLowerCase())
       return matches.length===1?matches[0].id:id
     })
-    if(article.sourceIds.some(id=>!sources.some(source=>source.id===id&&imageIds.has(source.assetId))))throw Error('Invalid article source reference')
-    if(article.culturalClaims?.some(claim=>!article.narrative.includes(claim.narrativeText)||!article.sourceIds.includes(claim.sourceId)||!sources.some(source=>source.id===claim.sourceId&&source.kind==='cultural_claim'&&imageIds.has(source.assetId))))throw Error('Invalid cultural claim binding')
+    article.sourceIds=article.sourceIds.filter(id=>sources.some(source=>source.id===id&&imageIds.has(source.assetId))||!/:((?:brand_(?:story|description))|(?:product_description))$/i.test(id.trim()))
+    if(article.sourceIds.some(id=>!sources.some(source=>source.id===id&&imageIds.has(source.assetId))))throw new ArticleValidationError('invalid_source')
+    if(article.culturalClaims?.some(claim=>!article.narrative.includes(claim.narrativeText)||!article.sourceIds.includes(claim.sourceId)||!sources.some(source=>source.id===claim.sourceId&&source.kind==='cultural_claim'&&imageIds.has(source.assetId))))throw new ArticleValidationError('cultural_claim')
   }
   return edition
 }
@@ -100,7 +122,7 @@ async function structuredMuse<T>(apiKey:string,model:string,instruction:string,i
   let content:unknown
   try{content=JSON.parse(envelope.choices[0].message.content)}catch{throw new ArticleWorkflowError(stage,'response_json')}
   const parsed=schema.safeParse(content)
-  if(!parsed.success)throw new ArticleWorkflowError(stage,'response_schema')
+  if(!parsed.success)throw new ArticleWorkflowError(stage,stage==='chief_editor'||stage==='revision'?articleSchemaCode(parsed.error,content):'response_schema')
   const value=parsed.data
   return {value,latencyMs:Math.round(performance.now()-started),usage:envelope.usage?{inputTokens:envelope.usage.prompt_tokens,outputTokens:envelope.usage.completion_tokens,totalTokens:envelope.usage.total_tokens}:null as Measurement|null}
 }
@@ -208,7 +230,7 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
     const catalog=selectedItems.map(item=>({catalogId:item.id,assetId:item.image.id,category:item.category,aestheticTags:item.lifestyleTags}))
     const chief=await call<ArticleEditionBody>('chief_editor',chiefModel(mode).model,`${chiefInstructionFor(count)} ${knowledge} ${knowledge?editorialV21Guidance.chief:''}`,{preferences:p,articleCount:count,catalog,sources,visualContexts:contexts,editorialEvidence:evidencePack},editionSchema,schemaName,8000)
     let edition:ArticleEditionBody
-    try{edition=validateArticleEdition(chief,selectedItems,sources,contexts,count)}catch{throw new ArticleWorkflowError(stage,'structural_validation')}
+    try{edition=validateArticleEdition(chief,selectedItems,sources,contexts,count)}catch(error){throw articleValidationFailure(stage,error)}
     const review=await call('reviewer','muse-spark-1.3',`${reviewInstruction} ${knowledge} ${knowledge?editorialV21Guidance.reviewer:''}`,{edition,preferences:p,sources,visualContexts:contexts,editorialEvidence:evidencePack},editorialReviewOutput,'curio_articles_review_v1',3000)
     let assessment:ReturnType<typeof validateReview>
     try{assessment=validateReview(review,edition,sources)}catch{throw new ArticleWorkflowError(stage,'review_validation')}
@@ -218,7 +240,7 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
     if(assessment.decision!=='PASS'||hard){
       const revision=await call<ArticleEditionBody>('revision','muse-spark-1.3',`${revisionInstruction} ${knowledge} ${knowledge?editorialV21Guidance.revision:''}`,{edition,review,sources,visualContexts:contexts,editorialEvidence:evidencePack},editionSchema,`${schemaName}_revision`,8000)
       let next:ArticleEditionBody
-      try{next=validateArticleEdition(revision,selectedItems,sources,contexts,count);if(stableStructure(next)!==stableStructure(edition))throw Error('Article identity changed')}catch{throw new ArticleWorkflowError(stage,'structural_validation')}
+      try{next=validateArticleEdition(revision,selectedItems,sources,contexts,count);if(stableStructure(next)!==stableStructure(edition))throw new ArticleValidationError('image_identity')}catch(error){throw articleValidationFailure(stage,error)}
       edition=next;revised=true
       const confirmation=await call('confirmation','muse-spark-1.3',`${reviewInstruction} ${knowledge} ${knowledge?editorialV21Guidance.reviewer:''}`,{edition,preferences:p,sources,visualContexts:contexts,editorialEvidence:evidencePack},editorialReviewOutput,'curio_articles_confirmation_v1',3000)
       try{assessment=validateReview(confirmation,edition,sources)}catch{throw new ArticleWorkflowError(stage,'review_validation')}
