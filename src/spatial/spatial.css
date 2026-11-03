@@ -40,7 +40,7 @@
 @media(min-width:641px){
 .spatial-rail{inset:0;overflow:visible;background:none;pointer-events:none;padding:0}
 .spatial-rail-card{position:absolute;pointer-events:auto}
-.rail-story{top:50%;transform:translateY(-50%);width:min(320px,26vw);max-height:62vh;overflow:auto;right:8%;background:linear-gradient(150deg,#fffffff5 0%,#f4f8ffed 40%,#fdf3fae8 70%,#edf6f4e8 100%);box-shadow:inset 0 1px 0 #ffffff,inset 0 -1px 0 #ffffff80,0 1px 2px #5f6f8021,0 12px 32px #5f6f8026,0 32px 80px #5f6f802e}
+.rail-story{top:50%;transform:translateY(-50%);width:min(320px,26vw);max-height:62vh;overflow:auto;overscroll-behavior:contain;right:8%;background:linear-gradient(150deg,#fffffff5 0%,#f4f8ffed 40%,#fdf3fae8 70%,#edf6f4e8 100%);box-shadow:inset 0 1px 0 #ffffff,inset 0 -1px 0 #ffffff80,0 1px 2px #5f6f8021,0 12px 32px #5f6f8026,0 32px 80px #5f6f802e}
 }
 .spatial-rail-card h2{margin:0 0 8px;font:400 20px/1.25 Georgia,serif}
 .spatial-rail-card p{margin:0 0 10px;font-size:13px;line-height:1.6;color:#626b7a}
@@ -57,20 +57,9 @@
 @keyframes story-backdrop-in{from{opacity:0}to{opacity:1}}
 .spatial-story{position:fixed;top:64px;right:16px;bottom:16px;z-index:31;width:min(92vw,600px);overflow-y:auto;background:linear-gradient(165deg,#fffffff8 0%,#f6f9fff5 55%,#fdf4faf2 100%);border:1px solid #e0e5ed;border-radius:18px;box-shadow:inset 0 1px 0 #ffffff,0 1px 2px #5f6f8024,0 16px 40px #5f6f802b,0 40px 96px #5f6f8033;padding:28px 30px;animation:story-sheet-in .32s cubic-bezier(.2,.7,.3,1)}
 @keyframes story-sheet-in{from{opacity:0;transform:translateX(56px) scale(.98)}to{opacity:1;transform:none}}
-.spatial-story h2{margin:0 0 14px;font:400 30px/1.2 Georgia,serif;padding-right:44px}
-.spatial-story h2:focus{outline:none}
-.spatial-story p{font-size:14px;line-height:1.7;color:#3c4350}
-.spatial-story-hero{margin:0 0 18px;border:1px solid #e0e5ed;border-radius:14px;overflow:hidden;background:#e8ecf1;animation:story-hero-in .45s cubic-bezier(.2,.7,.3,1)}
-.spatial-story-hero img{display:block;width:100%;height:auto}
 @keyframes story-hero-in{from{opacity:0;transform:translateX(-48px) scale(.97)}to{opacity:1;transform:none}}
-.spatial-story-thread{border-left:2px solid #a9c5ff;padding-left:12px;font-style:italic}
-.spatial-story-deck{font:italic 400 16px/1.6 Georgia,serif!important;color:#101219!important}
-.spatial-story-brand{padding:10px 14px 0;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#626b7a}
-.spatial-story-hero .spatial-fine{padding:2px 14px 12px;margin:0}
-.spatial-story button{min-height:40px;padding:8px 16px;border:1px solid #c6ceda;border-radius:9999px;background:#fff;color:#101219;cursor:pointer;font:inherit;font-size:12px;margin:4px 8px 4px 0}
-.spatial-story-close{position:absolute;top:12px;right:12px;width:40px;height:40px;padding:0!important;margin:0!important;border-radius:50%!important;font-size:20px}
 .spatial-sources{margin:22px 0 6px;border-top:1px solid #e0e5ed;padding-top:16px}
-.spatial-sources>button{min-height:36px!important;font-size:11px!important;letter-spacing:.12em;text-transform:uppercase;color:#626b7a!important}
+.spatial-sources>button{min-height:36px!important;padding:8px 16px;border:1px solid #c6ceda;border-radius:9999px;background:#fff;cursor:pointer;font:inherit;font-size:11px!important;letter-spacing:.12em;text-transform:uppercase;color:#626b7a!important}
 .spatial-sources-list p{font-size:13px!important}
 .spatial-sources .spatial-fine{font-size:10.5px!important}
 .spatial-sources-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:14px}
@@ -123,20 +112,45 @@
 .spatial-fallback ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
 .spatial-fallback li{background:#fff;border:1px solid #e0e5ed;border-radius:10px;padding:8px 12px}
 /* Static hover tints only; no transitions by design. */
-.spatial-actions button:hover,.spatial-rail-card button:hover,.spatial-journey-bar button:hover,.spatial-inspect-close:hover,.spatial-story button:hover,.spatial-mode-error button:hover{background:#f7f8fa}
+.spatial-actions button:hover,.spatial-rail-card button:hover,.spatial-journey-bar button:hover,.spatial-inspect-close:hover,.spatial-mode-error button:hover{background:#f7f8fa}
 .spatial-seed:hover,.spatial-circle:hover{border-color:#8b98ad;box-shadow:inset 0 1px 0 #ffffff,0 4px 14px #5f6f8026}
 .spatial-dock button[type=submit]:hover:not(:disabled),.spatial-node-enter:hover,.spatial-fallback button:hover:not(:disabled){background:linear-gradient(180deg,#39415a 0%,#1e2430 62%)}
-.spatial-hud a:focus-visible,.spatial-hud button:focus-visible,.spatial-dock button:focus-visible,.spatial-dock textarea:focus-visible,.spatial-consent input:focus-visible,.spatial-skip:focus-visible,.spatial-rail-card button:focus-visible,.spatial-inspect-close:focus-visible,.spatial-journey-bar button:focus-visible,.spatial-node-enter:focus-visible,.object-region:focus-visible,.spatial-story button:focus-visible,.spatial-sources a:focus-visible,.spatial-seed:focus-visible,.spatial-circle:focus-visible,.spatial-mode-error button:focus-visible{outline:2px solid #385fa8;outline-offset:3px}
+.spatial-hud a:focus-visible,.spatial-hud button:focus-visible,.spatial-dock button:focus-visible,.spatial-dock textarea:focus-visible,.spatial-consent input:focus-visible,.spatial-skip:focus-visible,.spatial-rail-card button:focus-visible,.spatial-inspect-close:focus-visible,.spatial-journey-bar button:focus-visible,.spatial-node-enter:focus-visible,.object-hotspot:focus-visible,.object-popover-close:focus-visible,.article-toggle:focus-visible,.spatial-sources a:focus-visible,.spatial-seed:focus-visible,.spatial-circle:focus-visible,.spatial-mode-error button:focus-visible{outline:2px solid #385fa8;outline-offset:3px}
 .spatial-mode-option input:focus-visible + .spatial-mode-card{outline:2px solid #385fa8;outline-offset:3px}
-@media(max-width:640px){.spatial-node-figure img{aspect-ratio:16/9}.spatial-story{top:auto;bottom:12px;left:12px;right:12px;width:auto;max-height:82vh;padding:22px 20px}.spatial-hud{gap:10px;padding:10px 14px}.spatial-crumb{display:none}.spatial-dock{padding:20px}.spatial-node-panel{top:auto;bottom:84px;left:12px;right:12px;width:auto;max-height:42vh}.spatial-journey-bar{bottom:12px;gap:8px;padding:6px 10px;flex-wrap:nowrap;overflow-x:auto;max-width:calc(100vw - 24px)}.spatial-journey-bar button{flex:none;min-height:36px;padding:6px 12px}.spatial-journey-bar .spatial-fine{display:none}}
-@media(prefers-reduced-motion:reduce){.spatial-dock{animation:none}.spatial-root{scroll-behavior:auto}.spatial-story-backdrop,.spatial-story,.spatial-story-hero{animation:none}.spatial-generating-pulse{animation:none}}
-/* Verified-object discovery: approved SAM regions on the exhibit image. */
-.object-discovery{margin:0 0 18px}
-.object-figure{position:relative;margin:0;border:1px solid #e0e5ed;border-radius:12px;overflow:hidden;background:#e8ecf1}
-.object-figure img{display:block;width:100%;height:auto}
-.object-region{position:absolute;padding:0;border:2px solid #ffffffee;border-radius:8px;background:#10121914;cursor:pointer;box-shadow:0 0 0 1px #10121966,inset 0 0 0 1px #10121955}
-.object-region::after{content:'';position:absolute;inset:-8px}
-.object-region:hover{background:#1012192e}
-.object-region.is-selected{border-color:#a9c5ff;background:#a9c5ff33;box-shadow:0 0 0 2px #385fa8}
-.object-detail{margin-top:12px;border-top:1px solid #e0e5ed;padding-top:12px}
-.object-detail h3{margin:0 0 8px;font:400 20px/1.25 Georgia,serif;color:#101219;overflow-wrap:anywhere}
+@media(max-width:640px){.spatial-node-figure img{aspect-ratio:16/9}.rail-story{max-height:56vh;overflow-y:auto;overscroll-behavior:contain}.spatial-story{top:auto;bottom:12px;left:12px;right:12px;width:auto;max-height:82vh;padding:22px 20px}.spatial-hud{gap:10px;padding:10px 14px}.spatial-crumb{display:none}.spatial-dock{padding:20px}.spatial-node-panel{top:auto;bottom:84px;left:12px;right:12px;width:auto;max-height:42vh}.spatial-journey-bar{bottom:12px;gap:8px;padding:6px 10px;flex-wrap:nowrap;overflow-x:auto;max-width:calc(100vw - 24px)}.spatial-journey-bar button{flex:none;min-height:36px;padding:6px 12px}.spatial-journey-bar .spatial-fine{display:none}}
+@media(prefers-reduced-motion:reduce){.spatial-dock{animation:none}.spatial-root{scroll-behavior:auto}.spatial-story-backdrop,.spatial-story,.article-hero{animation:none}.spatial-generating-pulse{animation:none}}
+/* Verified-object discovery: dot hotspots for approved regions on the image. */
+.object-figure{margin:0 0 18px;border:1px solid #e0e5ed;border-radius:12px;overflow:hidden;background:#e8ecf1}
+.object-frame{position:relative}
+.object-frame img{display:block;width:100%;height:auto}
+.object-figure .object-hotspot{position:absolute;width:40px;height:40px;min-height:40px;padding:0;margin:0;border:0;border-radius:50%;background:transparent;cursor:pointer;transform:translate(-50%,-50%)}
+.object-figure .object-hotspot::before{content:'';position:absolute;left:50%;top:50%;width:30px;height:30px;transform:translate(-50%,-50%);border-radius:50%;border:1.5px solid #ffffffee;background:#ffffff2e;box-shadow:0 1px 6px #10121955,inset 0 0 0 1px #ffffff44}
+.object-figure .object-hotspot::after{content:'';position:absolute;left:50%;top:50%;width:10px;height:10px;transform:translate(-50%,-50%);border-radius:50%;background:#fff;box-shadow:0 1px 4px #10121966}
+.object-figure .object-hotspot:hover{background:transparent}
+.object-figure .object-hotspot:hover::before{background:#ffffff55}
+.object-figure .object-hotspot.is-selected::before{border-color:#fff;background:#a9c5ff66;box-shadow:0 0 0 2px #385fa8}
+.object-catcher{position:fixed;inset:0;z-index:40;cursor:default}
+.object-popover{position:absolute;z-index:41;width:max-content;max-width:min(230px,86%);max-height:80%;overflow-y:auto;overscroll-behavior:contain;margin:0;padding:14px 16px;background:#fffffff5;border:1px solid #e0e5ed;border-radius:12px;box-shadow:inset 0 1px 0 #ffffffd9,0 1px 2px #5f6f8024,0 16px 40px #5f6f802b;backdrop-filter:blur(14px);text-align:left}
+.object-popover h3{margin:0 0 8px;font:400 18px/1.3 Georgia,serif;color:#101219;overflow-wrap:anywhere;padding-right:28px}
+.object-popover p{margin:0 0 8px;font-size:13px;line-height:1.6;color:#3c4350}
+.object-popover ul{margin:8px 0;padding-left:18px;font-size:12.5px;line-height:1.6;color:#3c4350}
+.object-popover .spatial-eyebrow{margin:0 0 6px}
+.object-popover .object-popover-close{position:absolute;top:8px;right:8px;width:32px;height:32px;min-height:32px;padding:0;margin:0;border:1px solid #c6ceda;border-radius:50%;background:#fff;color:#101219;font-size:18px;line-height:1;cursor:pointer}
+/* Article card: one reading surface shared by the rail card and the overlay. */
+.article-head{display:flex;align-items:flex-start;gap:12px}
+.article-head .spatial-eyebrow{flex:1;margin:0 0 10px}
+.article-head .article-toggle{flex:none;width:36px;height:36px;min-height:36px;padding:0;margin:0;border:1px solid #c6ceda;border-radius:50%;background:#fff;color:#3c4350;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 #ffffff}
+.article-head .article-toggle:hover{background:#f7f8fa}
+.article-deck{font:italic 400 16px/1.6 Georgia,serif!important;color:#101219!important}
+.article-hero{margin:0 0 18px;border:1px solid #e0e5ed;border-radius:14px;overflow:hidden;background:#e8ecf1}
+.article-hero img{display:block;width:100%;height:auto}
+.article-brand{padding:10px 14px 0;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#626b7a}
+.article-hero .spatial-fine,.object-figure .spatial-fine{padding:2px 14px 12px;margin:0}
+.article-body p{margin:0 0 12px;font-size:14px;line-height:1.7;color:#3c4350}
+.article-thread{border-left:2px solid #a9c5ff;padding-left:12px;font-style:italic}
+.spatial-story-backdrop.is-expanded{display:flex;align-items:center;justify-content:center;padding:5vh 4vw}
+.spatial-story.is-expanded{position:relative;top:auto;right:auto;bottom:auto;left:auto;width:min(94vw,720px);max-height:90vh}
+.spatial-story.is-expanded h2{margin:0 0 14px;font:400 30px/1.2 Georgia,serif}
+.spatial-story.is-expanded h2:focus{outline:none}
+.spatial-story.is-expanded .article-hero{animation:story-hero-in .45s cubic-bezier(.2,.7,.3,1)}
+@media(max-width:640px){.spatial-story.is-expanded{position:fixed;top:auto;bottom:12px;left:12px;right:12px;width:auto;max-height:82vh}}

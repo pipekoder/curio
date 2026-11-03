@@ -1,5 +1,5 @@
 import {describe,expect,it,vi} from 'vitest'
-import {boxToPercent,fetchObjectRegions,isVersionId} from '../src/spatial/object-regions'
+import {boxToPercent,fetchObjectRegions,isVersionId,mergeHotspots,regionAnchor} from '../src/spatial/object-regions'
 
 // Contract-shaped fixture (docs/sam-object-discovery-contract.md). The
 // version ID is synthetic and test-only; no Production result is implied.
@@ -46,5 +46,29 @@ describe('object regions client',()=>{
   it('maps normalized boxes to clamped percentages',()=>{
     expect(boxToPercent({x:0.1,y:0.2,width:0.3,height:0.4})).toEqual({left:'10%',top:'20%',width:'30%',height:'40%'})
     expect(boxToPercent({x:-0.5,y:0,width:2,height:1})).toEqual({left:'0%',top:'0%',width:'100%',height:'100%'})
+  })
+
+  it('anchors SAM boxes at their clamped centers',()=>{
+    expect(regionAnchor({x:0.1,y:0.2,width:0.3,height:0.25})).toEqual({x:0.25,y:0.325})
+    expect(regionAnchor({x:0.95,y:0.95,width:0.2,height:0.2})).toEqual({x:0.98,y:0.98})
+  })
+
+  it('keeps exact authored points and drops a SAM duplicate of the same object',()=>{
+    const placed=mergeHotspots([{id:'authored-1',x:0.25,y:0.325}],[
+      {id:'sam-1',box:{x:0.1,y:0.2,width:0.3,height:0.25}},
+      {id:'sam-2',box:{x:0.55,y:0.5,width:0.2,height:0.2}},
+    ])
+    expect(placed.map(mark=>mark.id)).toEqual(['authored-1','sam-2'])
+    expect(placed[0]).toMatchObject({x:0.25,y:0.325,authored:true})
+    expect(placed[1]).toMatchObject({x:0.65,y:0.6,authored:false})
+  })
+
+  it('nudges stacked markers apart deterministically',()=>{
+    const box={x:0.4,y:0.4,width:0.2,height:0.2}
+    const first=mergeHotspots([],[{'id':'a',box},{'id':'b',box}])
+    expect(first).toHaveLength(2)
+    expect(first[0]).toMatchObject({x:0.5,y:0.5})
+    expect(Math.hypot(first[1].x-first[0].x,first[1].y-first[0].y)).toBeGreaterThanOrEqual(0.045)
+    expect(mergeHotspots([],[{'id':'a',box},{'id':'b',box}])).toEqual(first)
   })
 })
