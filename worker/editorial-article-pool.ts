@@ -74,7 +74,7 @@ export async function editorialArticlePool(env:Bindings,p:EditorialPreferences,o
     const item=byVersion.get(String(row.version_id))
     if(!item){exclusions.publication++;continue}
     if(row.reader_eligible!==1||!observationAssetMatches(row,item,approvals)||item.permissions.aiAnalysis.status!=='approved'||!item.permissions.aiAnalysis.evidence){exclusions.permissions++;continue}
-    if(row.editorial_ready!==1||p.allocations[item.category]<=0){exclusions.metadata++;continue}
+    if(p.allocations[item.category]<=0){exclusions.metadata++;continue}
     const sha=String(row.image_sha256)
     if(!/^[a-f0-9]{64}$/.test(sha)){exclusions.image_integrity++;continue}
     if(seenSha.has(sha)){exclusions.duplicate_image++;continue}
@@ -88,7 +88,7 @@ export async function editorialArticlePool(env:Bindings,p:EditorialPreferences,o
   }
   const allSources=await stage('sources',()=>loadEditorialSources(db,verified.map(row=>row.item.image.id),{maxSources:300,maxBytes:524_288}))
   const sourced=verified.filter(row=>{
-    const found=allSources.some(source=>source.assetId===row.item.image.id&&source.kind==='brand_name')&&allSources.some(source=>source.assetId===row.item.image.id&&source.kind==='product_description')
+    const found=allSources.some(source=>source.assetId===row.item.image.id&&source.kind==='brand_name')&&allSources.some(source=>source.assetId===row.item.image.id&&source.kind==='product_name')
     if(!found)exclusions.sources++
     return found
   })
