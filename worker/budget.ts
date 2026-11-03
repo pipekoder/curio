@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import {articlePreparationPolicy} from './article-preparation-policy'
 
 // One SQLite DO serializes every reservation. Charges are never refunded:
 // even a failed provider request may have incurred a charge upstream.
@@ -6,6 +7,7 @@ export class InferenceBudget {
   constructor(private state: DurableObjectState) {
     state.storage.sql.exec('CREATE TABLE IF NOT EXISTS counters (key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL)')
     state.storage.sql.exec('CREATE TABLE IF NOT EXISTS demo_leases (id TEXT PRIMARY KEY, tester TEXT NOT NULL, expires INTEGER NOT NULL)')
+    state.storage.sql.exec('CREATE TABLE IF NOT EXISTS article_prep_leases (id TEXT PRIMARY KEY, expires INTEGER NOT NULL)')
     state.storage.sql.exec('CREATE TABLE IF NOT EXISTS reservation_events (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, units INTEGER NOT NULL, outcome TEXT NOT NULL, policy TEXT NOT NULL)')
   }
   async fetch(request:Request):Promise<Response>{
@@ -26,17 +28,24 @@ export class InferenceBudget {
       this.state.storage.transactionSync(()=>{
         const active=this.state.storage.sql.exec<{id:string}>('SELECT id FROM demo_leases WHERE id = ?',finished.data.id).toArray()[0]
         if(active){this.state.storage.sql.exec('DELETE FROM demo_leases WHERE id = ?',finished.data.id);this.record(Date.now(),0,finished.data.outcome,'demo')}
+        const preparation=this.state.storage.sql.exec<{id:string}>('SELECT id FROM article_prep_leases WHERE id = ?',finished.data.id).toArray()[0]
+        if(preparation){this.state.storage.sql.exec('DELETE FROM article_prep_leases WHERE id = ?',finished.data.id);this.record(Date.now(),0,finished.data.outcome,'article_preparation')}
       })
       return Response.json({released:true})
     }
     if(url.pathname!=='/reserve'&&url.pathname!=='/')return new Response(null,{status:404})
-    const parsed=z.strictObject({ip:z.string().regex(/^[a-f0-9]{64}$/),ceiling:z.number().int().min(1).max(500),daily:z.number().int().min(1).max(160).default(20),demo:z.boolean().default(false),demoTester:z.string().regex(/^[a-f0-9]{64}$/).optional(),units:z.union([z.literal(1),z.literal(2),z.literal(3),z.literal(4)]).default(1),samAssetId:z.string().regex(/^[a-z0-9-]+$/).max(80).optional(),editorialPilot:z.boolean().optional(),articlePreparation:z.boolean().optional()}).safeParse(await request.json())
+    const parsed=z.strictObject({ip:z.string().regex(/^[a-f0-9]{64}$/),ceiling:z.number().int().min(1).max(500),daily:z.number().int().min(1).max(160).default(20),demo:z.boolean().default(false),demoTester:z.string().regex(/^[a-f0-9]{64}$/).optional(),units:z.union([z.literal(1),z.literal(2),z.literal(3),z.literal(4)]).default(1),samAssetId:z.string().regex(/^[a-z0-9-]+$/).max(80).optional(),editorialPilot:z.boolean().optional(),articlePreparation:z.boolean().optional(),articlePreparationPolicy:articlePreparationPolicy.optional()}).safeParse(await request.json())
     if(!parsed.success)return Response.json({error:'Invalid reservation'},{status:400})
-    const {ip,ceiling,daily,demo,demoTester,units,samAssetId,editorialPilot=false,articlePreparation=false}=parsed.data
-    if((!demo&&(ceiling>100||daily>100||demoTester))||(demo&&(ceiling<daily||demoTester&&units!==4))||(editorialPilot&&(units!==4||samAssetId))||(articlePreparation&&(units!==1||samAssetId||editorialPilot||demoTester)))return Response.json({error:'Invalid policy'},{status:400})
+    const {ip,ceiling,daily,demo,demoTester,units,samAssetId,editorialPilot=false,articlePreparation=false,articlePreparationPolicy:prep}=parsed.data
+    if((!demo&&(ceiling>100||daily>100||demoTester))||(demo&&(ceiling<daily||demoTester&&units!==4))||(editorialPilot&&(units!==4||samAssetId))||(articlePreparation&&(units!==1||samAssetId||editorialPilot||demoTester||!prep))||(!articlePreparation&&prep))return Response.json({error:'Invalid policy'},{status:400})
     const result=this.state.storage.transactionSync(()=>{
       this.state.storage.sql.exec('DELETE FROM counters WHERE expires > 0 AND expires <= ?',now)
       this.state.storage.sql.exec('DELETE FROM demo_leases WHERE expires <= ?',now)
+      this.state.storage.sql.exec('DELETE FROM article_prep_leases WHERE expires <= ?',now)
+      if(prep){
+        const active=this.state.storage.sql.exec<{count:number;expires:number}>('SELECT COUNT(*) AS count,MIN(expires) AS expires FROM article_prep_leases').toArray()[0]
+        if((active?.count??0)>=prep.concurrency){this.record(now,units,'concurrency_denied','article_preparation');return {allowed:false,retryAfter:Math.max(1,Math.ceil(((active?.expires??now+30000)-now)/1000))}}
+      }
       if(demoTester){
         const active=this.state.storage.sql.exec<{count:number;expires:number}>('SELECT COUNT(*) AS count,MIN(expires) AS expires FROM demo_leases WHERE tester = ?',demoTester).toArray()[0]
         if((active?.count??0)>=2){this.record(now,units,'concurrency_denied','demo');return {allowed:false,retryAfter:Math.max(1,Math.ceil(((active?.expires??now+minute)-now)/1000))}}
@@ -45,10 +54,10 @@ export class InferenceBudget {
         ...(samAssetId?[{key:`sam-once:${samAssetId}`,limit:1,expires:0}]:[]),
         {key:'lifetime',limit:ceiling,expires:0},
         {key:`day:${Math.floor(now/day)}`,limit:daily,expires:(Math.floor(now/day)+1)*day},
-        {key:articlePreparation?`article-prep-hour:${ip}:${Math.floor(now/hour)}`:`hour:${ip}:${Math.floor(now/hour)}`,limit:articlePreparation?16:demoTester?40:editorialPilot?8:units===4?4:3,expires:(Math.floor(now/hour)+1)*hour},
-        ...(articlePreparation?[{key:`article-prep-day:${ip}:${Math.floor(now/day)}`,limit:24,expires:(Math.floor(now/day)+1)*day}]:[]),
+        {key:articlePreparation?`article-prep-hour:${ip}:${Math.floor(now/hour)}`:`hour:${ip}:${Math.floor(now/hour)}`,limit:prep?.maxPerHour??(demoTester?40:editorialPilot?8:units===4?4:3),expires:(Math.floor(now/hour)+1)*hour},
+        ...(prep?[{key:`article-prep-day:${ip}:${Math.floor(now/day)}`,limit:prep.maxPerDay,expires:(Math.floor(now/day)+1)*day}]:[]),
         ...(demoTester?[{key:`tester-hour:${demoTester}:${Math.floor(now/hour)}`,limit:40,expires:(Math.floor(now/hour)+1)*hour},{key:`tester-day:${demoTester}:${Math.floor(now/day)}`,limit:120,expires:(Math.floor(now/day)+1)*day}]:[]),
-        {key:articlePreparation?`article-prep-cooldown:${ip}`:`cooldown:${ip}`,limit:articlePreparation?2:demoTester?2:1,expires:now+(articlePreparation?16000:minute)},
+        {key:articlePreparation?`article-prep-cooldown:${ip}`:`cooldown:${ip}`,limit:prep?.windowLimit??(demoTester?2:1),expires:now+(prep?prep.windowSeconds*1000:minute)},
       ]
       for(const counter of counters){
         const row=this.state.storage.sql.exec<{count:number;expires:number}>('SELECT count,expires FROM counters WHERE key = ?',counter.key).toArray()[0]
@@ -56,8 +65,9 @@ export class InferenceBudget {
         if((row?.count??0)+cost>counter.limit){this.record(now,units,'limit_denied',demo?'demo':'standard');return {allowed:false,retryAfter:counter.expires?Math.max(1,Math.ceil(((row?.expires??counter.expires)-now)/1000)):86400}}
       }
       for(const counter of counters)this.state.storage.sql.exec('INSERT INTO counters(key,count,expires) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET count=count+excluded.count',counter.key,counter.key.startsWith('cooldown:')||counter.key.startsWith('article-prep-cooldown:')||counter.key.startsWith('sam-once:')?1:units,counter.expires)
-      const reservationId=demoTester?crypto.randomUUID():undefined
-      if(reservationId)this.state.storage.sql.exec('INSERT INTO demo_leases(id,tester,expires) VALUES(?,?,?)',reservationId,demoTester,now+180000)
+      const reservationId=demoTester||prep?crypto.randomUUID():undefined
+      if(reservationId&&demoTester)this.state.storage.sql.exec('INSERT INTO demo_leases(id,tester,expires) VALUES(?,?,?)',reservationId,demoTester,now+180000)
+      if(reservationId&&prep)this.state.storage.sql.exec('INSERT INTO article_prep_leases(id,expires) VALUES(?,?)',reservationId,now+30000)
       this.record(now,units,'reserved',articlePreparation?'article_preparation':demo?'demo':'standard')
       return {allowed:true,retryAfter:0,...(reservationId?{reservationId}:{})}
     })

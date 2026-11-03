@@ -8,15 +8,15 @@ import {editorialArticlePool,type ArticlePool} from './editorial-article-pool'
 import {runClassification,AssetAnalysisError} from './asset-classifier'
 import {catalogDigest} from './catalog-store'
 import {ARTICLE_EVIDENCE_VERSION,ARTICLE_INTERPRETATION_VERSION} from '../shared/article-evidence'
+import {resolveArticlePreparationPolicy} from './article-preparation-policy'
 
 const JOB_VERSION='curio-article-job-v1'
 const LEASE_MS=120_000
 const JOB_TTL_MS=7*86_400_000
-const PREPARE_RETRY_MS=16_000
 
 type JobRow={id:string;ip_digest:string;input_digest:string;state:'preparing'|'generating'|'completed'|'failed';lease_token:string|null;lease_until:number|null;result_json:string|null;evidence_digest:string|null}
 const base={format:ARTICLE_CONTRACT_VERSION,source:'deterministic' as const,retrieval:'d1' as const,cached:false,articleEdition:null}
-const pendingResponse=(pool:ArticlePool,outcome:string,retryAfterMs=PREPARE_RETRY_MS)=>Response.json({...base,status:'preparing',fallbackReason:'analysis_pending',eligibleImages:pool.eligibleCount,requiredImages:15,
+const pendingResponse=(pool:ArticlePool,outcome:string,retryAfterMs:number)=>Response.json({...base,status:'preparing',fallbackReason:'analysis_pending',eligibleImages:pool.eligibleCount,requiredImages:15,
   preparation:{outcome,remainingCandidates:pool.preparation?.pendingVersionIds.length??0,processing:pool.preparation?.processing??0,retryAfterMs}},{status:202})
 const failedResponse=(pool:ArticlePool)=>Response.json({...base,status:'insufficient_content',fallbackReason:'insufficient_content',eligibleImages:pool.eligibleCount,requiredImages:15},{status:409})
 const evidenceDigest=(pool:ArticlePool,edition:EditorialArticleEdition)=>{
@@ -41,6 +41,8 @@ async function jobIdentity(request:Request,env:Bindings,p:EditorialPreferences,m
 export async function articleJobResponse(request:Request,env:Bindings,p:EditorialPreferences,mode:EditorialMode):Promise<Response>{
   if(env.EDITORIAL_ARTICLE_PREPARATION_ENABLED!=='true'||!p.consent||env.EDITORIAL_ARTICLES_ENABLED!=='true'||env.MAGAZINE_AI_ENABLED!=='true'||env.EDITORIAL_REVIEW_ENABLED!=='true'||env.EDITORIAL_PUBLIC_AI_ENABLED!=='true'||!env.CATALOG_DB||!env.MEDIA_BUCKET||!env.META_API_KEY||!env.INFERENCE_BUDGET)
     return articleEditorialResponse(request,env,p,mode)
+  let policy:ReturnType<typeof resolveArticlePreparationPolicy>
+  try{policy=resolveArticlePreparationPolicy(env)}catch{return Response.json({...base,status:'unavailable',fallbackReason:'configuration'},{status:503})}
   const db=env.CATALOG_DB,now=Date.now()
   let identity:Awaited<ReturnType<typeof jobIdentity>>
   try{identity=await jobIdentity(request,env,p,mode)}catch{return Response.json({...base,status:'unavailable',fallbackReason:'configuration'},{status:503})}
@@ -82,7 +84,7 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
       }else await db.prepare(`UPDATE article_edition_jobs SET state='failed',lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(Date.now(),identity.id,token).run()
       return result
     }
-    const selected=(pool.preparation?.pendingVersionIds??[]).slice(0,2)
+    const selected=(pool.preparation?.pendingVersionIds??[]).slice(0,Math.min(policy.concurrency,15-pool.eligibleCount))
     if(!selected.length){
       if(pool.preparation?.processing)return pendingResponse(pool,'processing',15_000)
       await db.prepare(`UPDATE article_edition_jobs SET state='failed',lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(Date.now(),identity.id,token).run()
@@ -96,7 +98,7 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
       await db.prepare(`UPDATE article_edition_jobs SET state='failed',lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(Date.now(),identity.id,token).run()
       return failedResponse(pool)
     }
-    return pendingResponse(pool,pool.eligibleCount>=15?'evidence_ready':'processing',pool.eligibleCount>=15?0:PREPARE_RETRY_MS)
+    return pendingResponse(pool,pool.eligibleCount>=15?'evidence_ready':'processing',pool.eligibleCount>=15?0:policy.windowSeconds*1000)
   }catch{
     await db.prepare(`UPDATE article_edition_jobs SET state='failed',lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(Date.now(),identity.id,token).run().catch(()=>{})
     return Response.json({...base,status:'fallback',fallbackReason:'job_unavailable'},{status:503})
