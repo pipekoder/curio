@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import type {StagedExhibit} from './staging'
+import {depthOpacity} from './camera-math'
 
 export type Pick={assetId:string;hotspotId?:string}
 
@@ -32,6 +33,9 @@ export class ExhibitMounts{
   private raycaster=new THREE.Raycaster()
   private pickables:THREE.Object3D[]=[]
   private floats:{group:THREE.Group;baseY:number;phase:number}[]=[]
+  // Depth-fade registry: every mount material with its resting opacity so
+  // the reading focus can dim approaching/departing mounts smoothly.
+  private faders:{mat:THREE.Material&{opacity:number};base:number}[][]=[]
   // Mount lifecycle: every clear starts a new epoch, so asynchronous
   // texture callbacks can tell whether their mount is still staged. A
   // detached mount group keeps its children (art.parent stays set), so
@@ -52,10 +56,13 @@ export class ExhibitMounts{
       mount.position.set(at.x,0,at.z)
       const slab=new THREE.ExtrudeGeometry(roundedRect(FRAME_W,FRAME_H,FRAME_R),{depth:BOARD_D,bevelEnabled:false})
       slab.translate(0,0,-BOARD_D/2)
+      const fades:{mat:THREE.Material&{opacity:number};base:number}[]=[]
+      const fade=(mat:THREE.Material&{opacity:number},base=1)=>fades.push({mat,base})
       const board=new THREE.Mesh(
         slab,
-        new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.9,metalness:0}),
+        new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.9,metalness:0,transparent:true}),
       )
+      fade(board.material)
       board.position.y=2.6
       mount.add(board)
       // Artwork shares the slab's rounded silhouette exactly, so no square
@@ -71,8 +78,9 @@ export class ExhibitMounts{
       }
       const art=new THREE.Mesh(
         artGeo,
-        new THREE.MeshBasicMaterial({color:0xe8ecf1}),
+        new THREE.MeshBasicMaterial({color:0xe8ecf1,transparent:true}),
       )
+      fade(art.material)
       art.position.set(0,2.6,ART_Z)
       art.userData={assetId:exhibit.assetId} as Pick
       mount.add(art)
@@ -93,16 +101,19 @@ export class ExhibitMounts{
       const glass=new THREE.Mesh(bandGeo,new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,opacity:1}))
       glass.position.set(0,2.6,RING_Z)
       mount.add(glass)
+      fade(glass.material)
       for(const [fx,fy] of [[-1,-1],[1,-1],[-1,1],[1,1]] as const){
         const flare=new THREE.Sprite(new THREE.SpriteMaterial({map:ExhibitMounts.flare(),transparent:true,opacity:0.85,depthWrite:false}))
         flare.scale.setScalar(1.6)
         flare.position.set(fx*(FRAME_W/2-0.25),2.6+fy*(FRAME_H/2-0.25),RING_Z+0.003)
         mount.add(flare)
+        fade(flare.material,0.85)
       }
       const frame=new THREE.LineLoop(
         new THREE.BufferGeometry().setFromPoints(roundedRect(FRAME_W-0.05,FRAME_H-0.05,FRAME_R-0.02).getPoints(24)),
-        new THREE.LineBasicMaterial({color:0x101219}),
+        new THREE.LineBasicMaterial({color:0x101219,transparent:true}),
       )
+      fade(frame.material)
       frame.position.set(0,2.6,RING_Z)
       mount.add(frame)
       this.loader.load(exhibit.image,texture=>{
@@ -122,8 +133,9 @@ export class ExhibitMounts{
       for(const hotspot of exhibit.hotspots){
         const ring=new THREE.Mesh(
           new THREE.TorusGeometry(0.16,0.028,12,32),
-          new THREE.MeshBasicMaterial({color:0xb98a3e}),
+          new THREE.MeshBasicMaterial({color:0xb98a3e,transparent:true}),
         )
+        fade(ring.material)
         ring.position.set((hotspot.x-0.5)*FRAME_W,2.6+(0.5-hotspot.y)*FRAME_H,HOT_Z)
         mount.add(ring)
         const hit=new THREE.Mesh(
@@ -142,13 +154,15 @@ export class ExhibitMounts{
       shadow.rotation.x=-Math.PI/2
       shadow.position.y=0.02
       mount.add(shadow)
+      fade(shadow.material,0.35)
       this.group.add(mount)
       this.floats.push({group:mount,baseY:0,phase:index*1.3})
+      this.faders.push(fades)
     })
   }
 
   private static flareTexture:THREE.Texture|null=null
-  private static flare():THREE.Texture{
+  static flare():THREE.Texture{
     if(!ExhibitMounts.flareTexture){
       const canvas=document.createElement('canvas')
       canvas.width=64;canvas.height=64
@@ -185,6 +199,17 @@ export class ExhibitMounts{
     for(const float of this.floats)float.group.position.y=float.baseY+Math.sin(elapsed*0.6+float.phase)*0.08
   }
 
+  // Depth hierarchy for the reading focus: the mount at the camera's dock
+  // renders fully opaque while neighbors ease toward 60%. Driven by scroll
+  // distance every frame, so the falloff is continuous with no jumps.
+  setDepthFocus(distance:number,docks:readonly number[]):void{
+    this.faders.forEach((mats,index)=>{
+      const dock=docks[index]
+      const focus=dock===undefined?1:depthOpacity(distance,dock)
+      for(const {mat,base} of mats)mat.opacity=base*focus
+    })
+  }
+
   // Resolve pop as particles dissolve: 0 at materialization, 1 at rest.
   setResolve(t:number):void{
     const clamped=Math.min(1,Math.max(0,t))
@@ -206,6 +231,7 @@ export class ExhibitMounts{
     this.epoch++
     this.pickables=[]
     this.floats=[]
+    this.faders=[]
     this.group.traverse(object=>{
       const mesh=object as THREE.Mesh
       if(mesh.geometry)mesh.geometry.dispose()

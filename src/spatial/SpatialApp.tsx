@@ -109,7 +109,6 @@ export default function SpatialApp(){
   const orbitRef=useRef({yaw:0.5,pitch:0.15,radius:ORBIT_DEFAULT})
   const transitRef=useRef<Transit|null>(null)
   const flyRef=useRef<FlyTo|null>(null)
-  const interactingRef=useRef(false)
   const modeRef=useRef(mode)
   modeRef.current=mode
   const selectedRef=useRef(selected)
@@ -190,19 +189,16 @@ export default function SpatialApp(){
         const dist=Math.hypot(a.x-b.x,a.y-b.y)
         if(pinchDist>0)orbitRef.current.radius*=pinchDist/Math.max(1,dist)
         pinchDist=dist
-        interactingRef.current=true
         return
       }
       const orbit=orbitRef.current
       orbit.yaw-=(event.clientX-down.x)*0.005
       orbit.pitch+=(event.clientY-down.y)*0.005
       down={x:event.clientX,y:event.clientY}
-      interactingRef.current=true
     }
     const onUp=(event:PointerEvent)=>{
       pointers.delete(event.pointerId)
       if(pointers.size<2)pinchDist=0
-      interactingRef.current=pointers.size>0
       if(!down||!anchor)return
       const moved=Math.hypot(event.clientX-anchor.x,event.clientY-anchor.y)
       down=null
@@ -259,13 +255,14 @@ export default function SpatialApp(){
         transit.onFrame?.(eased)
         if(k>=1){transitRef.current=null;transit.onDone()}
       }else if(modeRef.current==='network'){
-        chamber.update(now/1000,dt,interactingRef.current,reduced.current)
         const orbit=orbitRef.current
         const view=orbitCamera(NETWORK_CENTER,orbit.yaw,orbit.pitch,orbit.radius)
         rig.camera.position.set(...view.position)
         rig.camera.lookAt(...view.look)
+        chamber.update(rig.camera)
       }else{
         rig.update(dt)
+        mounts.setDepthFocus(rig.state.distance,layoutRef.current.docks)
         const director=directorRef.current,assembly=assemblyRef.current
         if(assembly){
           const {phase,t,holdMs}=director.update()
@@ -840,7 +837,7 @@ export default function SpatialApp(){
         {mode==='network'
           ?<button type="button" onClick={backToPromenade}>Promenade</button>
           :<button type="button" onClick={openNetwork} disabled={!nodes.length||composing}>Journey</button>}
-        {staged&&mode==='promenade'&&<button type="button" onClick={reopen}>New prompt</button>}
+        {staged&&mode==='promenade'&&<button type="button" onClick={reopen}>New Discovery</button>}
       </div>
     </header>
     {editionLabel&&<p className="spatial-chip" role="note" data-testid="spatial-edition-chip">{HONEST_COPY[editionLabel]}{fallbackReason&&REASON_COPY[fallbackReason]?` (${REASON_COPY[fallbackReason]})`:''}{(editionLabel==='meta'||editionLabel==='meta-cached')&&generationMode==='hybrid'?' · Hybrid':''}{(editionLabel==='meta'||editionLabel==='meta-cached')&&exhibits.some(exhibit=>exhibit.article)?' · Article edition':''}</p>}
