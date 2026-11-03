@@ -1,10 +1,12 @@
 import {z} from 'zod'
 
-// Frontend copy of the reviewed-SAM-objects read contract
+// Frontend copy of the SAM-objects read contract
 // (docs/sam-object-discovery-contract.md). Approved regions arrive only
 // through GET /api/catalog/object-regions/:versionId for exact version
-// IDs. Anything else (ineligible ID, 404, 503, network failure, schema
-// drift, empty set) resolves to null and the caller renders nothing.
+// IDs, either human-reviewed (`sam_detection`) or automatic catalog
+// hotspots (`sam_hotspot`, system-validated, never human-reviewed).
+// Anything else (ineligible ID, 404, 503, network failure, schema drift,
+// empty set) resolves to null and the caller renders nothing.
 export const VERSION_ID=/^version-[a-f0-9]{64}$/
 export function isVersionId(assetId:string):boolean{
   return VERSION_ID.test(assetId)
@@ -19,7 +21,7 @@ const region=z.strictObject({
   label:z.string().min(1).max(120),
   editorialDetail:z.string().min(1).max(2000),
   product:regionProduct.nullable(),
-  provenance:z.strictObject({origin:z.literal('sam_detection'),model:z.string().min(1).max(60),uncertainty:z.string().min(1).max(120),reviewed:z.literal(true)}),
+  provenance:z.strictObject({origin:z.union([z.literal('sam_detection'),z.literal('sam_hotspot')]),model:z.string().min(1).max(60),uncertainty:z.string().min(1).max(120),reviewed:z.boolean()}).refine(provenance=>(provenance.origin==='sam_detection')===provenance.reviewed),
   confidence:z.number().min(0).max(1).nullable(),
 })
 const regionsResponse=z.strictObject({

@@ -125,3 +125,15 @@ it('hides markers gracefully on 404 and empty sets, and the figure on image erro
   fireEvent.error(broken.getByRole('img'))
   expect(broken.container.innerHTML).toBe('')
 })
+
+it('shows automatic hotspots as catalog name plus description sentence only',async()=>{
+  const auto={...payload,regions:[{id:'job-1:0',box:{x:0.3,y:0.4,width:0.2,height:0.2},label:'Ceramic Vase',editorialDetail:'A wheel-thrown vase with a matte glaze.',product:{id:'product-1',name:'Ceramic Vase',kind:'owner_mockup'},provenance:{origin:'sam_hotspot',model:'sam-3.1',uncertainty:'system_validated_estimate',reviewed:false},confidence:0.8}]}
+  vi.stubGlobal('fetch',vi.fn(async()=>({ok:true,json:async()=>auto}) as Response))
+  const user=userEvent.setup()
+  render(<ObjectDiscovery assetId={versionId} image="/x.png" alt="Artwork for testing" authored={[]}/>)
+  await user.click(await screen.findByRole('button',{name:'Inspect Ceramic Vase'}))
+  expect(screen.getByRole('heading',{name:'Ceramic Vase'})).toBeTruthy()
+  expect(screen.getByText('A wheel-thrown vase with a matte glaze.')).toBeTruthy()
+  expect(screen.queryByText(/Reviewed detection/)).toBeNull()
+  expect(screen.queryByText(/fictional mockup/)).toBeNull()
+})

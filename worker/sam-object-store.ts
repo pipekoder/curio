@@ -8,6 +8,7 @@ const captureId=z.string().regex(/^sam-capture-[a-f0-9]{64}$/)
 const regionId=z.string().regex(/^[a-z0-9-]{1,80}$/)
 const reviewInput=z.strictObject({regionId,expectedRevision:z.number().int().min(0),status:z.enum(['approved','blocked']),editorialDetail:z.string().trim().min(10).max(500).refine(value=>!/(<[^>]*>|https?:\/\/|www\.)/i.test(value)).optional(),productId:z.string().regex(/^product-[a-z0-9-]{1,70}$/).nullable().default(null),identityEvidence:z.string().trim().max(300).refine(value=>!value||isSafeHttpsUrl(value)||/^docs\/[a-zA-Z0-9/_#.-]+$/.test(value)).nullable().default(null)})
 type StoredCapture={imageSha256:string;concept:string;regions:{id:string;detailId:string;box:{x:number;y:number;width:number;height:number};confidence:number|null}[]}
+type PublishedRegion={id:string;box:{x:number;y:number;width:number;height:number};label:string;editorialDetail:string;product:{id:string;name:string|null;kind:'owner_mockup'}|null;provenance:{origin:'sam_detection'|'sam_hotspot';model:string;uncertainty:string;reviewed:boolean};confidence:number|null}
 
 const digest=async(value:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),n=>n.toString(16).padStart(2,'0')).join('')
 export class SamObjectStore {
@@ -56,7 +57,7 @@ export class SamObjectStore {
   const item=publication.items.find(item=>item.image.id===versionId)
   if(!item||item.permissions.display.status!=='approved'||item.permissions.aiAnalysis.status!=='approved')return null
   const rows=(await this.db.prepare(`SELECT o.id,o.output_json,o.width,o.height,r.region_id,r.editorial_detail,r.product_id,r.identity_evidence,p.name AS product_name,m.sha256,m.active,m.deleted_at FROM object_regions o JOIN sam_object_reviews r ON r.capture_id=o.id JOIN media_objects m ON m.version_id=o.version_id LEFT JOIN media_products p ON p.id=r.product_id WHERE o.version_id=? AND o.origin='sam_detection' AND r.status='approved' ORDER BY o.created_at DESC LIMIT 40`).bind(versionId).all<{id:string;output_json:string;width:number;height:number;region_id:string;editorial_detail:string;product_id:string|null;identity_evidence:string|null;product_name:string|null;sha256:string;active:number;deleted_at:string|null}>()).results
-  const seen=new Set<string>(),regions=[]
+  const seen=new Set<string>(),regions:PublishedRegion[]=[]
   for(const row of rows){
    if(row.active!==1||row.deleted_at||!row.editorial_detail)continue
    const capture=JSON.parse(row.output_json) as StoredCapture
@@ -67,6 +68,26 @@ export class SamObjectStore {
    seen.add(row.region_id)
    regions.push({id:`${row.id}:${region.id}`,box:region.box,label:item.discoverableObjects.find(detail=>detail.id===region.detailId)?.label??capture.concept,editorialDetail:row.editorial_detail,product:row.product_id?{id:row.product_id,name:row.product_name,kind:'owner_mockup'}:null,provenance:{origin:'sam_detection',model:'sam-3.1',uncertainty:'model_estimate_not_identity',reviewed:true},confidence:region.confidence})
   }
+  regions.push(...await this.hotspotRegions(versionId))
   return {catalogId:item.id,assetId:versionId,width:item.image.width,height:item.image.height,regions}
+ }
+ // Automatic hotspot rows for an eligible version. Each row re-verifies
+ // the live fingerprint, active media and the exact product association;
+ // stale, revoked or malformed rows stay invisible without deletes.
+ async hotspotRegions(versionId:string){
+  const regions:PublishedRegion[]=[]
+  const jobs=(await this.db.prepare(`SELECT j.id,j.result_json,p.id AS product_id,p.name AS product_name FROM sam_hotspot_jobs j JOIN media_objects m ON m.version_id=j.version_id JOIN media_products p ON p.id=j.product_id WHERE j.version_id=? AND j.state='ready' AND j.image_sha256=m.sha256 AND m.active=1 AND m.deleted_at IS NULL AND EXISTS(SELECT 1 FROM media_product_images WHERE version_id=j.version_id AND product_id=j.product_id) ORDER BY j.created_at LIMIT 12`).bind(versionId).all<{id:string;result_json:string|null;product_id:string;product_name:string}>()).results
+  for(const job of jobs){
+   let parsed:unknown=null
+   try{parsed=job.result_json?JSON.parse(job.result_json):null}catch{continue}
+   if(!parsed||typeof parsed!=='object'||!('regions' in parsed)||!Array.isArray(parsed.regions)||!('sentence' in parsed)||typeof parsed.sentence!=='string'||!parsed.sentence)continue
+   for(const [index,region] of parsed.regions.entries()){
+    if(!region||typeof region!=='object'||!('box' in region))continue
+    const box=region.box as {x:number;y:number;width:number;height:number}
+    if([box.x,box.y,box.width,box.height].some(n=>typeof n!=='number'||!(n>=0)||!(n<=1))||!(box.width>0)||!(box.height>0)||box.x+box.width>1.000001||box.y+box.height>1.000001)continue
+    regions.push({id:`${job.id}:${index}`,box:{x:box.x,y:box.y,width:box.width,height:box.height},label:job.product_name.slice(0,120),editorialDetail:parsed.sentence.slice(0,400),product:{id:job.product_id,name:job.product_name,kind:'owner_mockup'},provenance:{origin:'sam_hotspot',model:'sam-3.1',uncertainty:'system_validated_estimate',reviewed:false},confidence:typeof region.confidence==='number'?region.confidence:null})
+   }
+  }
+  return regions
  }
 }

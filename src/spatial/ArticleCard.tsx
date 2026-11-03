@@ -1,4 +1,4 @@
-import {lazy,Suspense,useCallback,useEffect,useRef,useState,type ReactNode} from 'react'
+import {lazy,Suspense,useCallback,useEffect,useRef,type ReactNode} from 'react'
 import type {StagedArticleImage,StagedExhibit} from './staging'
 import type {StagedPlan} from './edition'
 import ObjectDiscovery from './ObjectDiscovery'
@@ -20,8 +20,7 @@ export default function ArticleCard({exhibit,plan,index,total,expanded,onToggle,
 }){
   const headingRef=useRef<HTMLHeadingElement>(null)
   const scroller=useRef<HTMLElement|null>(null)
-  const [hidden,setHidden]=useState<readonly string[]>([])
-  const storyImages=exhibit.article?.storyImages.filter(image=>!hidden.includes(image.assetId))
+  const storyImages=exhibit.article?.storyImages
   const ref=useCallback((el:HTMLElement|null)=>{
     if(scroller.current&&!el)scrollTop.current=scroller.current.scrollTop
     scroller.current=el
@@ -95,13 +94,10 @@ export default function ArticleCard({exhibit,plan,index,total,expanded,onToggle,
   const extras=(storyImages??[]).slice(1)
   const grouped=variant==='gallery'?extras.slice(0,2):[]
   const rest=variant==='gallery'?extras.slice(2):extras
-  const hide=(assetId:string)=>setHidden(failed=>failed.includes(assetId)?failed:[...failed,assetId])
   const figure=(image:StagedArticleImage,at:number)=>(
-    <figure key={`${image.assetId}-${at}`} className="article-hero eb-figure">
-      <img src={image.image} alt={image.alt} width={image.width} height={image.height} loading="lazy" onError={()=>hide(image.assetId)}/>
-      <figcaption className="article-brand">{image.brandName}</figcaption>
-      <figcaption className="spatial-fine">{image.attribution} · {image.rights}</figcaption>
-    </figure>
+    <ObjectDiscovery key={`${image.assetId}-${at}`} assetId={image.assetId} image={image.image} alt={image.alt}
+      authored={[]} loading="lazy" width={image.width} height={image.height} className="eb-figure"
+      caption={{brand:image.brandName,fine:`${image.attribution} · ${image.rights}`}}/>
   )
   // Photos interleave with the narrative in order: hero opens, the next
   // photo follows the introduction, the rest spread toward the late
@@ -129,6 +125,7 @@ export default function ArticleCard({exhibit,plan,index,total,expanded,onToggle,
       <div className="eb-herofigure">
         <ObjectDiscovery key={exhibit.assetId} assetId={exhibit.assetId} image={exhibit.image} alt={`Artwork for ${exhibit.title}`}
           authored={exhibit.hotspots} initialSelectedId={spotlightId} onConsumeSpotlight={onConsumeSpotlight}
+          width={storyImages?.[0]?.width} height={storyImages?.[0]?.height}
           caption={storyImages?.[0]?{brand:storyImages[0].brandName,fine:`${storyImages[0].attribution} · ${storyImages[0].rights}`}:undefined}/>
       </div>
     </div>

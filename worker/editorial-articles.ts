@@ -16,6 +16,7 @@ import {catalogDigest} from './catalog-store'
 import {EDITORIAL_KNOWLEDGE_VERSION,editorialKnowledgeInstruction,editorialV21Guidance,selectEditorialVoice} from '../shared/editorial-knowledge-v2'
 import {articleEvidenceForPrompt} from './article-evidence'
 import {ARTICLE_REVIEW_STEP_TIMEOUT_MS,ARTICLE_WORKFLOW_TIMEOUT_MS,articleChiefTimeoutMs} from './article-provider-timeout'
+import {collectHotspotTargets,runHotspotSweep} from './sam-hotspots'
 import {articlePlan,researchForArticle,type ResearchFinding} from './article-cultural-research'
 import {activePrincipleInstruction} from './editorial-feedback'
 
@@ -186,7 +187,7 @@ function validateReview(value:z.infer<typeof editorialReviewOutput>,edition:Arti
   return scoreEditorialReview(value)
 }
 
-export async function articleEditorialResponse(request:Request,env:Bindings,p:EditorialPreferences,mode:EditorialMode,preparedPool?:ArticlePool,articleCount:1|3=3,onStage?:(stage:ArticleGenerationStage)=>unknown){
+export async function articleEditorialResponse(request:Request,env:Bindings,p:EditorialPreferences,mode:EditorialMode,preparedPool?:ArticlePool,articleCount:1|3=3,onStage?:(stage:ArticleGenerationStage)=>unknown,schedule?:(task:Promise<unknown>)=>void){
   const reportStage=async(stage:ArticleGenerationStage)=>{try{await onStage?.(stage)}catch{/* Progress reporting never breaks generation. */}}
   const single=articleCount===1
   const v3=single&&env.EDITORIAL_WORKFLOW_V3_ENABLED==='true'
@@ -302,6 +303,10 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
       try{assessment=validateReview(confirmation,edition,sources)}catch{throw new ArticleWorkflowError(stage,'review_validation')}
       if(assessment.decision!=='PASS'||confirmation.featureFeedback.some(row=>row.issues.some(issue=>issue.severity==='high'))){outcome='fallback';return fallback('editorial_rejected')}
     }
+    // Automatic hotspots trigger only here: the edition passed validation
+    // and its image selections are locked. Scheduled background work never
+    // blocks publication; without a scheduler nothing runs.
+    try{schedule?.(runHotspotSweep(env,collectHotspotTargets(edition)).catch(()=>{}))}catch{/* Hotspots never break publication. */}
     const generation=generationMetadata(mode,revised)
     const evidence=evidencePack?{interpretations:evidencePack.interpretations.length}:null
     if(cache.size>=20)cache.delete(cache.keys().next().value!)

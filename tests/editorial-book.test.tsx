@@ -83,6 +83,14 @@ it('lazy-loads below-fold photos with stable dimensions',()=>{
   expect(container.querySelector('.eb-herofigure img')?.getAttribute('loading')).toBeNull()
 })
 
+it('renders object discovery on every story image, hero and non-hero',()=>{
+  const {container}=render(<ArticleCard {...props({template:'spread'})}/>)
+  expect(container.querySelectorAll('.object-frame')).toHaveLength(3)
+  expect(container.querySelector('.eb-herofigure .object-frame')).toBeTruthy()
+  expect(container.querySelectorAll('.eb-flow .object-frame')).toHaveLength(2)
+  expect(container.querySelectorAll('.eb-figure')).toHaveLength(2)
+})
+
 it('assigns a stable template from the article ID and falls back to spread',()=>{
   const assigned=templateOf('story-quiet-craft')
   const {container}=render(<ArticleCard {...props()}/>)
