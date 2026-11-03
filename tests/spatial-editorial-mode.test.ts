@@ -68,4 +68,10 @@ describe('generation metadata',()=>{
     expect(parseGenerationMetadata({version:'old',editorialMode:'lite'})).toBeNull()
     expect(parseGenerationMetadata(null)).toBeNull()
   })
+  it('retains revision and confirmation models when the workflow revised',()=>{
+    expect(parseGenerationMetadata({version:'curio-editorial-model-routing-v1',editorialMode:'lite',revisionModel:'muse-spark-1.3',confirmationModel:'muse-spark-1.3'}))
+      .toEqual({version:'curio-editorial-model-routing-v1',editorialMode:'lite',revisionModel:'muse-spark-1.3',confirmationModel:'muse-spark-1.3'})
+    expect(parseGenerationMetadata({version:'curio-editorial-model-routing-v1',editorialMode:'lite',revisionModel:null,confirmationModel:null}))
+      .toEqual({version:'curio-editorial-model-routing-v1',editorialMode:'lite',revisionModel:null,confirmationModel:null})
+  })
 })
