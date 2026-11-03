@@ -4,11 +4,12 @@ import {DatabaseSync} from 'node:sqlite'
 import {readFileSync} from 'node:fs'
 import {articleEvidenceForPrompt} from '../worker/article-evidence'
 import type {CatalogItem} from '../shared/catalog'
+import type {EditorialPreferences} from '../shared/editorial'
 import type {EditorialSource} from '../shared/editorial-sources'
 import type {VisualContext} from '../shared/visual-observations'
 import {ARTICLE_CONTRACT_VERSION,ARTICLE_SINGLE_CONTRACT_VERSION,type EditorialArticleEdition} from '../shared/editorial-articles'
 import {editorialDimensions,EDITORIAL_STANDARD_VERSION} from '../shared/editorial-standard'
-import {validateArticleEdition} from '../worker/editorial-articles'
+import {articleEditorialResponse,validateArticleEdition} from '../worker/editorial-articles'
 import {editorialApi} from '../worker/editorial'
 import {editorialArticlePool,ArticlePoolError,reportArticlePoolFailure} from '../worker/editorial-article-pool'
 import {runClassification,AssetAnalysisError} from '../worker/asset-classifier'
@@ -31,7 +32,7 @@ function edition(size=3,per=3):EditorialArticleEdition{
     return {id:`article-${selected[0].item.image.id}`,heroAssetId:selected[0].item.image.id,headline:`A Room for ${i+1}`,deck:'A distinct editorial angle.',narrative:'These owner described objects invite a different way to read the room.',images:selected.map(row=>({catalogId:row.item.id,assetId:row.item.image.id,brandName:row.sources[0].value,brandSourceId:row.sources[0].id,productSourceIds:[row.sources[2].id]})),sourceIds:selected.flatMap(row=>row.sources.map(source=>source.id))}
   })}
 }
-const preferences={interests:'Explore seating and everyday interiors',allocations:{home:100,fashion:0,travel:0},aesthetics:['Scandinavian'],mode:'Focused',consent:true}
+const preferences:EditorialPreferences={interests:'Explore seating and everyday interiors',allocations:{home:100,fashion:0,travel:0},aesthetics:['Scandinavian'],mode:'Focused',consent:true}
 function environment(overrides:Record<string,unknown>={}){
  const budget={idFromName:()=>({}),get:()=>({fetch:async(url:string)=>Response.json(url.endsWith('/reserve')?{allowed:true,reservationId:'r1'}:{ok:true})})}
  return {PUBLIC_APP_ORIGIN:origin,EDITORIAL_ARTICLES_ENABLED:'true',MAGAZINE_AI_ENABLED:'true',EDITORIAL_REVIEW_ENABLED:'true',EDITORIAL_PUBLIC_AI_ENABLED:'true',CATALOG_PUBLIC_ENABLED:'true',META_API_KEY:'fixture-only',META_SPARK_MODEL:'muse-spark-1.3',RATE_LIMIT_SALT:'fixture-salt-'.repeat(4),INFERENCE_BUDGET:budget,CATALOG_DB:{},MEDIA_BUCKET:{},...overrides} as never
@@ -477,5 +478,53 @@ it('keeps single-story and three-story jobs for the same prompt separate',async(
     expect(rows).toHaveLength(2)
     expect(new Set(rows.map(row=>row.id)).size).toBe(2)
     expect(rows.map(row=>row.state).sort()).toEqual(['completed','failed'])
+  }finally{sqlite.close()}
+})
+it('reports chief and reviewer stage entries through the progress hook',async()=>{
+  mockPool()
+  vi.stubGlobal('fetch',provider())
+  const seen:string[]=[]
+  const request=new Request(origin,{method:'POST',headers:{Origin:origin,'CF-Connecting-IP':'192.0.2.9'}})
+  const response=await articleEditorialResponse(request,environment(),preferences,'lite',undefined,3,stage=>{seen.push(stage)})
+  expect(response.status).toBe(200)
+  expect(seen).toEqual(['chief_editor','reviewer'])
+})
+it('reports revision and confirmation entries when review requests changes',async()=>{
+  mockPool()
+  vi.stubGlobal('fetch',provider(3,5))
+  const seen:string[]=[]
+  const request=new Request(origin,{method:'POST',headers:{Origin:origin,'CF-Connecting-IP':'192.0.2.9'}})
+  const response=await articleEditorialResponse(request,environment(),{...preferences,interests:'A revision-forcing study in quiet interiors'},'lite',undefined,3,stage=>{seen.push(stage)})
+  expect(response.status).toBe(200)
+  expect(seen).toEqual(['chief_editor','reviewer','revision','confirmation'])
+})
+it('reports a null evidence summary when the direct path builds no pack',async()=>{
+  mockPool()
+  vi.stubGlobal('fetch',provider())
+  const body=await (await post({})).json() as Record<string,unknown>
+  expect(body).toMatchObject({source:'meta'})
+  expect(body.evidence).toBeNull()
+})
+it('reports the built evidence count on prepared generations',async()=>{
+  const {sqlite,db}=preparationDb()
+  try{
+    vi.mocked(editorialArticlePool).mockResolvedValue(prepared(9,[]))
+    vi.stubGlobal('fetch',provider())
+    const body=await (await post({EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db})).json() as Record<string,unknown>
+    expect(body).toMatchObject({source:'meta'})
+    expect(body.evidence).toEqual({interpretations:9})
+  }finally{sqlite.close()}
+})
+it('includes the reported generation stage on in-flight polls',async()=>{
+  const {sqlite,db}=preparationDb()
+  try{
+    vi.mocked(editorialArticlePool).mockResolvedValue(prepared(5,[version(6)]))
+    const first=await post({EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db})
+    expect(first.status).toBe(202)
+    sqlite.prepare(`UPDATE article_edition_jobs SET state='generating',lease_token='held',lease_until=?,result_json=?`)
+      .run(Date.now()+60000,JSON.stringify({progress:{eligibleImages:5,remainingCandidates:1,processing:0},stage:'reviewer'}))
+    const second=await post({EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db})
+    expect(second.status).toBe(202)
+    expect(await second.json()).toMatchObject({preparation:{outcome:'reviewing'},generationStage:'reviewer',eligibleImages:5})
   }finally{sqlite.close()}
 })

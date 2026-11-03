@@ -35,6 +35,8 @@ export async function fetchCapabilities(fetchImpl:typeof fetch=fetch):Promise<Ed
 const generationMetadata=z.object({
   version:z.literal(MODEL_ROUTING_VERSION),
   editorialMode:z.enum(['lite','hybrid']),
+  revisionModel:z.string().nullable().optional(),
+  confirmationModel:z.string().nullable().optional(),
 })
 export type GenerationMetadata=z.infer<typeof generationMetadata>
 

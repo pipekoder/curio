@@ -3,7 +3,7 @@ import type {EditorialMode} from './editorial-model-routing'
 import type {Bindings} from './index'
 import {ARTICLE_CONTRACT_VERSION,ARTICLE_MIN_ELIGIBLE_IMAGES,ARTICLE_SINGLE_CONTRACT_VERSION,ARTICLE_SINGLE_MIN_ELIGIBLE_IMAGES} from '../shared/editorial-articles'
 import type {ArticleEditionBody} from '../shared/editorial-articles'
-import {articleEditorialResponse,validateArticleEdition} from './editorial-articles'
+import {articleEditorialResponse,validateArticleEdition,type ArticleGenerationStage} from './editorial-articles'
 import {editorialArticlePool,reportArticlePoolFailure,type ArticlePool} from './editorial-article-pool'
 import {runClassification,AssetAnalysisError} from './asset-classifier'
 import {catalogDigest} from './catalog-store'
@@ -32,8 +32,15 @@ const storedProgress=(job:JobRow):Progress=>{
   }catch{/* No saved progress yet. */}
   return emptyProgress
 }
-const pendingResponse=(base:Record<string,unknown>,requiredImages:number,progress:Progress,outcome:string,retryAfterMs:number)=>Response.json({...base,status:'preparing',fallbackReason:'analysis_pending',eligibleImages:progress.eligibleImages,requiredImages,
-  preparation:{outcome,remainingCandidates:progress.remainingCandidates,processing:progress.processing,retryAfterMs}},{status:202})
+const pendingResponse=(base:Record<string,unknown>,requiredImages:number,progress:Progress,outcome:string,retryAfterMs:number,generationStage?:ArticleGenerationStage|null)=>Response.json({...base,status:'preparing',fallbackReason:'analysis_pending',eligibleImages:progress.eligibleImages,requiredImages,
+  preparation:{outcome,remainingCandidates:progress.remainingCandidates,processing:progress.processing,retryAfterMs},...(generationStage?{generationStage}:{})},{status:202})
+const storedStage=(job:JobRow):ArticleGenerationStage|null=>{
+  try{
+    const value=(JSON.parse(job.result_json??'{}') as {stage?:unknown}).stage
+    if(value==='evidence'||value==='chief_editor'||value==='reviewer'||value==='revision'||value==='confirmation')return value
+  }catch{/* No reported stage yet. */}
+  return null
+}
 const failedResponse=(base:Record<string,unknown>,requiredImages:number,eligibleImages:number)=>Response.json({...base,status:'insufficient_content',fallbackReason:'insufficient_content',eligibleImages,requiredImages},{status:409})
 const evidenceDigest=(pool:ArticlePool,edition:ArticleEditionBody)=>{
   const ids=new Set(edition.articles.flatMap(article=>article.images.map(image=>image.assetId)))
@@ -86,11 +93,11 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
   }
   if(job.state==='completed'&&job.result_json)try{
     if(!pool)throw Error('Article pool unavailable')
-    const saved=JSON.parse(job.result_json) as {articleEdition:ArticleEditionBody;generation:unknown}
+    const saved=JSON.parse(job.result_json) as {articleEdition:ArticleEditionBody;generation:unknown;evidence?:{interpretations:number}|null}
     const edition=validateArticleEdition(saved.articleEdition,pool.items,pool.sources,pool.visualContexts,saved.articleEdition.articles.length)
     if(job.evidence_digest!==await evidenceDigest(pool,edition))throw Error('Evidence changed')
     return Response.json({format,source:'meta',retrieval:'d1',cached:true,articleEdition:edition,items:pool.items,generation:saved.generation,
-      inference:{attempted:false,reservedUnits:0,latencyMs:null,usage:null}})
+      ...(saved.evidence!==undefined?{evidence:saved.evidence}:{}),inference:{attempted:false,reservedUnits:0,latencyMs:null,usage:null}})
   }catch{/* A changed version, source or grant invalidates the saved result. */}
   if(job.state==='completed'){
     const changed={...base,status:'unavailable',fallbackReason:'evidence_changed'}
@@ -105,7 +112,7 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
     return failedResponse(base,minEligible,storedProgress(job).eligibleImages)
   }
   if(job.state==='generating'&&(!job.lease_until||job.lease_until<now))return Response.json({...base,status:'fallback',fallbackReason:'generation_interrupted'},{status:503})
-  if(job.lease_until&&job.lease_until>=now)return pendingResponse(base,minEligible,storedProgress(job),job.state==='generating'?'reviewing':'processing',15_000)
+  if(job.lease_until&&job.lease_until>=now)return pendingResponse(base,minEligible,storedProgress(job),job.state==='generating'?'reviewing':'processing',15_000,storedStage(job))
   const token=crypto.randomUUID()
   const claimed=await db.prepare(`UPDATE article_edition_jobs SET lease_token=?,lease_until=?,updated_at=? WHERE id=? AND (lease_until IS NULL OR lease_until<?) AND state='preparing' RETURNING id`).bind(token,now+LEASE_MS,now,identity.id,now).first()
   if(!claimed)return pendingResponse(base,minEligible,storedProgress(job),'processing',15_000)
@@ -129,11 +136,14 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
       const generationClaim=await db.prepare(`UPDATE article_edition_jobs SET state='generating',lease_until=?,updated_at=? WHERE id=? AND lease_token=? AND (SELECT COUNT(*) FROM article_edition_jobs WHERE updated_at>? AND state='generating' AND lease_until>?)<2 RETURNING id`)
         .bind(generationNow+LEASE_MS,generationNow,identity.id,token,generationNow-LEASE_MS,generationNow).first()
       if(!generationClaim)return pendingResponse(base,minEligible,progress,'waiting_for_capacity',15_000)
-      const result=await articleEditorialResponse(request,env,p,mode,pool,articleCount)
-      const payload=await result.clone().json() as {source?:string;articleEdition?:unknown;generation?:unknown}
+      const reportGenerationStage=async(stage:ArticleGenerationStage)=>{
+        await db.prepare(`UPDATE article_edition_jobs SET result_json=?,updated_at=? WHERE id=? AND lease_token=?`).bind(JSON.stringify({progress,stage}),Date.now(),identity.id,token).run()
+      }
+      const result=await articleEditorialResponse(request,env,p,mode,pool,articleCount,reportGenerationStage)
+      const payload=await result.clone().json() as {source?:string;articleEdition?:unknown;generation?:unknown;evidence?:{interpretations:number}|null}
       if(payload.source==='meta'&&payload.articleEdition){
         await db.prepare(`UPDATE article_edition_jobs SET state='completed',result_json=?,evidence_digest=?,lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`)
-          .bind(JSON.stringify({articleEdition:payload.articleEdition,generation:payload.generation}),await evidenceDigest(pool,payload.articleEdition as ArticleEditionBody),Date.now(),identity.id,token).run()
+          .bind(JSON.stringify({articleEdition:payload.articleEdition,generation:payload.generation,evidence:payload.evidence??null}),await evidenceDigest(pool,payload.articleEdition as ArticleEditionBody),Date.now(),identity.id,token).run()
       }else await db.prepare(`UPDATE article_edition_jobs SET state='failed',result_json=?,lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(JSON.stringify({failure:{status:result.status,body:payload}}),Date.now(),identity.id,token).run()
       return result
     }

@@ -21,7 +21,8 @@ const ARTICLE_WORKFLOW_VERSION='curio-article-workflow-demo-v2'
 const MAX_PROVIDER_INPUT_BYTES=96_000
 const modelUsage=z.object({prompt_tokens:z.number().int().min(0).max(10_000_000),completion_tokens:z.number().int().min(0).max(10_000_000),total_tokens:z.number().int().min(0).max(10_000_000)}).optional()
 type Measurement={inputTokens:number;outputTokens:number;totalTokens:number}
-const cache=new Map<string,{expires:number;edition:ArticleEditionBody;generation:ReturnType<typeof generationMetadata>}>()
+const cache=new Map<string,{expires:number;edition:ArticleEditionBody;generation:ReturnType<typeof generationMetadata>;evidence:{interpretations:number}|null}>()
+export type ArticleGenerationStage='evidence'|'chief_editor'|'reviewer'|'revision'|'confirmation'
 type ArticleStage='reservation'|'chief_editor'|'reviewer'|'revision'|'confirmation'
 type ArticleFailureCode='budget_unavailable'|'workflow_limit'|'context_limit'|'provider_http'|'provider_transport'|'provider_timeout'|'provider_response'|'response_json'|'response_schema'|'structural_validation'|'review_validation'
 class ArticleWorkflowError extends Error{
@@ -133,7 +134,8 @@ function validateReview(value:z.infer<typeof editorialReviewOutput>,edition:Arti
   return scoreEditorialReview(value)
 }
 
-export async function articleEditorialResponse(request:Request,env:Bindings,p:EditorialPreferences,mode:EditorialMode,preparedPool?:ArticlePool,articleCount:1|3=3){
+export async function articleEditorialResponse(request:Request,env:Bindings,p:EditorialPreferences,mode:EditorialMode,preparedPool?:ArticlePool,articleCount:1|3=3,onStage?:(stage:ArticleGenerationStage)=>unknown){
+  const reportStage=async(stage:ArticleGenerationStage)=>{try{await onStage?.(stage)}catch{/* Progress reporting never breaks generation. */}}
   const single=articleCount===1
   const format=single?ARTICLE_SINGLE_CONTRACT_VERSION:ARTICLE_CONTRACT_VERSION
   const minEligible=single?ARTICLE_SINGLE_MIN_ELIGIBLE_IMAGES:ARTICLE_MIN_ELIGIBLE_IMAGES
@@ -162,7 +164,7 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
   const contexts=pool.visualContexts.filter(context=>selectedIds.has(context.assetId))
   const count=articleCount
   let evidencePack:Awaited<ReturnType<typeof articleEvidenceForPrompt>>|null=null,evidenceRequestId:string|null=null
-  if(env.EDITORIAL_ARTICLE_PREPARATION_ENABLED==='true')try{evidencePack=await articleEvidenceForPrompt(env,p,pool)}catch(error){
+  if(env.EDITORIAL_ARTICLE_PREPARATION_ENABLED==='true')try{await reportStage('evidence');evidencePack=await articleEvidenceForPrompt(env,p,pool)}catch(error){
     evidenceRequestId=crypto.randomUUID()
     reportArticlePoolFailure(evidenceRequestId,new ArticlePoolError('evidence',error),'article_evidence_failure')
   }
@@ -177,7 +179,7 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
   const previous=cache.get(cacheKey)
   if(previous&&previous.expires>Date.now())try{
     const edition=validateArticleEdition(previous.edition,selectedItems,sources,contexts,count)
-    return Response.json({format,source:'meta',retrieval:'d1',cached:true,articleEdition:edition,items:selectedItems,generation:previous.generation,inference:{attempted:false,reservedUnits:0,latencyMs:null,usage:null}})
+    return Response.json({format,source:'meta',retrieval:'d1',cached:true,articleEdition:edition,items:selectedItems,generation:previous.generation,evidence:previous.evidence,inference:{attempted:false,reservedUnits:0,latencyMs:null,usage:null}})
   }catch{cache.delete(cacheKey)}
   const ip=request.headers.get('CF-Connecting-IP')
   if(!ip||ip.length>64)return Response.json({...base,status:'unavailable',fallbackReason:'configuration'},{status:503})
@@ -200,6 +202,7 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
     const reservation=new InferenceReservation(4)
     const call=async<T>(callStage:ArticleStage,model:string,instruction:string,input:unknown,schema:z.ZodType<T>,name:string,maxTokens:number)=>{
       stage=callStage
+      if(callStage!=='reservation')await reportStage(callStage)
       if(!reservation.claim())throw new ArticleWorkflowError(stage,'workflow_limit')
       const result=await structuredMuse(env.META_API_KEY!,model,instruction,input,schema,name,maxTokens,stage,()=>{called++},stage==='chief_editor'?chiefTimeoutMs:ARTICLE_REVIEW_STEP_TIMEOUT_MS,workflowSignal)
       if(result.usage)measurements.push(result.usage)
@@ -225,10 +228,11 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
       if(assessment.decision!=='PASS'||confirmation.featureFeedback.some(row=>row.issues.some(issue=>issue.severity==='high'))){outcome='fallback';return fallback('editorial_rejected')}
     }
     const generation=generationMetadata(mode,revised)
+    const evidence=evidencePack?{interpretations:evidencePack.interpretations.length}:null
     if(cache.size>=20)cache.delete(cache.keys().next().value!)
-    cache.set(cacheKey,{edition,generation,expires:Date.now()+300_000})
+    cache.set(cacheKey,{edition,generation,evidence,expires:Date.now()+300_000})
     outcome='completed'
-    return Response.json({format,source:'meta',retrieval:'d1',cached:false,articleEdition:edition,items:selectedItems,generation,inference:{attempted:true,reservedUnits:4,latencyMs:Math.round(performance.now()-started),usage:measurements.length?{inputTokens:measurements.reduce((n,row)=>n+row.inputTokens,0),outputTokens:measurements.reduce((n,row)=>n+row.outputTokens,0),totalTokens:measurements.reduce((n,row)=>n+row.totalTokens,0)}:null}})
+    return Response.json({format,source:'meta',retrieval:'d1',cached:false,articleEdition:edition,items:selectedItems,generation,evidence,inference:{attempted:true,reservedUnits:4,latencyMs:Math.round(performance.now()-started),usage:measurements.length?{inputTokens:measurements.reduce((n,row)=>n+row.inputTokens,0),outputTokens:measurements.reduce((n,row)=>n+row.outputTokens,0),totalTokens:measurements.reduce((n,row)=>n+row.totalTokens,0)}:null}})
   }catch(error){return fallback('provider_or_validation',undefined,workflowFailure(stage,error))}
   finally{if(reservationId)await finishInference(env,reservationId,outcome).catch(()=>{})}
 }
