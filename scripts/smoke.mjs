@@ -77,10 +77,15 @@ try {
     body: JSON.stringify({ interests: 'Quiet rooms', lifestyles: ['Scandinavian'], allocations: { home: 40, fashion: 30, travel: 30 }, consent: true }),
   })
   assert.equal(response.status, 503)
-  assert.equal((await response.json()).status, 'disabled')
+  // wrangler.jsonc enables the magazine flag, so local workerd passes the
+  // 'disabled' gate and stops at 'not_configured': no Meta key, budget, or
+  // abuse-protection bindings exist in this offline environment.
+  const payload = await response.json()
+  assert.equal(payload.status, 'not_configured')
+  assert.equal(payload.message, 'Generation is unavailable until the operator configures Meta and abuse protection.')
   const invalid = await fetch(`${base}/api/magazine`, { method: 'POST', body: '{' })
   assert.equal(invalid.status, 400)
-  console.log('PASS: local workerd health, built React assets, SPA deep link, API 404s, disabled magazine 503, invalid JSON 400')
+  console.log('PASS: local workerd health, built React assets, SPA deep link, API 404s, unconfigured magazine 503, invalid JSON 400')
 } finally {
   const exited = once(child, 'exit')
   child.kill('SIGTERM')
