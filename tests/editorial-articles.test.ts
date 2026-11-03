@@ -202,3 +202,26 @@ it('stores distinct source-linked perspectives for different curiosity prompts a
   expect(a.interpretations[0]).toMatchObject({origin:'deterministic',status:'editorial_perspective',assetVersionId:items[0].image.id,sourceIds:[sources[0].id,sources[1].id]})
  }finally{sqlite.close()}
 })
+it('stages a full 15-draft prompt within the D1 bound-variable limit',async()=>{
+ const {sqlite,db}=preparationDb()
+ try{
+  const inner=db as unknown as {prepare:(sql:string)=>{bind:(...params:unknown[])=>unknown}}
+  const d1={prepare:(sql:string)=>({bind:(...params:unknown[])=>{if(params.length>100)throw Error('D1_ERROR: too many SQL variables');return inner.prepare(sql).bind(...params)}})}
+  const pack=await articleEvidenceForPrompt({CATALOG_DB:d1} as never,{...preferences,interests:'Daily rituals around seating and craft'} as never,prepared(15,[]))
+  expect(pack.interpretations).toHaveLength(15)
+  expect((sqlite.prepare('SELECT COUNT(*) AS n FROM article_interpretations').get() as {n:number}).n).toBe(15)
+ }finally{sqlite.close()}
+})
+it('re-serves the stored generation failure for a failed job instead of reporting insufficient content',async()=>{
+ const {sqlite,db}=preparationDb()
+ try{
+  const interests='A failed evidence investigation with a stored reason'
+  vi.mocked(editorialArticlePool).mockResolvedValueOnce(prepared(14,[]))
+  expect((await post({EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db},{interests})).status).toBe(409)
+  sqlite.prepare('UPDATE article_edition_jobs SET result_json=?').run(JSON.stringify({failure:{status:503,body:{format:ARTICLE_CONTRACT_VERSION,source:'deterministic',retrieval:'d1',cached:false,articleEdition:null,status:'unavailable',fallbackReason:'evidence_unavailable'}}}))
+  vi.mocked(editorialArticlePool).mockResolvedValue(prepared(16,[]))
+  const second=await post({EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db},{interests})
+  expect(second.status).toBe(503)
+  expect(await second.json()).toMatchObject({status:'unavailable',fallbackReason:'evidence_unavailable'})
+ }finally{sqlite.close()}
+})

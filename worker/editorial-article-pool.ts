@@ -19,7 +19,7 @@ export type ArticlePool={items:CatalogItem[];sources:EditorialSource[];visualCon
   preparation?:{pendingVersionIds:string[];processing:number;failed:number;exclusions:Record<Exclusion,number>;rankedCount:number;evaluatedCount:number;activeMediaCount?:number;publishedInPromptWindow?:number}}
 const emptyExclusions=():Record<Exclusion,number>=>({relevance_or_window:0,publication:0,permissions:0,metadata:0,sources:0,image_integrity:0,observations:0,analysis_processing:0,analysis_failed:0,invalid_observations:0,duplicate_image:0})
 
-export type ArticlePoolStage='retrieve'|'publications'|'verify'|'sources'|'jobs'|'cultural'
+export type ArticlePoolStage='retrieve'|'publications'|'verify'|'sources'|'jobs'|'cultural'|'evidence'
 export class ArticlePoolError extends Error{
   constructor(readonly stage:ArticlePoolStage,readonly cause:unknown){super(`article pool ${stage} failed`)}
 }
@@ -30,14 +30,14 @@ const stage=async<T>(name:ArticlePoolStage,run:()=>Promise<T>):Promise<T>=>{
 // Operator-only failure record for Cloudflare Logs. Classifies the pool
 // stage and error family with a correlation ID; never image metadata, R2
 // keys, SQL, values, or secrets. The public contract stays untouched.
-export function reportArticlePoolFailure(requestId:string,error:unknown):{stage:ArticlePoolStage|'unknown';code:string}{
+export function reportArticlePoolFailure(requestId:string,error:unknown,event='article_pool_failure'):{stage:ArticlePoolStage|'unknown';code:string}{
   const cause=error instanceof ArticlePoolError?error.cause:error
   const stage=error instanceof ArticlePoolError?error.stage:'unknown'
-  const code=cause instanceof ZodError?'validation':cause instanceof Error&&/d1_|sqlite|database|no such table|no such column/i.test(cause.message)?'d1':'error'
+  const code=cause instanceof ZodError?'validation':cause instanceof Error&&/d1_|sqlite|database|no such table|no such column|too many.*variable/i.test(cause.message)?'d1':'error'
   const detail=cause instanceof ZodError
     ?cause.issues.map(issue=>`${issue.path.join('.')}:${issue.code}`).join(',').slice(0,200)
     :cause instanceof Error?cause.message.replace(/\s+/g,' ').slice(0,200):'unknown'
-  console.error(JSON.stringify({event:'article_pool_failure',requestId,stage,code,detail}))
+  console.error(JSON.stringify({event,requestId,stage,code,detail}))
   return {stage,code}
 }
 
