@@ -20,7 +20,7 @@ export async function loadEditorialSources(db:D1Database,versionIds:readonly str
     JOIN media_products p ON p.id=pi.product_id JOIN media_brands b ON b.id=p.brand_id
     LEFT JOIN media_campaign_images ci ON ci.version_id=m.version_id LEFT JOIN media_campaigns c ON c.id=ci.campaign_id
     WHERE m.active=1 AND m.version_id IN(SELECT value FROM json_each(?))
-    AND trim(p.name)<>'' AND trim(p.description)<>'' AND trim(b.name)<>'' AND (trim(b.story)<>'' OR trim(b.description)<>'')`).bind(JSON.stringify(versionIds)).all<SourceRow>()).results
+    AND trim(p.name)<>'' AND trim(b.name)<>''`).bind(JSON.stringify(versionIds)).all<SourceRow>()).results
   // One version can have several product/campaign links. Source IDs encode
   // only version + kind, so conflicting rows would otherwise overwrite facts.
   // Exclude ambiguous versions instead of presenting an arbitrary last row.
@@ -31,7 +31,9 @@ export async function loadEditorialSources(db:D1Database,versionIds:readonly str
     return peers.every(peer=>JSON.stringify(peer)===JSON.stringify(row))
   })
   const values=unambiguous.flatMap(row=>{
-    const result:EditorialSource[]=[source(row,'brand_name','Brand name',row.brand_name),source(row,'product_name','Product name',row.product_name),source(row,'product_description','Product description',row.product_description),source(row,'product_category','Product category',row.category)]
+    const result:EditorialSource[]=[source(row,'brand_name','Brand name',row.brand_name),source(row,'product_name','Product name',row.product_name)]
+    if(clean(row.product_description))result.push(source(row,'product_description','Product description',row.product_description))
+    if(clean(row.category))result.push(source(row,'product_category','Product category',row.category))
     if(clean(row.brand_story))result.push(source(row,'brand_story','Brand story',row.brand_story))
     if(clean(row.brand_description))result.push(source(row,'brand_description','Brand description',row.brand_description))
     if(clean(row.country))result.push(source(row,'brand_country','Brand country',row.country!))

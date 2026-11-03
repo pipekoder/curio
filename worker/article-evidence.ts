@@ -21,7 +21,7 @@ export async function articleEvidenceForPrompt(env:Bindings,p:EditorialPreferenc
   for(const item of candidates){
     const context=pool.visualContexts.find(row=>row.assetId===item.image.id)
     const sources=pool.sources.filter(source=>source.assetId===item.image.id&&source.source==='content_studio').slice(0,12)
-    if(!context?.imageSha256||!sources.some(source=>source.kind==='brand_name')||!sources.some(source=>source.kind==='product_description'))continue
+    if(!context?.imageSha256||!sources.some(source=>source.kind==='brand_name')||!sources.some(source=>source.kind==='product_name'))continue
     const sourceDigest=await catalogDigest(JSON.stringify(sources)),observationDigest=await catalogDigest(JSON.stringify(context))
     const id=`interpretation-${await catalogDigest(JSON.stringify([item.image.id,context.imageSha256,intentDigest,sourceDigest,observationDigest,ARTICLE_INTERPRETATION_VERSION]))}`
     const product=sources.find(source=>source.kind==='product_name')?.value?.slice(0,72)??'this owner-described product'
