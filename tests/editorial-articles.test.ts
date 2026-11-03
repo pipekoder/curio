@@ -10,10 +10,10 @@ import {ARTICLE_CONTRACT_VERSION,type EditorialArticleEdition} from '../shared/e
 import {editorialDimensions,EDITORIAL_STANDARD_VERSION} from '../shared/editorial-standard'
 import {validateArticleEdition} from '../worker/editorial-articles'
 import {editorialApi} from '../worker/editorial'
-import {editorialArticlePool} from '../worker/editorial-article-pool'
+import {editorialArticlePool,ArticlePoolError,reportArticlePoolFailure} from '../worker/editorial-article-pool'
 import {runClassification,AssetAnalysisError} from '../worker/asset-classifier'
 
-vi.mock('../worker/editorial-article-pool',()=>({editorialArticlePool:vi.fn()}))
+vi.mock('../worker/editorial-article-pool',async importOriginal=>({...await importOriginal<typeof import('../worker/editorial-article-pool')>(),editorialArticlePool:vi.fn()}))
 vi.mock('../worker/asset-classifier',async importOriginal=>({...await importOriginal<typeof import('../worker/asset-classifier')>(),runClassification:vi.fn()}))
 const origin='https://curio.example'
 const version=(n:number)=>`version-${n.toString(16).padStart(64,'0')}`
@@ -54,6 +54,29 @@ it('rejects wrong catalog joins, unsupported brand attribution, missing product 
   const candidate=structuredClone(edition());mutate(candidate);expect(()=>validateArticleEdition(candidate,items,sources,contexts,8)).toThrow()
  }
  expect(()=>validateArticleEdition(edition(),items,sources,contexts.filter(context=>context.assetId!==items[0].image.id),8)).toThrow()
+})
+it('keeps the public contract on pool failure while logging stage and correlation id',async()=>{
+  const logged:unknown[][]=[]
+  const sink=console.error
+  console.error=(...args:unknown[])=>{logged.push(args)}
+  try{
+    vi.mocked(editorialArticlePool).mockRejectedValueOnce(new ArticlePoolError('sources',new Error('D1_ERROR: no such table: media_products')))
+    const result=await post()
+    expect(result.status).toBe(503)
+    expect(await result.json()).toEqual({format:ARTICLE_CONTRACT_VERSION,source:'deterministic',retrieval:'d1',cached:false,articleEdition:null,status:'unavailable',fallbackReason:'catalog_unavailable'})
+    const requestId=result.headers.get('X-Curio-Request-Id')
+    expect(requestId).toMatch(/^[0-9a-f-]{36}$/)
+    const record=JSON.parse(String(logged[0][0]))
+    expect(record).toMatchObject({event:'article_pool_failure',requestId,stage:'sources',code:'d1'})
+    // Structured validation detail carries paths and codes, never values.
+    const {z}=await import('zod')
+    const parsed=z.string().max(5).safeParse('secret-value-123')
+    if(parsed.success)throw Error('fixture must fail validation')
+    reportArticlePoolFailure('req-fixture',new ArticlePoolError('verify',parsed.error))
+    const redacted=JSON.parse(String(logged[1][0]))
+    expect(redacted).toMatchObject({event:'article_pool_failure',requestId:'req-fixture',stage:'verify',code:'validation'})
+    expect(String(redacted.detail)).not.toContain('secret-value-123')
+  }finally{console.error=sink}
 })
 it('is default-off, retains the ordinary endpoint, and reports insufficient content without inference',async()=>{
  mockPool(14);expect((await post({EDITORIAL_ARTICLES_ENABLED:'false'})).status).toBe(503)
