@@ -29,12 +29,14 @@
 .spatial-rail-card.editorial-book .eb-headline{
   font-family:var(--editorial-display);font-weight:400;
   font-size:46px;line-height:1.05;letter-spacing:-.015em;
-  color:var(--editorial-ink);margin:0 0 20px;overflow-wrap:break-word;
+  color:var(--editorial-ink);margin:0 0 20px;overflow-wrap:normal;word-break:normal;
 }
 .editorial-book .eb-deck{
   font-family:var(--editorial-display)!important;font-style:italic;
-  font-size:19px!important;line-height:1.5!important;margin:0;
+  font-size:19px!important;line-height:1.5!important;margin:0;max-width:60ch;
 }
+.editorial-book .eb-hero>*,
+.editorial-book .eb-flow>*{min-width:0}
 
 /* Single-column flow: mobile first. */
 .editorial-book .eb-hero{display:grid;gap:24px;margin:0 0 64px}
@@ -79,23 +81,24 @@
 /* Desktop: full 12-column editorial grid. */
 @media(min-width:1024px){
   .spatial-story.is-expanded.editorial-book{width:min(94vw,1120px);padding:56px clamp(48px,5vw,80px) 96px}
-  .spatial-story.is-expanded.editorial-book .eb-headline{font-size:clamp(64px,6vw,80px);line-height:.98;letter-spacing:-.025em;margin-bottom:24px}
+  .spatial-story.is-expanded.editorial-book .eb-headline{font-size:clamp(42px,5vw,80px);line-height:1.05;letter-spacing:-.025em;margin-bottom:24px}
   .editorial-book .eb-deck{font-size:24px!important}
   .editorial-book:not(.is-compact) .eb-hero{grid-template-columns:repeat(12,minmax(0,1fr));column-gap:24px;margin-bottom:112px}
   .editorial-book:not(.is-compact) .eb-flow{grid-template-columns:repeat(12,minmax(0,1fr));column-gap:24px;row-gap:28px}
   .editorial-book:not(.is-compact) .eb-flow>p{font-size:18px;line-height:1.72}
   .editorial-book:not(.is-compact) .eb-group{gap:20px}
-  /* Template 01 — Editorial Spread: headline block beside the hero,
-     narrative in a right-hand column, figures alternating wide. */
-  .editorial-book.is-spread:not(.is-compact) .eb-headblock{grid-column:1/6}
-  .editorial-book.is-spread:not(.is-compact) .eb-herofigure{grid-column:6/13}
+  /* Template 01 — Editorial Spread: full-width headline header above
+     the photography grid; 7-column hero, narrative in a right-hand
+     column, figures alternating wide. */
+  .editorial-book.is-spread:not(.is-compact) .eb-headblock{grid-column:1/13}
+  .editorial-book.is-spread:not(.is-compact) .eb-herofigure{grid-column:1/8}
   .editorial-book.is-spread:not(.is-compact) .eb-flow>p{grid-column:7/13;max-width:640px}
   .editorial-book.is-spread:not(.is-compact) .eb-flow>.eb-figure:nth-of-type(odd){grid-column:1/8}
   .editorial-book.is-spread:not(.is-compact) .eb-flow>.eb-figure:nth-of-type(even){grid-column:6/13}
   .editorial-book.is-spread:not(.is-compact) .eb-flow>.eb-figure:nth-of-type(1){grid-column:1/5}
   /* Template 02 — Gallery Composition: full-width headline and main
      image, supporting group beside the narrative. */
-  .editorial-book.is-gallery:not(.is-compact) .eb-headblock{grid-column:1/13;max-width:13ch}
+  .editorial-book.is-gallery:not(.is-compact) .eb-headblock{grid-column:1/13}
   .editorial-book.is-gallery:not(.is-compact) .eb-herofigure{grid-column:1/13}
   .editorial-book.is-gallery:not(.is-compact) .eb-flow>p{grid-column:6/13;max-width:640px}
   .editorial-book.is-gallery:not(.is-compact) .eb-group{grid-column:1/6}
@@ -105,7 +108,7 @@
      keeps the headline before the image for assistive tech), narrow
      narrative column, alternating wide and narrow figures. */
   .editorial-book.is-fullbleed:not(.is-compact) .eb-herofigure{grid-column:1/13;grid-row:1}
-  .editorial-book.is-fullbleed:not(.is-compact) .eb-headblock{grid-column:3/12;grid-row:2;max-width:13ch}
+  .editorial-book.is-fullbleed:not(.is-compact) .eb-headblock{grid-column:1/13;grid-row:2}
   .editorial-book.is-fullbleed:not(.is-compact) .eb-flow>p{grid-column:4/11;max-width:680px}
   .editorial-book.is-fullbleed:not(.is-compact) .eb-flow>.eb-figure:nth-of-type(odd){grid-column:1/13}
   .editorial-book.is-fullbleed:not(.is-compact) .eb-flow>.eb-figure:nth-of-type(even){grid-column:4/10}
