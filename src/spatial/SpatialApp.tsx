@@ -11,7 +11,6 @@ import type {CatalogNode} from './contracts'
 import {editionStatusCopy,fetchEdition,type HonestState,type StagedPlan} from './edition'
 import {fetchCapabilities,type EditorialCapabilities,type EditorialMode,type GenerationMetadata} from './editorial-mode'
 import {INTEREST_SEEDS,SEED_DISPLAY,drawSurprise,pickSuggestions,type InterestSeed} from './prompt-library'
-import ArticleCard from './ArticleCard'
 import type {ProgressSnapshot} from './editorial-progress'
 import type {StagedExhibit} from './staging'
 import {AssemblyDirector} from './assembly'
@@ -26,8 +25,10 @@ import './spatial.css'
 
 // Generation-only UI stays out of the initial spatial chunk: the progress
 // monitor, its tracker, and exhibit staging all load with the existing
-// dynamic import inside submit(), alongside './articles'.
+// dynamic import inside submit(), alongside './articles'. The reading
+// surface preloads the same way: exhibits render only after staging.
 const EditorialProgress=lazy(()=>import('./EditorialProgress'))
+const ArticleCard=lazy(()=>import('./ArticleCard'))
 
 type DebugSnapshot={distance:number;cameraZ:number;cameraY:number;current:number;exhibits:number;nodes:number;source:NodeSource|'pending';assembly:string;mode:string;orbit:{yaw:number;pitch:number;radius:number};selected:number;staged:string[];nodeIds:string[];honest:HonestState|null}
 type Transit={t0:number;dur:number;fromPos:THREE.Vector3;fromLook:THREE.Vector3;toPos:THREE.Vector3;toLook:THREE.Vector3;onFrame?:(k:number)=>void;onDone:()=>void}
@@ -467,6 +468,7 @@ export default function SpatialApp(){
     const wantArticles=formatOverride?formatOverride==='articles':articleFormat
     const wantStory=!wantArticles&&(formatOverride?formatOverride==='story':consent&&!articleFormat)
     const wantCount:1|3=wantArticles?3:1
+    await import('./ArticleCard')
     const tearDownAssembly=()=>{
       setComposing(false)
       window.clearInterval(tickerRef.current)
@@ -931,12 +933,12 @@ export default function SpatialApp(){
       </p>}
     </section>}
     {active&&mode==='promenade'&&<section id="spatial-rail" tabIndex={-1} className="spatial-rail" aria-label={`Contents of ${active.title}`}>
-      <ArticleCard key={active.assetId} exhibit={active} plan={planRef.current} index={current} total={exhibits.length}
+      <Suspense fallback={null}><ArticleCard key={active.assetId} exhibit={active} plan={planRef.current} index={current} total={exhibits.length}
         expanded={false} onToggle={expandStory} scrollTop={articleScroll}
-        spotlightId={spotlight?.assetId===active.assetId?spotlight.hotspotId:null} onConsumeSpotlight={consumeSpotlight}/>
+        spotlightId={spotlight?.assetId===active.assetId?spotlight.hotspotId:null} onConsumeSpotlight={consumeSpotlight}/></Suspense>
     </section>}
-    {expanded&&active&&mode==='promenade'&&<ArticleCard key={`expanded-${active.assetId}`} exhibit={active} plan={planRef.current} index={current} total={exhibits.length}
-      expanded onToggle={collapseStory} scrollTop={articleScroll} spotlightId={null} onConsumeSpotlight={consumeSpotlight}/>}
+    {expanded&&active&&mode==='promenade'&&<Suspense fallback={null}><ArticleCard key={`expanded-${active.assetId}`} exhibit={active} plan={planRef.current} index={current} total={exhibits.length}
+      expanded onToggle={collapseStory} scrollTop={articleScroll} spotlightId={null} onConsumeSpotlight={consumeSpotlight}/></Suspense>}
     {mode==='network'&&<nav id="spatial-journey" tabIndex={-1} className="spatial-journey-bar" aria-label="Journey network">
       <button type="button" onClick={backToPromenade}>← Promenade</button>
       <button type="button" onClick={surprise}>Surprise me</button>

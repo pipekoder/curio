@@ -1,0 +1,124 @@
+/* Editorial Book design system. Scoped strictly to the AI Story reader
+   (.editorial-book on ArticleCard); nothing here touches Discover,
+   Generating, Exhibition chrome, Journey, or the progress monitor. */
+
+.editorial-book{
+  --editorial-display:'Instrument Serif',Georgia,serif;
+  --editorial-body:'Avenir Next','Segoe UI',Arial,sans-serif;
+  --editorial-space-1:8px;
+  --editorial-space-2:16px;
+  --editorial-space-3:24px;
+  --editorial-space-4:32px;
+  --editorial-space-5:48px;
+  --editorial-space-6:64px;
+  --editorial-space-7:96px;
+  --editorial-space-8:128px;
+  --editorial-ink:#101219;
+  --editorial-secondary:#3c4350;
+  --editorial-muted:#626b7a;
+  --editorial-rule:#e0e5ed;
+}
+
+/* Eyebrow / index. */
+.editorial-book .article-head .spatial-eyebrow{
+  font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--editorial-muted);
+}
+
+/* Hero headline + deck. */
+.spatial-story.is-expanded.editorial-book .eb-headline,
+.spatial-rail-card.editorial-book .eb-headline{
+  font-family:var(--editorial-display);font-weight:400;
+  font-size:46px;line-height:1.05;letter-spacing:-.015em;
+  color:var(--editorial-ink);margin:0 0 20px;overflow-wrap:break-word;
+}
+.editorial-book .eb-deck{
+  font-family:var(--editorial-display)!important;font-style:italic;
+  font-size:19px!important;line-height:1.5!important;margin:0;
+}
+
+/* Single-column flow: mobile first. */
+.editorial-book .eb-hero{display:grid;gap:24px;margin:0 0 64px}
+.editorial-book .eb-flow{display:grid;row-gap:20px}
+.editorial-book .eb-flow>p{
+  font-family:var(--editorial-body);font-size:16px;line-height:1.68;
+  color:var(--editorial-secondary);margin:0;max-width:70ch;
+}
+.editorial-book .eb-group{display:grid;gap:12px}
+.editorial-book .eb-thread{margin-top:24px}
+
+/* Borderless photography; natural aspect ratios, never cropped. */
+.editorial-book .article-hero,
+.editorial-book .object-figure{
+  margin:0;border:none;border-radius:4px;background:transparent;box-shadow:none;overflow:hidden;
+}
+.editorial-book .article-hero img,
+.editorial-book .object-frame img{display:block;width:100%;height:auto}
+.editorial-book .article-brand{padding:10px 0 0;font-size:12px;letter-spacing:.04em}
+.editorial-book .article-hero .spatial-fine,
+.editorial-book .object-figure .spatial-fine{padding:2px 0 0;margin:0;letter-spacing:.04em}
+.editorial-book .spatial-sources{margin-top:32px}
+
+/* Tablet: 6-column grid, stacked hero, mild asymmetry. */
+@media(min-width:640px){
+  .spatial-story.is-expanded.editorial-book{padding:44px 36px 80px}
+  .spatial-story.is-expanded.editorial-book .eb-headline{font-size:64px;line-height:1.02;letter-spacing:-.02em}
+  .editorial-book .eb-deck{font-size:21px!important}
+  .editorial-book:not(.is-compact) .eb-hero{grid-template-columns:repeat(6,minmax(0,1fr));column-gap:20px}
+  .editorial-book:not(.is-compact) .eb-headblock{grid-column:1/7}
+  .editorial-book:not(.is-compact) .eb-herofigure{grid-column:1/7}
+  .editorial-book:not(.is-compact) .eb-flow{grid-template-columns:repeat(6,minmax(0,1fr));column-gap:20px;row-gap:24px}
+  .editorial-book:not(.is-compact) .eb-flow>p{grid-column:1/6;font-size:17px;line-height:1.7}
+  .editorial-book:not(.is-compact) .eb-flow>.eb-figure{grid-column:1/7}
+  .editorial-book:not(.is-compact) .eb-flow>.eb-figure:nth-of-type(even){grid-column:2/7}
+  .editorial-book:not(.is-compact) .eb-group{grid-column:1/7;gap:16px}
+  .editorial-book .article-hero .spatial-fine,
+  .editorial-book .object-figure .spatial-fine{font-size:12px!important}
+  .editorial-book .spatial-sources{margin-top:48px}
+}
+
+/* Desktop: full 12-column editorial grid. */
+@media(min-width:1024px){
+  .spatial-story.is-expanded.editorial-book{width:min(94vw,1120px);padding:56px clamp(48px,5vw,80px) 96px}
+  .spatial-story.is-expanded.editorial-book .eb-headline{font-size:clamp(64px,6vw,80px);line-height:.98;letter-spacing:-.025em;margin-bottom:24px}
+  .editorial-book .eb-deck{font-size:24px!important}
+  .editorial-book:not(.is-compact) .eb-hero{grid-template-columns:repeat(12,minmax(0,1fr));column-gap:24px;margin-bottom:112px}
+  .editorial-book:not(.is-compact) .eb-flow{grid-template-columns:repeat(12,minmax(0,1fr));column-gap:24px;row-gap:28px}
+  .editorial-book:not(.is-compact) .eb-flow>p{font-size:18px;line-height:1.72}
+  .editorial-book:not(.is-compact) .eb-group{gap:20px}
+  /* Template 01 — Editorial Spread: headline block beside the hero,
+     narrative in a right-hand column, figures alternating wide. */
+  .editorial-book.is-spread:not(.is-compact) .eb-headblock{grid-column:1/6}
+  .editorial-book.is-spread:not(.is-compact) .eb-herofigure{grid-column:6/13}
+  .editorial-book.is-spread:not(.is-compact) .eb-flow>p{grid-column:7/13;max-width:640px}
+  .editorial-book.is-spread:not(.is-compact) .eb-flow>.eb-figure:nth-of-type(odd){grid-column:1/8}
+  .editorial-book.is-spread:not(.is-compact) .eb-flow>.eb-figure:nth-of-type(even){grid-column:6/13}
+  .editorial-book.is-spread:not(.is-compact) .eb-flow>.eb-figure:nth-of-type(1){grid-column:1/5}
+  /* Template 02 — Gallery Composition: full-width headline and main
+     image, supporting group beside the narrative. */
+  .editorial-book.is-gallery:not(.is-compact) .eb-headblock{grid-column:1/13;max-width:13ch}
+  .editorial-book.is-gallery:not(.is-compact) .eb-herofigure{grid-column:1/13}
+  .editorial-book.is-gallery:not(.is-compact) .eb-flow>p{grid-column:6/13;max-width:640px}
+  .editorial-book.is-gallery:not(.is-compact) .eb-group{grid-column:1/6}
+  .editorial-book.is-gallery:not(.is-compact) .eb-flow>.eb-figure:nth-of-type(odd){grid-column:1/8}
+  .editorial-book.is-gallery:not(.is-compact) .eb-flow>.eb-figure:nth-of-type(even){grid-column:6/13}
+  /* Template 03 — Full-Bleed Story: immersive hero first (DOM order
+     keeps the headline before the image for assistive tech), narrow
+     narrative column, alternating wide and narrow figures. */
+  .editorial-book.is-fullbleed:not(.is-compact) .eb-herofigure{grid-column:1/13;grid-row:1}
+  .editorial-book.is-fullbleed:not(.is-compact) .eb-headblock{grid-column:3/12;grid-row:2;max-width:13ch}
+  .editorial-book.is-fullbleed:not(.is-compact) .eb-flow>p{grid-column:4/11;max-width:680px}
+  .editorial-book.is-fullbleed:not(.is-compact) .eb-flow>.eb-figure:nth-of-type(odd){grid-column:1/13}
+  .editorial-book.is-fullbleed:not(.is-compact) .eb-flow>.eb-figure:nth-of-type(even){grid-column:4/10}
+  .editorial-book .spatial-sources{margin-top:72px}
+}
+
+/* Compact promenade card: a docked preview, always single-column with
+   restrained type; the full system applies on expand. */
+.editorial-book.is-compact .eb-hero,
+.editorial-book.is-compact .eb-flow{display:flex;flex-direction:column}
+.editorial-book.is-compact .eb-hero{gap:16px;margin-bottom:24px}
+.editorial-book.is-compact .eb-flow{gap:12px}
+.spatial-rail-card.editorial-book.is-compact .eb-headline{font-size:30px;line-height:1.08;letter-spacing:-.015em;margin-bottom:10px}
+.editorial-book.is-compact .eb-deck{font-size:16px!important;margin-bottom:4px}
+.editorial-book.is-compact .eb-flow>p{font-size:14px;line-height:1.7}
+.editorial-book.is-compact .spatial-sources{margin-top:24px}
