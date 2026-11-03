@@ -492,9 +492,9 @@ export default function SpatialApp(){
         return
       }
       const articleStaged=stageArticleEdition(result.edition)
-      if(articleStaged.exhibits.length<5){
+      if(articleStaged.exhibits.length<3){
         tearDownAssembly()
-        setArticleError({title:'The article edition arrived incomplete.',detail:'Fewer than five articles could be verified against the catalog. The standard edition below remains available.'})
+        setArticleError({title:'The article edition arrived incomplete.',detail:'Fewer than three articles could be verified against the catalog. The standard edition below remains available.'})
         setStatus('The article edition arrived incomplete.')
         return
       }
@@ -892,7 +892,7 @@ export default function SpatialApp(){
         </label>
         <label className="spatial-consent">
           <input type="checkbox" checked={articleFormat} disabled={composing} onChange={event=>setArticleFormat(event.target.checked)}/>
-          Article edition · 5–8 stories
+          Article edition · 3 stories
         </label>
         <button type="submit" disabled={!prompt.trim()||composing}>{composing?'Composing…':'Begin exploration →'}</button>
       </form>

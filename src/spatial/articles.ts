@@ -1,5 +1,5 @@
 import {z} from 'zod'
-import {ARTICLE_CONTRACT_VERSION,editorialArticleEdition,type EditorialArticleEdition} from '../../shared/editorial-articles'
+import {ARTICLE_CONTRACT_VERSION,ARTICLE_MIN_ELIGIBLE_IMAGES,editorialArticleEdition,type EditorialArticleEdition} from '../../shared/editorial-articles'
 import {catalogItem,type CatalogItem} from '../../shared/catalog'
 import {parseGenerationMetadata,type EditorialMode,type GenerationMetadata} from './editorial-mode'
 import {EDITORIAL_TIMEOUT_MS,type HonestState} from './edition'
@@ -48,7 +48,7 @@ export function articleStatusCopy(fetch:ArticleFetch):{title:string;detail:strin
       const have=fetch.eligibleImages
       return {title:'Not enough approved imagery for an article edition.',detail:have===undefined
         ?'The standard edition below remains available.'
-        :`${have} of ${fetch.requiredImages??15} required images are currently eligible. The standard edition below remains available.`}
+        :`${have} of ${fetch.requiredImages??ARTICLE_MIN_ELIGIBLE_IMAGES} required images are currently eligible. The standard edition below remains available.`}
     }
     case 'preparing':return {title:'Preparing approved images for this edition.',detail:'Curio is checking saved visual evidence and analyzing only what is needed.'}
     case 'unavailable':return {title:'Article editions are currently unavailable.',detail:'The standard edition below remains available.'}

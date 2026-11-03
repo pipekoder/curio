@@ -56,7 +56,7 @@ export function stageEdition(edition:EditorialEdition,max=6):{exhibits:StagedExh
 // IDs with approved artwork; brand captions come from the article record,
 // while URLs, alt text and attribution come only from joined items. An
 // article with any unresolvable image is skipped whole, never patched.
-export function stageArticleEdition(edition:{articleEdition:EditorialArticleEdition;items:CatalogItem[]},max=8):{exhibits:StagedExhibit[];skipped:number}{
+export function stageArticleEdition(edition:{articleEdition:EditorialArticleEdition;items:CatalogItem[]},max=3):{exhibits:StagedExhibit[];skipped:number}{
   const exhibits:StagedExhibit[]=[]
   let skipped=0
   for(const [index,article] of edition.articleEdition.articles.entries()){
@@ -74,7 +74,7 @@ export function stageArticleEdition(edition:{articleEdition:EditorialArticleEdit
         rights:`${item.licensing.rightsHolder??'Rights holder unlisted'} · ${item.image.id}`,
       })
     }
-    if(!complete||storyImages.length<3){skipped++;continue}
+    if(!complete||storyImages.length<2){skipped++;continue}
     const hero=storyImages[0]
     const media=demoMediaFor(hero.assetId)
     exhibits.push({
@@ -88,6 +88,6 @@ export function stageArticleEdition(edition:{articleEdition:EditorialArticleEdit
       article:{id:article.id,deck:article.deck,storyImages},
     })
   }
-  const unique=[...new Map(exhibits.map(exhibit=>[exhibit.article!.id,exhibit])).values()].slice(0,8)
+  const unique=[...new Map(exhibits.map(exhibit=>[exhibit.article!.id,exhibit])).values()].slice(0,3)
   return {exhibits:unique,skipped}
 }
