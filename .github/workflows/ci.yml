@@ -20,7 +20,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
-      - run: npx eslint shared/object-groups.ts shared/reader-media.ts worker/editorial-quality.ts tests/object-groups.test.ts scripts/replay-norm-sam.mjs
+      - run: npx eslint shared/object-groups.ts shared/object-localization.ts tests/object-localization.test.ts shared/reader-media.ts worker/editorial-quality.ts tests/object-groups.test.ts scripts/replay-norm-sam.mjs
       - run: npm test
       - run: npm run build
       - run: npm run worker:check

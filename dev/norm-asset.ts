@@ -1,4 +1,5 @@
 // Development-only module. Never import from the public app or production Worker.
+import { localizationConcept, conceptDetail } from '../shared/object-localization'
 import { imageDimensions } from '../worker/asset-classifier'
 import { candidateIds } from '../worker/catalog-store'
 import { understanding } from '../worker/asset-contracts'
@@ -45,6 +46,6 @@ export async function normGeometryRecord() {
     licensing: { status: 'pending', rightsHolder: null, evidence: null },
     permissions: { display: { status: 'pending', evidence: null }, aiAnalysis: { status: 'pending', evidence: null }, edits: { status: 'pending', evidence: null } },
     verifiedBrandLink: null,
-    discoverableObjects: [{ id: 'norm-local-detail', label: 'seating', description: 'Operator segmentation query, not a verified product identity.', grounding: 'catalog_metadata', productIdentity: null }],
+    discoverableObjects: [{ id: 'norm-local-detail', label: 'seating', description: 'Operator segmentation query, not a verified product identity.', grounding: 'catalog_metadata', productIdentity: null }, ...localizationConcept.options.map(concept=>({id:conceptDetail(concept),label:concept,description:'Muse-guided localization query; appearance, not verified product identity.',grounding:'catalog_metadata' as const,productIdentity:null}))],
   })
 }

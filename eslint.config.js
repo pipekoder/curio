@@ -37,6 +37,8 @@ export default ts.config(
       "src/App.tsx",
       "tests/editorial*.ts",
       "shared/object-groups.ts",
+      "shared/object-localization.ts",
+      "tests/object-localization.test.ts",
       "shared/reader-media.ts",
       "worker/editorial-quality.ts",
       "tests/object-groups.test.ts",
