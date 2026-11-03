@@ -15,7 +15,7 @@ import {boundedText} from './meta'
 import {catalogDigest} from './catalog-store'
 import {EDITORIAL_KNOWLEDGE_VERSION,editorialKnowledgeInstruction,editorialV21Guidance,selectEditorialVoice} from '../shared/editorial-knowledge-v2'
 import {articleEvidenceForPrompt} from './article-evidence'
-import {ARTICLE_REVIEW_STEP_TIMEOUT_MS,ARTICLE_WORKFLOW_TIMEOUT_MS,articleChiefTimeoutMs} from './article-provider-timeout'
+import {ARTICLE_REVIEW_STEP_TIMEOUT_MS,ARTICLE_WORKFLOW_TIMEOUT_MS,articleChiefTimeoutMs,articleReviewTimeoutMs} from './article-provider-timeout'
 import {collectHotspotTargets,runHotspotSweep} from './sam-hotspots'
 import {catalogEntries,chiefDraftSchema,hydrateChiefDraft,sourcesWithClaimRefs} from './chief-draft'
 import {articlePlan,researchForArticle,type ResearchFinding} from './article-cultural-research'
@@ -205,8 +205,8 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
   if(!p.consent)return Response.json({...base,status:'consent_required',fallbackReason:'consent_missing'},{status:403})
   if(env.MAGAZINE_AI_ENABLED!=='true'||env.EDITORIAL_REVIEW_ENABLED!=='true'||env.EDITORIAL_PUBLIC_AI_ENABLED!=='true')return Response.json({...base,status:'unavailable',fallbackReason:'configuration'},{status:503})
   if(!env.CATALOG_DB||!env.MEDIA_BUCKET||!env.META_API_KEY||env.META_SPARK_MODEL!=='muse-spark-1.3'||!env.INFERENCE_BUDGET)return Response.json({...base,status:'unavailable',fallbackReason:'configuration'},{status:503})
-  let chiefTimeoutMs:number
-  try{chiefTimeoutMs=articleChiefTimeoutMs(env)}catch{return Response.json({...base,status:'unavailable',fallbackReason:'configuration'},{status:503})}
+  let chiefTimeoutMs:number,reviewTimeoutMs:number
+  try{chiefTimeoutMs=articleChiefTimeoutMs(env);reviewTimeoutMs=articleReviewTimeoutMs(env)}catch{return Response.json({...base,status:'unavailable',fallbackReason:'configuration'},{status:503})}
   let pool:ArticlePool
   try{pool=preparedPool??await editorialArticlePool(env,p)}catch(error){
     const requestId=crypto.randomUUID()
@@ -251,7 +251,7 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
   const fallback=(reason:string,budget?:unknown,failure?:ArticleWorkflowError)=>{
     const requestId=failure?crypto.randomUUID():null
     const diagnostic=failure?{stage:failure.stage,code:failure.code,chiefModel:chiefModel(mode).model,editorialMode:mode,...(failure.detail?{detail:failure.detail}:{})}:null
-    if(diagnostic)console.error(JSON.stringify({event:'article_editorial_failure',requestId,...diagnostic}))
+    if(diagnostic)console.error(JSON.stringify({event:'article_editorial_failure',requestId,elapsedMs:Math.round(performance.now()-started),...diagnostic}))
     const response=Response.json({...base,status:'fallback',fallbackReason:reason,...(budget?{budget}:{}),...(diagnostic?{requestId,validationDiagnostic:diagnostic}:{}),inference:{attempted:called>0,reservedUnits,latencyMs:Math.round(performance.now()-started),usage:measurements.length?{inputTokens:measurements.reduce((n,row)=>n+row.inputTokens,0),outputTokens:measurements.reduce((n,row)=>n+row.outputTokens,0),totalTokens:measurements.reduce((n,row)=>n+row.totalTokens,0)}:null}})
     if(requestId)response.headers.set('X-Curio-Request-Id',requestId)
     return response
@@ -267,7 +267,7 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
       stage=callStage
       if(callStage!=='reservation')await reportStage(callStage)
       if(!reservation.claim())throw new ArticleWorkflowError(stage,'workflow_limit')
-      const result=await structuredMuse(env.META_API_KEY!,model,instruction,input,schema,name,maxTokens,stage,()=>{called++},stage==='chief_editor'?chiefTimeoutMs:ARTICLE_REVIEW_STEP_TIMEOUT_MS,workflowSignal)
+      const result=await structuredMuse(env.META_API_KEY!,model,instruction,input,schema,name,maxTokens,stage,()=>{called++},stage==='chief_editor'?chiefTimeoutMs:stage==='reviewer'?reviewTimeoutMs:ARTICLE_REVIEW_STEP_TIMEOUT_MS,workflowSignal)
       if(result.usage)measurements.push(result.usage)
       return result.value
     }
