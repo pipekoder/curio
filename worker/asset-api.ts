@@ -16,7 +16,7 @@ import type { Bindings } from './index'
 import {loadEditorialSources,parsePilotVersions} from './editorial-sources'
 import {inferenceBudgetStatus} from './inference-budget'
 import {resolveEditorialInput,PromptIntentError} from '../shared/editorial-intent'
-import {editorialArticlePool} from './editorial-article-pool'
+import {editorialArticlePool,reportArticlePoolFailure} from './editorial-article-pool'
 
 // Mounted only behind the existing catalog operator authentication middleware.
 export const assetApi = new Hono<{ Bindings: Bindings }>()
@@ -38,7 +38,12 @@ assetApi.get('/articles/readiness',async c=>{
   const prompt=c.req.query('prompt')??''
   let preferences
   try{preferences=resolveEditorialInput({prompt,consent:false})}catch(error){if(error instanceof z.ZodError||error instanceof PromptIntentError)return c.json({error:'Invalid editorial prompt.'},400);throw error}
-  const pool=await editorialArticlePool(c.env,preferences)
+  let pool:Awaited<ReturnType<typeof editorialArticlePool>>
+  try{pool=await editorialArticlePool(c.env,preferences)}catch(error){
+    const requestId=crypto.randomUUID()
+    const poolError=reportArticlePoolFailure(requestId,error)
+    return c.json({version:'curio-article-readiness-v1',ready:false,poolError,requestId},503)
+  }
   return c.json({version:'curio-article-readiness-v1',eligibleImages:pool.eligibleCount,requiredImages:15,
     activeMediaAssets:pool.preparation?.activeMediaCount??0,publishedInPromptWindow:pool.preparation?.publishedInPromptWindow??0,
     ready:pool.eligibleCount>=15,rankedImages:pool.preparation?.rankedCount??0,evaluatedImages:pool.preparation?.evaluatedCount??0,

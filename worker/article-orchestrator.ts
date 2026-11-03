@@ -4,7 +4,7 @@ import type {Bindings} from './index'
 import {ARTICLE_CONTRACT_VERSION} from '../shared/editorial-articles'
 import type {EditorialArticleEdition} from '../shared/editorial-articles'
 import {articleEditorialResponse,validateArticleEdition} from './editorial-articles'
-import {editorialArticlePool,type ArticlePool} from './editorial-article-pool'
+import {editorialArticlePool,reportArticlePoolFailure,type ArticlePool} from './editorial-article-pool'
 import {runClassification,AssetAnalysisError} from './asset-classifier'
 import {catalogDigest} from './catalog-store'
 import {ARTICLE_EVIDENCE_VERSION,ARTICLE_INTERPRETATION_VERSION} from '../shared/article-evidence'
@@ -55,7 +55,13 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
   }catch{return Response.json({...base,status:'unavailable',fallbackReason:'job_storage_unavailable'},{status:503})}
   if(!job||job.ip_digest!==identity.ipDigest||job.input_digest!==identity.inputDigest)return Response.json({...base,status:'unavailable',fallbackReason:'job_unavailable'},{status:503})
   let pool:ArticlePool
-  try{pool=await editorialArticlePool(env,p)}catch{return Response.json({...base,status:'unavailable',fallbackReason:'catalog_unavailable'},{status:503})}
+  try{pool=await editorialArticlePool(env,p)}catch(error){
+    const requestId=crypto.randomUUID()
+    reportArticlePoolFailure(requestId,error)
+    const failed=Response.json({...base,status:'unavailable',fallbackReason:'catalog_unavailable'},{status:503})
+    failed.headers.set('X-Curio-Request-Id',requestId)
+    return failed
+  }
   if(job.state==='completed'&&job.result_json)try{
     const saved=JSON.parse(job.result_json) as {articleEdition:EditorialArticleEdition;generation:unknown}
     const edition=validateArticleEdition(saved.articleEdition,pool.items,pool.sources,pool.visualContexts,saved.articleEdition.articles.length)
