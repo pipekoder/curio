@@ -70,10 +70,17 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
       inference:{attempted:false,reservedUnits:0,latencyMs:null,usage:null}})
   }catch{/* A changed version, source or grant invalidates the saved result. */}
   if(job.state==='completed'){
-    await db.prepare(`UPDATE article_edition_jobs SET state='failed',result_json=NULL,evidence_digest=NULL,updated_at=? WHERE id=? AND state='completed'`).bind(Date.now(),identity.id).run()
-    return Response.json({...base,status:'unavailable',fallbackReason:'evidence_changed'},{status:409})
+    const changed={...base,status:'unavailable',fallbackReason:'evidence_changed'}
+    await db.prepare(`UPDATE article_edition_jobs SET state='failed',result_json=?,evidence_digest=NULL,updated_at=? WHERE id=? AND state='completed'`).bind(JSON.stringify({failure:{status:409,body:changed}}),Date.now(),identity.id).run()
+    return Response.json(changed,{status:409})
   }
-  if(job.state==='failed')return failedResponse(pool)
+  if(job.state==='failed'){
+    try{
+      const saved=JSON.parse(job.result_json??'') as {failure?:{status?:unknown;body?:unknown}}
+      if(saved?.failure&&typeof saved.failure.status==='number'&&saved.failure.body!==null&&typeof saved.failure.body==='object')return Response.json(saved.failure.body,{status:saved.failure.status})
+    }catch{/* A preparation failure without a stored outcome stays insufficient. */}
+    return failedResponse(pool)
+  }
   if(job.state==='generating'&&(!job.lease_until||job.lease_until<now))return Response.json({...base,status:'fallback',fallbackReason:'generation_interrupted'},{status:503})
   if(job.lease_until&&job.lease_until>=now)return pendingResponse(pool,job.state==='generating'?'reviewing':'processing',15_000)
   const token=crypto.randomUUID()
@@ -87,7 +94,7 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
       if(payload.source==='meta'&&payload.articleEdition){
         await db.prepare(`UPDATE article_edition_jobs SET state='completed',result_json=?,evidence_digest=?,lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`)
           .bind(JSON.stringify({articleEdition:payload.articleEdition,generation:payload.generation}),await evidenceDigest(pool,payload.articleEdition as EditorialArticleEdition),Date.now(),identity.id,token).run()
-      }else await db.prepare(`UPDATE article_edition_jobs SET state='failed',lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(Date.now(),identity.id,token).run()
+      }else await db.prepare(`UPDATE article_edition_jobs SET state='failed',result_json=?,lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(JSON.stringify({failure:{status:result.status,body:payload}}),Date.now(),identity.id,token).run()
       return result
     }
     const selected=(pool.preparation?.pendingVersionIds??[]).slice(0,Math.min(policy.concurrency,15-pool.eligibleCount))

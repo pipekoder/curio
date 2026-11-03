@@ -35,9 +35,14 @@ export async function articleEvidenceForPrompt(env:Bindings,p:EditorialPreferenc
   const existing=new Map(rows.map(row=>[String(row.id),row]))
   const missing=drafts.filter(row=>!existing.has(row.id))
   if(missing.length){
-    const values=missing.map(()=>'(?,?,?,?,?,?,?,?,?,?,?)').join(',')
-    await env.CATALOG_DB.prepare(`INSERT INTO article_interpretations(id,asset_version,image_sha256,intent_digest,source_digest,observation_digest,profile_version,topic,focus_question,source_ids_json,created_at) VALUES ${values} ON CONFLICT(id) DO NOTHING`)
-      .bind(...missing.flatMap(row=>[row.id,row.assetVersionId,row.imageSha256,row.intentDigest,row.sourceDigest,row.observationDigest,row.profileVersion,row.topic,row.focusQuestion,JSON.stringify(row.sourceIds),Date.now()])).run()
+    // D1 allows at most 100 bound variables per statement with 11 per row,
+    // so a full prompt stages its interpretations in bounded batches.
+    for(let i=0;i<missing.length;i+=9){
+      const batch=missing.slice(i,i+9)
+      const values=batch.map(()=>'(?,?,?,?,?,?,?,?,?,?,?)').join(',')
+      await env.CATALOG_DB.prepare(`INSERT INTO article_interpretations(id,asset_version,image_sha256,intent_digest,source_digest,observation_digest,profile_version,topic,focus_question,source_ids_json,created_at) VALUES ${values} ON CONFLICT(id) DO NOTHING`)
+        .bind(...batch.flatMap(row=>[row.id,row.assetVersionId,row.imageSha256,row.intentDigest,row.sourceDigest,row.observationDigest,row.profileVersion,row.topic,row.focusQuestion,JSON.stringify(row.sourceIds),Date.now()])).run()
+    }
   }
   // Re-query persisted rows and accept only exact current evidence digests.
   const saved=(await env.CATALOG_DB.prepare(`SELECT id,asset_version,image_sha256,intent_digest,source_digest,observation_digest,profile_version,topic,focus_question,source_ids_json FROM article_interpretations WHERE id IN(SELECT value FROM json_each(?))`).bind(JSON.stringify(ids)).all<Record<string,unknown>>()).results
