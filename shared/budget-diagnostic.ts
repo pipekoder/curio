@@ -3,6 +3,7 @@ import {z} from 'zod'
 export const budgetLimitType=z.enum([
   'global_lifetime','global_daily','per_ip_hourly','per_ip_cooldown',
   'demo_tester_hourly','demo_tester_daily','demo_tester_concurrency',
+  'demo_testing_window',
   'article_preparation_hourly','article_preparation_daily','article_preparation_window','article_preparation_concurrency',
   'sam_once_per_asset',
 ])
@@ -31,6 +32,7 @@ const labels:Record<BudgetLimitType,string>={
   global_lifetime:'shared lifetime inference budget',global_daily:'shared daily inference budget',
   per_ip_hourly:'your hourly inference allowance',per_ip_cooldown:'your request cooldown',
   demo_tester_hourly:'your tester hourly allowance',demo_tester_daily:'your tester daily allowance',demo_tester_concurrency:'your concurrent tester request limit',
+  demo_testing_window:'your Demo Testing window',
   article_preparation_hourly:'your hourly image-preparation allowance',article_preparation_daily:'your daily image-preparation allowance',article_preparation_window:'your image-preparation request window',article_preparation_concurrency:'the shared image-preparation concurrency limit',
   sam_once_per_asset:'the one-time object-analysis limit for this image',
 }

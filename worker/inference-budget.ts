@@ -2,6 +2,7 @@ import type { Bindings } from './index'
 import { demoCapsValid,demoPolicyEnabled,demoIdentity } from './demo-access'
 import {resolveArticlePreparationPolicy} from './article-preparation-policy'
 import {budgetDenial,publicBudgetDenial,resolveRatePolicy,type BudgetDenial} from './budget-policy'
+import {resolveDemoTestingPolicy} from './demo-testing-policy'
 
 export class InferenceReservation{
   private remaining:number
@@ -26,6 +27,7 @@ export async function reserveInference(env: Bindings, ip: string, units: 1 | 2 |
   const hash = Array.from(new Uint8Array(signature), value => value.toString(16).padStart(2, '0')).join('')
   if(env.EDITORIAL_DEMO_BUDGET_ENABLED==='true'&&!demoPolicyEnabled(env))throw new Error('Demo budget unavailable')
   const demo=demoPolicyEnabled(env)
+  const testing=resolveDemoTestingPolicy(env)
   const {ceiling,daily}=budgetLimits(env,demo)
   const stub = env.INFERENCE_BUDGET.get(env.INFERENCE_BUDGET.idFromName('magazine-v1'))
   if(editorialPilot&&(units!==4||!env.EDITORIAL_REVIEW_PILOT_TOKEN||env.EDITORIAL_REVIEW_PILOT_TOKEN.length<32))throw new Error('Pilot unavailable')
@@ -34,7 +36,8 @@ export async function reserveInference(env: Bindings, ip: string, units: 1 | 2 |
   const rates=resolveRatePolicy(env)
   const testerHash=demo&&demoTester?await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(`demo-tester:${demoTester}`)):null
   const testerKey=testerHash?Array.from(new Uint8Array(testerHash),value=>value.toString(16).padStart(2,'0')).join(''):null
-  const response = await stub.fetch('https://budget/reserve', { method: 'POST', body: JSON.stringify({ ip: hash, ceiling, daily, demo, rates, ...(testerKey&&units===4?{demoTester:testerKey}:{}), ...(units > 1 ? { units } : {}), ...(samAssetId ? { samAssetId } : {}),...(editorialPilot?{editorialPilot:true}:{}),...(preparationPolicy?{articlePreparation:true,articlePreparationPolicy:preparationPolicy}:{}) }) })
+  const testingActive=Boolean(testing&&demo&&testerKey&&units===4&&!samAssetId&&!articlePreparation)
+  const response = await stub.fetch('https://budget/reserve', { method: 'POST', body: JSON.stringify({ ip: hash, ceiling, daily, demo, rates, ...(testerKey&&units===4?{demoTester:testerKey}:{}), ...(testingActive?{demoTestingPolicy:testing}:{}), ...(units > 1 ? { units } : {}), ...(samAssetId ? { samAssetId } : {}),...(editorialPilot?{editorialPilot:true}:{}),...(preparationPolicy?{articlePreparation:true,articlePreparationPolicy:preparationPolicy}:{}) }) })
   if (!response.ok) throw new Error('Budget unavailable')
   const result = await response.json() as { allowed?: boolean; retryAfter?: number; reservationId?: string;denial?:unknown }
   if (typeof result.allowed !== 'boolean') throw new Error('Invalid budget result')
@@ -53,6 +56,7 @@ export async function inferenceBudgetStatus(env:Bindings,request?:Request){
   if(!env.INFERENCE_BUDGET)throw Error('Budget unavailable')
   if(env.EDITORIAL_DEMO_BUDGET_ENABLED==='true'&&!demoCapsValid(env))throw Error('Demo budget unavailable')
   const demo=env.EDITORIAL_DEMO_BUDGET_ENABLED==='true', {ceiling,daily}=budgetLimits(env,demo)
+  const testing=resolveDemoTestingPolicy(env)
   const rates=resolveRatePolicy(env)
   const preparationPolicy=env.EDITORIAL_ARTICLE_PREPARATION_ENABLED==='true'?resolveArticlePreparationPolicy(env):null
   const stub=env.INFERENCE_BUDGET.get(env.INFERENCE_BUDGET.idFromName('magazine-v1'))
@@ -65,8 +69,9 @@ export async function inferenceBudgetStatus(env:Bindings,request?:Request){
     const tester=await demoIdentity(request!,env,rawIp)
     if(tester)testerKey=hex(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(`demo-tester:${tester}`)))
   }
-  const response=await stub.fetch(new Request('https://budget/status',{method:'POST',body:JSON.stringify({ceiling,daily,demo,rates,...(ip?{ip}:{}),...(testerKey?{demoTester:testerKey}:{}),...(preparationPolicy?{articlePreparationPolicy:preparationPolicy}:{})})}))
+  const testingActive=Boolean(testing&&demo&&testerKey)
+  const response=await stub.fetch(new Request('https://budget/status',{method:'POST',body:JSON.stringify({ceiling,daily,demo,rates,...(ip?{ip}:{}),...(testerKey?{demoTester:testerKey}:{}),...(testingActive?{demoTestingPolicy:testing}:{}),...(preparationPolicy?{articlePreparationPolicy:preparationPolicy}:{})})}))
   if(!response.ok)throw Error('Budget status unavailable')
-  return {...await response.json() as Record<string,unknown>,inferenceEnabled:env.MAGAZINE_AI_ENABLED==='true',demoActive:demoPolicyEnabled(env),effectiveWorkerConfig:{lifetimeUnits:ceiling,dailyUnits:daily,rates,articlePreparationPolicy:preparationPolicy}}
+  return {...await response.json() as Record<string,unknown>,inferenceEnabled:env.MAGAZINE_AI_ENABLED==='true',demoActive:demoPolicyEnabled(env),demoTesting:{enabled:Boolean(testing),authenticated:Boolean(testerKey),active:testingActive,configuredWindow:testing},effectiveWorkerConfig:{lifetimeUnits:ceiling,dailyUnits:daily,rates,articlePreparationPolicy:preparationPolicy,demoTestingPolicy:testing}}
 }
 export type {BudgetDenial}
