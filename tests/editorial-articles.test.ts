@@ -177,12 +177,13 @@ it('distinguishes Chief structural validation from Reviewer schema and reference
  mockPool(6)
  for(const [name,second,stage,code] of [
   ['structure',async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({...edition(3,2),articles:edition(3,2).articles.map((article,i)=>i?article:{...article,images:article.images.map((image,j)=>j?image:{...image,catalogId:'wrong'})})})}}]}),'chief_editor','image_identity'],
+  ['identitySchema',async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({...edition(3,2),articles:edition(3,2).articles.map((article,i)=>i?article:{...article,heroAssetId:version(7)})})}}]}),'chief_editor','image_identity_schema'],
   ['reviewSchema',async()=>Response.json({choices:[{finish_reason:'stop',message:{content:'{}'}}]}),'reviewer','response_schema'],
   ['reviewReferences',async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({...review(edition(3,2)),featureFeedback:review(edition(3,2)).featureFeedback.map((row,i)=>i?row:{...row,assetId:version(99)})})}}]}),'reviewer','review_validation'],
  ] as const){
   let calls=0
   const first=provider()
-  vi.stubGlobal('fetch',vi.fn(async(url:string,init:RequestInit)=>{calls++;return calls===1&&name!=='structure'?first(url,init):second()}))
+  vi.stubGlobal('fetch',vi.fn(async(url:string,init:RequestInit)=>{calls++;return calls===1&&name!=='structure'&&name!=='identitySchema'?first(url,init):second()}))
   const response=await post({}, {interests:`Distinct ${name} validation study`})
   expect(await response.json()).toMatchObject({fallbackReason:'provider_or_validation',validationDiagnostic:{stage,code},inference:{reservedUnits:4}})
  }
