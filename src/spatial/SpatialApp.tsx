@@ -418,7 +418,7 @@ export default function SpatialApp(){
     return <SpatialFallback/>
   }
 
-  const submit=async(event?:React.FormEvent,promptOverride?:string,modeOverride?:EditorialMode,formatOverride?:'articles'|'standard')=>{
+  const submit=async(event?:React.FormEvent,promptOverride?:string,modeOverride?:EditorialMode,formatOverride?:'articles'|'story'|'standard')=>{
     event?.preventDefault()
     const trimmed=(promptOverride??prompt).trim()
     if(!trimmed||composing)return
@@ -458,6 +458,8 @@ export default function SpatialApp(){
     fetchAbortRef.current=controller
     const selectedMode=modeOverride??editorialMode
     const wantArticles=formatOverride?formatOverride==='articles':articleFormat
+    const wantStory=!wantArticles&&(formatOverride?formatOverride==='story':consent&&!articleFormat)
+    const wantCount:1|3=wantArticles?3:1
     const tearDownAssembly=()=>{
       setComposing(false)
       window.clearInterval(tickerRef.current)
@@ -471,10 +473,10 @@ export default function SpatialApp(){
     let fullPlan:StagedPlan|null=null
     let honest:HonestState,reason:string|undefined,timedOut:boolean,generation:GenerationMetadata|null
     let staged:StagedExhibit[],skipped:number
-    if(wantArticles){
+    if(wantArticles||wantStory){
       const {articleStatusCopy,fetchArticleEdition}=await import('./articles')
       if(submitId!==submitIdRef.current)return
-      const result=await fetchArticleEdition(trimmed,consent,fetch,{onResponse:()=>directorRef.current.onResponse(),signal:controller.signal,editorialMode:capabilities?selectedMode:undefined})
+      const result=await fetchArticleEdition(trimmed,consent,fetch,{onResponse:()=>directorRef.current.onResponse(),signal:controller.signal,editorialMode:capabilities?selectedMode:undefined,articleCount:wantCount})
       if(submitId!==submitIdRef.current)return
       if(!result.edition){
         tearDownAssembly()
@@ -483,11 +485,14 @@ export default function SpatialApp(){
         setStatus(copy.title)
         return
       }
-      const articleStaged=stageArticleEdition(result.edition)
-      if(articleStaged.exhibits.length<3){
+      const articleStaged=stageArticleEdition(result.edition,wantCount)
+      if(articleStaged.exhibits.length<wantCount){
         tearDownAssembly()
-        setArticleError({title:'The article edition arrived incomplete.',detail:'Fewer than three articles could be verified against the catalog. The standard edition below remains available.'})
-        setStatus('The article edition arrived incomplete.')
+        const incomplete=wantCount===1
+          ?{title:'The AI story arrived incomplete.',detail:'The story could not be verified against the catalog. The standard edition below remains available.'}
+          :{title:'The article edition arrived incomplete.',detail:'Fewer than three articles could be verified against the catalog. The standard edition below remains available.'}
+        setArticleError(incomplete)
+        setStatus(incomplete.title)
         return
       }
       honest=result.honest;reason=result.fallbackReason;timedOut=result.timedOut;generation=result.generation
@@ -896,9 +901,11 @@ export default function SpatialApp(){
       {articleError&&!composing&&<div role="alert" className="spatial-mode-error">
         <p><strong>{articleError.title}</strong> {articleError.detail}</p>
         <button type="button" onClick={()=>{setArticleFormat(false);void submit(undefined,undefined,undefined,'standard')}}>Continue with the standard edition</button>
-        <button type="button" onClick={()=>void submit(undefined,undefined,undefined,'articles')}>Try articles again</button>
+        {articleFormat
+          ?<button type="button" onClick={()=>void submit(undefined,undefined,undefined,'articles')}>Try articles again</button>
+          :<button type="button" onClick={()=>void submit(undefined,undefined,undefined,'story')}>Try the story again</button>}
       </div>}
-      <p className="spatial-fine">Off by default. When on, your prompt may be sent to Meta for curation.</p>
+      <p className="spatial-fine">Use Meta AI to create one original editorial story from your discovery.</p>
       {cleared&&<p role="status" className="spatial-status">
         Visit cleared from this browser{cleared.length?`: ${cleared.join(', ')}`:'. No visit data was found in this browser.'} Server data handling: pending confirmation.
       </p>}

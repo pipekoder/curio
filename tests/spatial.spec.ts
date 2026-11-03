@@ -540,18 +540,19 @@ test('a grounded meta edition shows Meta provenance and consent off by default',
   expect(consent).toBe(false)
 })
 
-test('checking AI curation sends the actual consent value',async({page})=>{
-  let consent:unknown='unset'
+test('checking AI curation requests one story with the actual consent value',async({page})=>{
+  let seen:{consent?:unknown;editionFormat?:unknown}={}
   await page.route('**/api/editorial',route=>{
-    consent=(route.request().postDataJSON() as {consent:boolean})?.consent??'missing'
+    seen=(route.request().postDataJSON() ?? {}) as {consent?:unknown;editionFormat?:unknown}
     return route.fulfill({status:503,json:{error:'AI disabled'}})
   })
   await page.setViewportSize({width:1440,height:900})
   await page.goto('/spatial')
   await page.getByLabel('Allow AI curation').check()
   await submitPrompt(page)
-  await expect(page.getByTestId('spatial-edition-chip')).toContainText('Curio-authored edition · AI not used',{timeout:15000})
-  expect(consent).toBe(true)
+  await expect(page.getByRole('alert')).toContainText('The article edition could not be composed.',{timeout:15000})
+  expect(seen.consent).toBe(true)
+  expect(seen.editionFormat).toBe('curio-editorial-article-v1')
 })
 
 test('cached meta and deterministic states stay honestly labeled',async({page})=>{

@@ -6,7 +6,7 @@ import {articleEvidenceForPrompt} from '../worker/article-evidence'
 import type {CatalogItem} from '../shared/catalog'
 import type {EditorialSource} from '../shared/editorial-sources'
 import type {VisualContext} from '../shared/visual-observations'
-import {ARTICLE_CONTRACT_VERSION,type EditorialArticleEdition} from '../shared/editorial-articles'
+import {ARTICLE_CONTRACT_VERSION,ARTICLE_SINGLE_CONTRACT_VERSION,type EditorialArticleEdition} from '../shared/editorial-articles'
 import {editorialDimensions,EDITORIAL_STANDARD_VERSION} from '../shared/editorial-standard'
 import {validateArticleEdition} from '../worker/editorial-articles'
 import {editorialApi} from '../worker/editorial'
@@ -39,6 +39,7 @@ const post=(overrides:Record<string,unknown>={},extra:Record<string,unknown>={})
 const mockPool=(length=24)=>vi.mocked(editorialArticlePool).mockResolvedValue({items:items.slice(0,length),visualContexts:contexts.slice(0,length),sources:sources.filter(s=>items.slice(0,length).some(item=>item.image.id===s.assetId)),eligibleCount:length})
 function review(value:EditorialArticleEdition,score=5,high=false){return {rubricVersion:EDITORIAL_STANDARD_VERSION,dimensions:Object.fromEntries(editorialDimensions.map(key=>[key,{score,reason:'Independent assessment against supplied evidence.',evidenceRefs:[`feature:${value.articles[0].heroAssetId}`]}])),magazineFeedback:'The edition is assessed.',featureFeedback:value.articles.map((article,i)=>({assetId:article.heroAssetId,strengths:[],issues:high&&i===0?[{severity:'high',code:'fact_integrity',evidenceRefs:[article.images[0].brandSourceId],instruction:'Remove the unsupported claim.'}]:[]})),revisionInstructions:high?['Remove the unsupported claim.']:[]}}
 function provider(firstScore=5,finalScore=5,high=false){let calls=0;return vi.fn(async(_url:string,init:RequestInit)=>{const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content);calls++;const value=calls===1?edition(input.articleCount,input.catalog.length>=9?3:2):calls===2?review(input.edition,firstScore,high):calls===3?input.edition:review(input.edition,finalScore);return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})})}
+function singleProvider(){const base=provider();let calls=0;return vi.fn(async(url:string,init:RequestInit)=>{const response=await base(url,init) as Response;calls++;if(calls!==1)return response;const raw=await response.json() as {choices:{message:{content:string}}[]};const value={...JSON.parse(raw.choices[0].message.content),version:ARTICLE_SINGLE_CONTRACT_VERSION};return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})})}
 afterEach(()=>{vi.unstubAllGlobals();vi.mocked(editorialArticlePool).mockReset();vi.mocked(runClassification).mockReset()})
 
 it('validates exactly three articles with two or three unique exact-version images',()=>{
@@ -331,4 +332,54 @@ it('re-serves the stored generation failure for a failed job instead of reportin
   expect(second.status).toBe(503)
   expect(await second.json()).toMatchObject({status:'unavailable',fallbackReason:'evidence_unavailable'})
  }finally{sqlite.close()}
+})
+it('generates exactly one reviewed story from a three-image pool in single-article mode',async()=>{
+  mockPool(3)
+  const send=singleProvider();vi.stubGlobal('fetch',send)
+  const result=await (await post({},{editionFormat:ARTICLE_SINGLE_CONTRACT_VERSION})).json() as Record<string,unknown>
+  expect(result).toMatchObject({format:ARTICLE_SINGLE_CONTRACT_VERSION,source:'meta',retrieval:'d1',inference:{reservedUnits:4,attempted:true}})
+  expect((result.articleEdition as {articles:unknown[]}).articles).toHaveLength(1)
+  expect(send).toHaveBeenCalledTimes(2)
+  const chiefInput=JSON.parse(JSON.parse(String(send.mock.calls[0][1].body)).messages[1].content)
+  expect(chiefInput.articleCount).toBe(1)
+  expect(chiefInput.catalog).toHaveLength(3)
+  expect(String(send.mock.calls[0][1].body)).toContain('exactly one distinct article')
+})
+it('requires three eligible images for a single story without inference',async()=>{
+  mockPool(2)
+  const send=singleProvider();vi.stubGlobal('fetch',send)
+  const result=await post({},{editionFormat:ARTICLE_SINGLE_CONTRACT_VERSION})
+  expect(result.status).toBe(409)
+  expect(await result.json()).toMatchObject({format:ARTICLE_SINGLE_CONTRACT_VERSION,status:'insufficient_content',requiredImages:3,eligibleImages:2})
+  expect(send).not.toHaveBeenCalled()
+})
+it('validates a single story with the same structural safeguards',()=>{
+  const one={...edition(1,3),version:ARTICLE_SINGLE_CONTRACT_VERSION}
+  expect(validateArticleEdition(one,items,sources,contexts,1).articles).toHaveLength(1)
+  expect(()=>validateArticleEdition(one,items,sources,contexts,3)).toThrow()
+  expect(()=>validateArticleEdition(edition(3,3),items,sources,contexts,1)).toThrow()
+  const duplicate=structuredClone(one);duplicate.articles[0].images[1]=duplicate.articles[0].images[0]
+  expect(()=>validateArticleEdition(duplicate,items,sources,contexts,1)).toThrow()
+})
+it('keeps single-story and three-story jobs for the same prompt separate',async()=>{
+  const {sqlite,db}=preparationDb()
+  try{
+    vi.mocked(editorialArticlePool).mockResolvedValue(prepared(5,[]))
+    const send=singleProvider();vi.stubGlobal('fetch',send)
+    const config={EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db}
+    const interests='A same-prompt study in one and three stories'
+    const three=await post(config,{interests})
+    expect(three.status).toBe(409)
+    expect(await three.json()).toMatchObject({format:ARTICLE_CONTRACT_VERSION,requiredImages:6,eligibleImages:5})
+    const one=await post(config,{interests,editionFormat:ARTICLE_SINGLE_CONTRACT_VERSION})
+    expect(one.status).toBe(200)
+    const body=await one.json() as Record<string,unknown>
+    expect(body).toMatchObject({format:ARTICLE_SINGLE_CONTRACT_VERSION,source:'meta'})
+    expect((body.articleEdition as {articles:unknown[]}).articles).toHaveLength(1)
+    expect(send).toHaveBeenCalledTimes(2)
+    const rows=sqlite.prepare('SELECT id,state FROM article_edition_jobs').all() as {id:string;state:string}[]
+    expect(rows).toHaveLength(2)
+    expect(new Set(rows.map(row=>row.id)).size).toBe(2)
+    expect(rows.map(row=>row.state).sort()).toEqual(['completed','failed'])
+  }finally{sqlite.close()}
 })
