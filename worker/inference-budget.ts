@@ -1,4 +1,5 @@
 import type { Bindings } from './index'
+import {z} from 'zod'
 import { demoCapsValid,demoPolicyEnabled,demoIdentity } from './demo-access'
 import {resolveArticlePreparationPolicy} from './article-preparation-policy'
 import {budgetDenial,publicBudgetDenial,resolveRatePolicy,type BudgetDenial} from './budget-policy'
@@ -73,5 +74,25 @@ export async function inferenceBudgetStatus(env:Bindings,request?:Request){
   const response=await stub.fetch(new Request('https://budget/status',{method:'POST',body:JSON.stringify({ceiling,daily,demo,rates,...(ip?{ip}:{}),...(testerKey?{demoTester:testerKey}:{}),...(testingActive?{demoTestingPolicy:testing}:{}),...(preparationPolicy?{articlePreparationPolicy:preparationPolicy}:{})})}))
   if(!response.ok)throw Error('Budget status unavailable')
   return {...await response.json() as Record<string,unknown>,inferenceEnabled:env.MAGAZINE_AI_ENABLED==='true',demoActive:demoPolicyEnabled(env),demoTesting:{enabled:Boolean(testing),authenticated:Boolean(testerKey),active:testingActive,configuredWindow:testing},effectiveWorkerConfig:{lifetimeUnits:ceiling,dailyUnits:daily,rates,articlePreparationPolicy:preparationPolicy,demoTestingPolicy:testing}}
+}
+export async function resetDemoUsage(env:Bindings,request:Request){
+  const testing=resolveDemoTestingPolicy(env)
+  if(!testing)throw Error('Demo Testing Mode is inactive')
+  const ip=request.headers.get('CF-Connecting-IP')
+  if(!ip||ip.length>64||!env.INFERENCE_BUDGET||!env.RATE_LIMIT_SALT||env.RATE_LIMIT_SALT.length<32)throw Error('Demo reset unavailable')
+  // Fail before mutating the DO if the effective quota configuration cannot
+  // be read and validated for the confirmation response.
+  await inferenceBudgetStatus(env,request)
+  const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(env.RATE_LIMIT_SALT),{name:'HMAC',hash:'SHA-256'},false,['sign'])
+  const hash=async(value:string)=>Array.from(new Uint8Array(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(value))),byte=>byte.toString(16).padStart(2,'0')).join('')
+  const tester=await demoIdentity(request,env,ip)
+  const stub=env.INFERENCE_BUDGET.get(env.INFERENCE_BUDGET.idFromName('magazine-v1'))
+  const response=await stub.fetch('https://budget/reset-demo',{method:'POST',body:JSON.stringify({ip:await hash(ip),...(tester?{demoTester:await hash(`demo-tester:${tester}`)}:{}),windowSeconds:testing.windowSeconds,articlePreparation:env.EDITORIAL_ARTICLE_PREPARATION_ENABLED==='true'})})
+  if(!response.ok)throw Error('Demo reset unavailable')
+  const result=await response.json() as {resetApplied?:boolean;operatorIpReset?:boolean;testerWindowReset?:boolean;articlePreparationReset?:boolean}
+  if(result.resetApplied!==true)throw Error('Demo reset unavailable')
+  const parsed=z.object({lifetime:z.object({remaining:z.number().int().nonnegative()}),day:z.object({remaining:z.number().int().nonnegative()})}).safeParse(await inferenceBudgetStatus(env,request))
+  if(!parsed.success)throw Error('Budget status unavailable')
+  return {resetApplied:true,operatorIpReset:result.operatorIpReset===true,testerWindowReset:result.testerWindowReset===true,articlePreparationReset:result.articlePreparationReset===true,globalLimitBlocking:parsed.data.lifetime.remaining<4?'global_lifetime':parsed.data.day.remaining<4?'global_daily':null}
 }
 export type {BudgetDenial}
