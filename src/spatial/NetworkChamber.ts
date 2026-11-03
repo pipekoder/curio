@@ -1,44 +1,39 @@
 import * as THREE from 'three'
 import type {CatalogNode} from './contracts'
 import {ExhibitMounts} from './ExhibitMounts'
-import {NETWORK_CENTER,NETWORK_RADIUS,buildEdges,layoutNetwork,nodeScale,relevanceWeights} from './network-math'
+import {NETWORK_CENTER,NETWORK_RADIUS,layoutDust,mulberry} from './network-math'
 
-// The Curiosity Journey constellation: one refined particle per real catalog
-// node, edges only where edge hints resolve on both ends. No invented
-// records, no decorative filler nodes; the chamber scales with the catalog.
+// The Curiosity Journey as silver dust: one fine particle per real catalog
+// record in a single draw call, plus dimmer decorative dust for depth. No
+// rings, no edges, no diagram: an atmospheric 3D cloud of silver-white
+// points over the light editorial field, with scene fog falloff.
 //
-// The constellation is stationary unless the visitor acts: no idle rotation,
-// drift, or zoom. Drag rotates, wheel/pinch zooms, tap selects. Image
-// previews stay hidden at rest and reveal progressively — for the selected
-// node, plus the nearest few when zoomed in — while the node panel carries
-// the full label, artwork, and Enter/Curate actions.
-const DOT_SIZE=1.15
-const RING_SIZE=2.3
+// The cloud is stationary unless the visitor acts: no idle rotation, drift,
+// or zoom. Drag rotates, wheel/pinch zooms, tap selects through invisible
+// hit discs. Image previews stay hidden at rest and fade in progressively
+// for the selected record plus the nearest few when zoomed in, while the
+// node panel carries the full label, artwork, and Enter/Curate actions.
+const DUST_SIZE=0.4
+const DUST_EXTRA=450
 const THUMB_SIZE=3.0
 const HIT_SIZE=4.6
-const DETAIL=0x7a8ca8
-const BRASS=0xb98a3e
 const ACCENT=0xa9c5ff
-const PEARL=0xf6f9fd
-const FAINT=0xd9e2f0
 // Zoomed-in reveal: only when the camera is this close to the chamber
-// center may nearby nodes show previews, capped so the view stays calm.
+// center may nearby records show previews, capped so the view stays calm.
 const REVEAL_RADIUS=56
 const REVEAL_DIST=52
 const REVEAL_MAX=8
 
-type ChamberNode={
-  dot:THREE.Sprite;ring:THREE.Sprite;thumb:THREE.Sprite;hit:THREE.Sprite;
-  url:string;loaded:boolean;base:THREE.Vector3;dotBase:number;assetId:string
-}
+type ChamberNode={hit:THREE.Sprite;thumb:THREE.Sprite;url:string;loaded:boolean;base:THREE.Vector3;revealAt:number}
 
 export class NetworkChamber{
   readonly group=new THREE.Group()
   private raycaster=new THREE.Raycaster()
   private nodes:ChamberNode[]=[]
-  private edges:THREE.LineSegments|null=null
+  private dust:THREE.Points|null=null
+  private baseColors=new Float32Array(0)
+  private allBases=new Float32Array(0)
   private selected=-1
-  private staged=new Set<string>()
   private center=new THREE.Vector3(...NETWORK_CENTER)
 
   constructor(scene:THREE.Scene){
@@ -48,48 +43,47 @@ export class NetworkChamber{
 
   setNodes(nodes:readonly CatalogNode[],stagedIds:ReadonlySet<string>):void{
     this.clear()
-    this.staged=new Set(stagedIds)
-    const hints=new Map(nodes.map(node=>[node.assetId,node.edgeHints??[]] as const))
-    const edgePairs=buildEdges(nodes.map(node=>node.assetId),hints)
-    const stagedIndexes=new Set(nodes.map((node,index)=>stagedIds.has(node.assetId)?index:-1).filter(i=>i>=0))
-    const weights=relevanceWeights(stagedIndexes,edgePairs,nodes.length)
-    const positions=layoutNetwork(nodes.length,NETWORK_CENTER,NETWORK_RADIUS,weights)
-    const dotMap=ExhibitMounts.flare()
-    const make=(material:THREE.SpriteMaterial,size:number,index:number)=>{
-      const sprite=new THREE.Sprite(material)
-      sprite.scale.setScalar(size)
-      sprite.position.set(...positions[index])
-      sprite.userData={index}
-      return sprite
+    const rand=mulberry(7)
+    const real=layoutDust(nodes.length,NETWORK_CENTER,NETWORK_RADIUS*0.8,rand)
+    const decor=layoutDust(DUST_EXTRA,NETWORK_CENTER,NETWORK_RADIUS*1.3,rand)
+    const total=nodes.length+DUST_EXTRA
+    const positions=new Float32Array(total*3),colors=new Float32Array(total*3)
+    const silver=(dim:number)=>{
+      const v=dim+rand()*0.14
+      return [v*0.94,v*0.99,v*1.06]
     }
     nodes.forEach((node,index)=>{
-      const scale=nodeScale(weights[index])
-      const dot=make(new THREE.SpriteMaterial({map:dotMap,transparent:true,fog:false,depthWrite:false}),DOT_SIZE*scale,index)
-      ;(dot.material as THREE.SpriteMaterial).color.set(stagedIds.has(node.assetId)?PEARL:FAINT)
-      const dotBase=0.72+0.28*weights[index]
-      ;(dot.material as THREE.SpriteMaterial).opacity=dotBase
-      const ring=make(new THREE.SpriteMaterial({map:NetworkChamber.ringTexture(),transparent:true,fog:false,depthWrite:false,opacity:0.8}),RING_SIZE*scale,index)
-      const thumb=make(new THREE.SpriteMaterial({color:0xe8ecf1,transparent:true,fog:false}),THUMB_SIZE*scale,index)
+      const [x,y,z]=real[index]
+      positions.set([x,y,z],index*3)
+      colors.set(stagedIds.has(node.assetId)?silver(0.3):silver(0.38),index*3)
+      const hit=new THREE.Sprite(new THREE.SpriteMaterial({colorWrite:false,depthWrite:false}))
+      hit.scale.setScalar(HIT_SIZE)
+      hit.position.set(x,y,z)
+      hit.userData={index}
+      const thumb=new THREE.Sprite(new THREE.SpriteMaterial({color:0xe8ecf1,transparent:true,fog:false,opacity:0}))
+      thumb.scale.setScalar(THUMB_SIZE)
+      thumb.position.set(x,y,z)
       thumb.visible=false
-      const hit=make(new THREE.SpriteMaterial({colorWrite:false,depthWrite:false}),HIT_SIZE,index)
-      this.group.add(dot,ring,thumb,hit)
-      this.nodes.push({dot,ring,thumb,hit,url:node.thumbnail,loaded:false,base:new THREE.Vector3(...positions[index]),dotBase,assetId:node.assetId})
-      this.paintRing(index)
+      this.group.add(hit,thumb)
+      this.nodes.push({hit,thumb,url:node.thumbnail,loaded:false,base:new THREE.Vector3(x,y,z),revealAt:0})
     })
-    if(edgePairs.length){
-      const array=new Float32Array(edgePairs.length*6)
-      edgePairs.forEach(([a,b],i)=>{
-        array.set([positions[a][0],positions[a][1],positions[a][2],positions[b][0],positions[b][1],positions[b][2]],i*6)
-      })
-      const geometry=new THREE.BufferGeometry()
-      geometry.setAttribute('position',new THREE.BufferAttribute(array,3))
-      this.edges=new THREE.LineSegments(geometry,new THREE.LineBasicMaterial({color:0x7a8ca8,transparent:true,opacity:0.3,fog:false}))
-      this.group.add(this.edges)
-    }
+    decor.forEach(([x,y,z],k)=>{
+      const at=(nodes.length+k)*3
+      positions.set([x,y,z],at)
+      colors.set(silver(0.66),at)
+    })
+    const geometry=new THREE.BufferGeometry()
+    geometry.setAttribute('position',new THREE.BufferAttribute(positions,3))
+    geometry.setAttribute('color',new THREE.BufferAttribute(colors,3))
+    this.dust=new THREE.Points(geometry,new THREE.PointsMaterial({size:DUST_SIZE,map:ExhibitMounts.flare(),vertexColors:true,transparent:true,opacity:1,depthWrite:false}))
+    this.dust.frustumCulled=false
+    this.group.add(this.dust)
+    this.baseColors=colors.slice()
+    this.allBases=positions.slice()
   }
 
-  // Circular-cropped artwork so revealed nodes read as discs. Same-origin
-  // imagery needs no CORS handling; on failure the pearl dot stays and the
+  // Circular-cropped artwork so revealed records read as discs. Same-origin
+  // imagery needs no CORS handling; on failure the dust point stays and the
   // HUD panel carries the label. Textures load lazily on first reveal, so a
   // zoomed-out chamber fetches no thumbnails at all.
   private loadThumb(node:ChamberNode):void{
@@ -98,12 +92,12 @@ export class NetworkChamber{
     const thumb=node.thumb
     const image=new Image()
     // Anonymous CORS: a tainted canvas would throw at WebGL upload time, so
-    // uncooperative hosts fail here instead and keep the pearl dot.
+    // uncooperative hosts fail here instead and keep the dust point.
     image.crossOrigin='anonymous'
-    image.onerror=()=>{/* Pearl dot stays; the HUD panel carries the label. */}
+    image.onerror=()=>{/* Dust point stays; the HUD panel carries the label. */}
     image.onload=()=>{
-      // A pruned node is detached before its thumbnail arrives; the pearl
-      // dot stays and nothing revoked is ever drawn.
+      // A pruned node is detached before its thumbnail arrives; the dust
+      // point stays and nothing revoked is ever drawn.
       if(!thumb.parent)return
       const size=256,canvas=document.createElement('canvas')
       canvas.width=size;canvas.height=size
@@ -124,41 +118,28 @@ export class NetworkChamber{
     image.src=node.url
   }
 
-  private static ring:THREE.Texture|null=null
-  private static ringTexture():THREE.Texture{
-    if(!NetworkChamber.ring){
-      const canvas=document.createElement('canvas')
-      canvas.width=128;canvas.height=128
-      const ctx=canvas.getContext('2d')!
-      ctx.strokeStyle='rgba(255,255,255,1)'
-      ctx.lineWidth=7
-      ctx.beginPath()
-      ctx.arc(64,64,54,0,Math.PI*2)
-      ctx.stroke()
-      NetworkChamber.ring=new THREE.CanvasTexture(canvas)
-    }
-    return NetworkChamber.ring
-  }
-
   setSelected(index:number):void{
-    const previous=this.selected
+    if(!this.dust)return
+    const colors=this.dust.geometry.getAttribute('color') as THREE.BufferAttribute
+    const paint=(i:number,accent:boolean)=>{
+      if(accent){
+        const tint=new THREE.Color(ACCENT)
+        colors.setXYZ(i,tint.r,tint.g,tint.b)
+      }else colors.setXYZ(i,this.baseColors[i*3],this.baseColors[i*3+1],this.baseColors[i*3+2])
+    }
+    if(this.selected>=0&&this.nodes[this.selected])paint(this.selected,false)
     this.selected=index
-    if(previous>=0&&this.nodes[previous])this.paintRing(previous)
-    if(index>=0&&this.nodes[index])this.paintRing(index)
-  }
-
-  private paintRing(index:number):void{
-    const node=this.nodes[index]
-    if(!node)return
-    ;(node.ring.material as THREE.SpriteMaterial).color.set(index===this.selected?ACCENT:this.staged.has(node.assetId)?BRASS:DETAIL)
+    if(index>=0&&this.nodes[index])paint(index,true)
+    colors.needsUpdate=true
   }
 
   // Stationary by default: reveal state follows the camera and selection,
   // but nothing moves on its own. Reduced motion needs no special case.
   update(camera?:THREE.Camera):void{
-    if(!this.group.visible)return
+    if(!this.group.visible||!this.dust)return
+    const radius=camera?camera.position.distanceTo(this.center):Infinity
     const nearby:number[]=[]
-    if(camera&&camera.position.distanceTo(this.center)<REVEAL_RADIUS){
+    if(camera&&radius<REVEAL_RADIUS){
       const scored:[number,number][]=[]
       for(let i=0;i<this.nodes.length;i++){
         const dist=this.nodes[i].base.distanceTo(camera.position)
@@ -167,28 +148,47 @@ export class NetworkChamber{
       scored.sort((a,b)=>a[0]-b[0])
       for(let k=0;k<scored.length&&k<REVEAL_MAX;k++)nearby.push(scored[k][1])
     }
+    // Zooming in dims the dust as previews emerge; near points never blob.
+    ;(this.dust.material as THREE.PointsMaterial).opacity=0.55+0.45*Math.min(1,Math.max(0,(radius-38)/26))
+    const positions=this.dust.geometry.getAttribute('position') as THREE.BufferAttribute
+    const now=performance.now()
+    let moved=false
     this.nodes.forEach((node,index)=>{
       const revealed=index===this.selected||nearby.includes(index)
       if(revealed&&!node.loaded)this.loadThumb(node)
-      node.thumb.visible=revealed
-      node.dot.visible=!revealed
+      if(revealed&&!node.thumb.visible){node.thumb.visible=true;node.revealAt=now}
+      if(!revealed&&node.thumb.visible){node.thumb.visible=false;(node.thumb.material as THREE.SpriteMaterial).opacity=0}
+      if(revealed){
+        const material=node.thumb.material as THREE.SpriteMaterial
+        material.opacity=Math.min(1,(now-node.revealAt)/350)
+      }
+      // A revealed record hides its dust point so the preview reads clean.
+      const hiddenY=node.base.y+100000
+      const y=positions.getY(index)
+      if(revealed&&y!==hiddenY){positions.setY(index,hiddenY);moved=true}
+      else if(!revealed&&y!==node.base.y){positions.setY(index,node.base.y);moved=true}
     })
+    if(moved)positions.needsUpdate=true
   }
 
   // Clear exhale: the constellation breathes outward and dissolves.
   disperse(t:number):void{
-    const clamped=Math.min(1,Math.max(0,t))
-    const eased=1-Math.pow(1-clamped,2)
-    this.nodes.forEach(node=>{
-      const position=node.base.clone().sub(this.center).multiplyScalar(eased*1.6).add(node.base)
-      const sprites=[node.dot,node.ring,node.thumb],bases=[node.dotBase,0.8,1]
-      sprites.forEach((sprite,i)=>{
-        sprite.position.copy(position)
-        ;(sprite.material as THREE.SpriteMaterial).opacity=bases[i]*(1-eased)
-      })
-      node.hit.position.copy(position)
+    if(!this.dust)return
+    const eased=1-Math.pow(1-Math.min(1,Math.max(0,t)),2)
+    const positions=this.dust.geometry.getAttribute('position') as THREE.BufferAttribute
+    const array=positions.array as Float32Array,bases=this.allBases,center=this.center
+    for(let i=0;i<array.length;i+=3){
+      array[i]=bases[i]+(bases[i]-center.x)*eased*1.6
+      array[i+1]=bases[i+1]+(bases[i+1]-center.y)*eased*1.6
+      array[i+2]=bases[i+2]+(bases[i+2]-center.z)*eased*1.6
+    }
+    positions.needsUpdate=true
+    ;(this.dust.material as THREE.PointsMaterial).opacity=1-eased
+    this.nodes.forEach((node,index)=>{
+      node.hit.position.set(array[index*3],array[index*3+1],array[index*3+2])
+      node.thumb.position.copy(node.hit.position)
+      ;(node.thumb.material as THREE.SpriteMaterial).opacity=1-eased
     })
-    if(this.edges)(this.edges.material as THREE.LineBasicMaterial).opacity=0.3*(1-eased)
   }
 
   pick(clientX:number,clientY:number,camera:THREE.Camera,rect:{left:number;top:number;width:number;height:number}):number{
@@ -202,16 +202,17 @@ export class NetworkChamber{
   }
 
   private clear():void{
-    // Only thumbnails own their textures; dots and rings share statics.
+    // Only thumbnails own their textures; the dust shares statics.
     for(const node of this.nodes){
       const owned=(node.thumb.material as THREE.SpriteMaterial).map
       if(owned)owned.dispose()
-      for(const sprite of [node.dot,node.ring,node.thumb,node.hit])(sprite.material as THREE.Material).dispose()
+      ;(node.hit.material as THREE.Material).dispose()
+      ;(node.thumb.material as THREE.Material).dispose()
     }
     this.nodes=[]
-    this.edges?.geometry.dispose()
-    ;(this.edges?.material as THREE.Material|undefined)?.dispose()
-    this.edges=null
+    this.dust?.geometry.dispose()
+    ;(this.dust?.material as THREE.Material|undefined)?.dispose()
+    this.dust=null
     this.selected=-1
     this.group.clear()
   }
