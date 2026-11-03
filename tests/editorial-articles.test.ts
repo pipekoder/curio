@@ -105,6 +105,19 @@ it('rejects missing consent or AI flags before paid calls',async()=>{
  expect((await post({EDITORIAL_REVIEW_ENABLED:'false'})).status).toBe(503)
  expect(send).not.toHaveBeenCalled()
 })
+it('discloses the exact caller limit without model calls or global usage leakage',async()=>{
+ mockPool(6)
+ const send=provider();vi.stubGlobal('fetch',send)
+ const denial={limitType:'global_daily',limit:100,used:100,remaining:0,requestedUnits:4,measure:'units',retryAfterSeconds:1200,resetAt:'2026-11-02T00:00:00.000Z'}
+ const budget={idFromName:()=>({}),get:()=>({fetch:async()=>Response.json({allowed:false,denial,retryAfter:1200})})}
+ const response=await post({INFERENCE_BUDGET:budget})
+ expect(response.status).toBe(200)
+ const body=await response.json() as Record<string,unknown>
+ expect(body).toMatchObject({source:'deterministic',status:'fallback',fallbackReason:'budget',budget:{limitType:'global_daily',remaining:0,requestedUnits:4},inference:{attempted:false,reservedUnits:0}})
+ expect(body.budget).not.toHaveProperty('used')
+ expect(body.budget).not.toHaveProperty('limit')
+ expect(send).not.toHaveBeenCalled()
+})
 function preparationDb(){
  const sqlite=new DatabaseSync(':memory:')
  sqlite.exec('CREATE TABLE asset_versions(id TEXT PRIMARY KEY)')
@@ -174,10 +187,12 @@ it('does not retry failed analysis, and keeps budget refusal explicit',async()=>
   vi.mocked(editorialArticlePool).mockResolvedValue(prepared(5,[version(6)]))
   expect((await post()).status).toBe(409)
   expect(runClassification).not.toHaveBeenCalled()
-  vi.mocked(runClassification).mockRejectedValue(new AssetAnalysisError('inference_limit_reached',429))
+  const denied=new AssetAnalysisError('inference_limit_reached',429)
+  denied.budget={limitType:'article_preparation_hourly',limit:16,used:16,remaining:0,requestedUnits:1,measure:'units',retryAfterSeconds:1200}
+  vi.mocked(runClassification).mockRejectedValue(denied)
   const response=await post({EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db},{interests:'A separate budget-limited preparation study'})
   expect(response.status).toBe(429)
-  expect(await response.json()).toMatchObject({status:'unavailable',fallbackReason:'budget'})
+  expect(await response.json()).toMatchObject({status:'unavailable',fallbackReason:'budget',budget:{limitType:'article_preparation_hourly',limit:16,used:16,remaining:0}})
   expect(runClassification).toHaveBeenCalledOnce()
  }finally{sqlite.close()}
 })

@@ -9,6 +9,7 @@ import {runClassification,AssetAnalysisError} from './asset-classifier'
 import {catalogDigest} from './catalog-store'
 import {ARTICLE_EVIDENCE_VERSION,ARTICLE_INTERPRETATION_VERSION} from '../shared/article-evidence'
 import {resolveArticlePreparationPolicy} from './article-preparation-policy'
+import {publicBudgetDenial} from '../shared/budget-diagnostic'
 
 const JOB_VERSION='curio-article-job-demo-v2'
 const LEASE_MS=120_000
@@ -137,7 +138,8 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
     const settled=await Promise.allSettled(selected.map(versionId=>runClassification({versionId,mode:'meta',consent:true,retryFailed:false},env,identity.ip,{articlePreparation:true})))
     const budgetPaused=settled.every(row=>row.status==='rejected'&&row.reason instanceof AssetAnalysisError&&row.reason.code==='inference_limit_reached')
     if(budgetPaused){
-      const body={...base,status:'unavailable',fallbackReason:'budget',eligibleImages:progress.eligibleImages,requiredImages:ARTICLE_MIN_ELIGIBLE_IMAGES}
+      const denial=settled.find(row=>row.status==='rejected'&&row.reason instanceof AssetAnalysisError&&row.reason.budget)
+      const body={...base,status:'unavailable',fallbackReason:'budget',...(denial?.status==='rejected'&&denial.reason instanceof AssetAnalysisError&&denial.reason.budget?{budget:publicBudgetDenial(denial.reason.budget)}:{}),eligibleImages:progress.eligibleImages,requiredImages:ARTICLE_MIN_ELIGIBLE_IMAGES}
       return Response.json(body,{status:429})
     }
     pool=await editorialArticlePool(env,p)
