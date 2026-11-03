@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest'
-import {NETWORK_CENTER,NETWORK_RADIUS,ORBIT_DEFAULT,ORBIT_MAX,ORBIT_MIN,buildEdges,layoutNetwork,nodeScale,orbitCamera,pickSurprise,relevanceWeights} from '../src/spatial/network-math'
+import {NETWORK_CENTER,NETWORK_RADIUS,ORBIT_DEFAULT,ORBIT_MAX,ORBIT_MIN,buildEdges,layoutDust,layoutNetwork,mulberry,nodeScale,orbitCamera,pickSurprise,relevanceWeights} from '../src/spatial/network-math'
 
 describe('network layout',()=>{
  it('spreads every node deterministically inside the chamber shell',()=>{
@@ -17,6 +17,36 @@ describe('network layout',()=>{
  it('handles empty and single-node catalogs',()=>{
   expect(layoutNetwork(0)).toEqual([])
   expect(layoutNetwork(1)).toEqual([NETWORK_CENTER])
+ })
+})
+
+describe('dust volume',()=>{
+ it('fills genuine 3D space deterministically with density variation',()=>{
+  const first=layoutDust(163,NETWORK_CENTER,NETWORK_RADIUS,mulberry(7))
+  expect(layoutDust(163,NETWORK_CENTER,NETWORK_RADIUS,mulberry(7))).toEqual(first)
+  expect(first).toHaveLength(163)
+  const axes=[0,1,2].map(axis=>{
+    const values=first.map(p=>p[axis] as number)
+    const mean=values.reduce((n,v)=>n+v,0)/values.length
+    return Math.sqrt(values.reduce((n,v)=>n+(v-mean)*(v-mean),0)/values.length)
+  })
+  // Spread in every axis: a volume, not a shell, plane, or ring.
+  expect(axes[0]).toBeGreaterThan(6)
+  expect(axes[1]).toBeGreaterThan(3)
+  expect(axes[2]).toBeGreaterThan(5)
+  for(const [x,y,z] of first){
+    expect(Math.hypot(x-NETWORK_CENTER[0],y-NETWORK_CENTER[1],z-NETWORK_CENTER[2])).toBeLessThan(NETWORK_RADIUS*1.4)
+  }
+  const heart=first.filter((_,i)=>i%5!==0),halo=first.filter((_,i)=>i%5===0)
+  const spread=(pts:number[][])=>Math.hypot(...[0,1,2].map(axis=>{
+    const values=pts.map(p=>p[axis])
+    return Math.max(...values)-Math.min(...values)
+  }))
+  expect(spread(halo)).toBeGreaterThan(spread(heart))
+ })
+ it('handles empty and single-point clouds',()=>{
+  expect(layoutDust(0,NETWORK_CENTER,NETWORK_RADIUS,mulberry(1))).toEqual([])
+  expect(layoutDust(1,NETWORK_CENTER,NETWORK_RADIUS,mulberry(1))).toHaveLength(1)
  })
 })
 
