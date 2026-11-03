@@ -115,10 +115,10 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
   const tester=await demoIdentity(request,env,ip)
   let reservationId:string|undefined,outcome:'completed'|'fallback'|'error'='error',called=0
   const started=performance.now(),measurements:Measurement[]=[]
-  const fallback=(reason:string)=>Response.json({...base,status:'fallback',fallbackReason:reason,inference:{attempted:called>0,reservedUnits:reservationId?4:0,latencyMs:Math.round(performance.now()-started),usage:measurements.length?{inputTokens:measurements.reduce((n,row)=>n+row.inputTokens,0),outputTokens:measurements.reduce((n,row)=>n+row.outputTokens,0),totalTokens:measurements.reduce((n,row)=>n+row.totalTokens,0)}:null}})
+  const fallback=(reason:string,budget?:unknown)=>Response.json({...base,status:'fallback',fallbackReason:reason,...(budget?{budget}:{}),inference:{attempted:called>0,reservedUnits:reservationId?4:0,latencyMs:Math.round(performance.now()-started),usage:measurements.length?{inputTokens:measurements.reduce((n,row)=>n+row.inputTokens,0),outputTokens:measurements.reduce((n,row)=>n+row.outputTokens,0),totalTokens:measurements.reduce((n,row)=>n+row.totalTokens,0)}:null}})
   try{
     const budget=await reserveInference(env,ip,4,undefined,false,tester)
-    if(!budget.allowed)return fallback('budget')
+    if(!budget.allowed)return fallback('budget',budget.publicDenial)
     reservationId=budget.reservationId
     const reservation=new InferenceReservation(4)
     const call=async<T>(model:string,instruction:string,input:unknown,schema:z.ZodType<T>,name:string,maxTokens:number)=>{

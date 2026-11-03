@@ -37,6 +37,12 @@ describe('spatial edition fetch',()=>{
     if('fallbackReason' in body)expect(fallbackReason).toBe(body.fallbackReason)
   }
  })
+ it('preserves safe budget diagnostics on a deterministic fallback',async()=>{
+  const body={plan:plan(),items:pool,source:'deterministic',retrieval:'d1',cached:false,fallbackReason:'budget',budget:{limitType:'per_ip_cooldown',limit:1,used:1,remaining:0,requestedUnits:4,measure:'requests',retryAfterSeconds:58}}
+  const result=await fetchEdition('quiet rooms',true,ok(body) as unknown as typeof fetch)
+  expect(result.fallbackReason).toBe('budget')
+  expect(result.budget).toMatchObject({limitType:'per_ip_cooldown',retryAfterSeconds:58})
+ })
  it('stages only features joining returned items on both IDs',async()=>{
   const joined={...plan(),features:[plan().features[0]]}
   const body={plan:joined,items:pool,source:'meta',retrieval:'d1',cached:false}

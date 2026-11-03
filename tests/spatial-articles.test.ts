@@ -87,6 +87,9 @@ describe('spatial article edition fetch', () => {
     expect(fallback.edition).toBeNull()
     expect(fallback.status).toBe('fallback')
     expect(fallback.fallbackReason).toBe('editorial_rejected')
+    const budget = await call(ok({format:ARTICLE_CONTRACT_VERSION,source:'deterministic',retrieval:'d1',cached:false,articleEdition:null,status:'fallback',fallbackReason:'budget',budget:{limitType:'global_lifetime',remaining:0,requestedUnits:4,measure:'units'}}))
+    expect(budget.budget).toMatchObject({limitType:'global_lifetime',remaining:0})
+    expect(articleStatusCopy(budget).detail).toContain('shared lifetime inference budget')
     const offline = await call(vi.fn(async () => {throw Error('offline')}))
     expect(offline.edition).toBeNull()
     expect(offline.status).toBe('request_failed')
@@ -102,6 +105,7 @@ describe('spatial article edition fetch', () => {
     expect(articleStatusCopy({status: 'disabled'} as never).title).toContain('disabled')
     expect(articleStatusCopy({status: 'consent_required'} as never).title).toContain('consent')
     expect(articleStatusCopy({status: 'insufficient_content', eligibleImages: 9, requiredImages: 6} as never).detail).toContain('9 of 6')
+    expect(articleStatusCopy({status:'fallback',fallbackReason:'budget',budget:{limitType:'per_ip_hourly',limit:4,used:4,remaining:0,requestedUnits:4,measure:'units',retryAfterSeconds:3600}} as never).detail).toContain('hourly inference allowance')
     expect(articleStatusCopy({timedOut: true} as never).title).toContain('still being reviewed')
     for (const status of ['disabled', 'consent_required', 'unavailable', 'insufficient_content', 'fallback', 'request_failed', null] as const) {
       expect(articleStatusCopy({status, timedOut: false} as never).detail).toContain('standard edition')
