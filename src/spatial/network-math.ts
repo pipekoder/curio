@@ -76,6 +76,30 @@ export function orbitCamera(center:Vec3,yaw:number,pitch:number,radius:number):{
   }
 }
 
+// Deterministic stream so the dust cloud is stable across renders.
+export function mulberry(seed:number):()=>number{
+  let a=seed
+  return ()=>{
+    a|=0;a=a+0x6D2B79F5|0
+    let t=Math.imul(a^a>>>15,1|a)
+    t=t+Math.imul(t^t>>>7,61|t)^t
+    return((t^t>>>14)>>>0)/4294967296
+  }
+}
+
+// Volumetric dust: center-weighted points through a flattened ellipsoid, a
+// denser heart plus a sparse halo. Genuine depth in every axis, no shell,
+// grid, or ring. Deterministic for the given stream.
+export function layoutDust(count:number,center:Vec3,radius:number,rand:()=>number):Vec3[]{
+  const pts:Vec3[]=[]
+  for(let i=0;i<count;i++){
+    const g=()=>(rand()+rand()+rand())/1.5-1
+    const spread=i%5===0?1.15:0.75
+    pts.push([center[0]+g()*radius*spread,center[1]+g()*radius*0.55*spread,center[2]+g()*radius*0.85*spread])
+  }
+  return pts
+}
+
 // Uniform random pick that never repeats the current highlight. The visitor
 // chooses whether to enter; selection never dives on its own.
 export function pickSurprise(count:number,exclude=-1,rand:()=>number=Math.random):number{
