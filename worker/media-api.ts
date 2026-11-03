@@ -7,6 +7,8 @@ import { MediaStore, MEDIA_MAX_BYTES } from './media-store'
 import { mediaMetadataUpdate, parseStudioText } from './media-contracts'
 import { allowedOperatorOrigin } from './operator-origin'
 import type { Bindings } from './index'
+import {feedbackInput,principleUpdate,listRecentArticles,saveFeedback,feedbackHistory,listPrinciples,updatePrinciple} from './editorial-feedback'
+import {revisionInput,decisionInput,listArticleVersions,requestArticleRevision,decideArticleVersion,RevisionConflict} from './editorial-revisions'
 
 const versionId = z.string().regex(/^version-[a-f0-9]{64}$/)
 export const mediaApi = new Hono<{ Bindings: Bindings }>()
@@ -20,6 +22,7 @@ export const mediaOperatorAuth:MiddlewareHandler<{Bindings:Bindings}>=async (c,n
 }
 mediaApi.use('*',mediaOperatorAuth)
 mediaApi.onError((error,c)=>{
+  if(error instanceof RevisionConflict)return c.json({error:error.message},409)
   if(error instanceof CatalogConflict)return c.json({error:error.message},409)
   if(error instanceof z.ZodError||error instanceof SyntaxError)return c.json({error:'Invalid Media Studio input.'},400)
   if(error instanceof RangeError)return c.json({error:error.message},413)
@@ -30,6 +33,37 @@ const json=async(request:Request,max=150000)=>{let value:string;try{value=await 
 
 export const mediaRoot:Handler<{Bindings:Bindings}>=async c=>c.json(await store(c.env).list())
 mediaApi.get('/',mediaRoot)
+const feedbackAvailable=(env:Bindings)=>env.EDITORIAL_FEEDBACK_ENABLED==='true'&&!!env.CATALOG_DB
+mediaApi.get('/editorial/articles',async c=>feedbackAvailable(c.env)?c.json({articles:await listRecentArticles(c.env.CATALOG_DB!)}):c.json({error:'Editorial feedback unavailable.'},503))
+mediaApi.get('/editorial/feedback/:articleId',async c=>{
+  if(!feedbackAvailable(c.env))return c.json({error:'Editorial feedback unavailable.'},503)
+  const id=z.string().regex(/^article-version-[a-f0-9]{64}$/).parse(c.req.param('articleId'))
+  return c.json({feedback:await feedbackHistory(c.env.CATALOG_DB!,id)})
+})
+mediaApi.post('/editorial/feedback',async c=>{
+  if(!feedbackAvailable(c.env))return c.json({error:'Editorial feedback unavailable.'},503)
+  try{return c.json(await saveFeedback(c.env.CATALOG_DB!,feedbackInput.parse(await json(c.req.raw,5000))),201)}
+  catch(error){if(error instanceof Error&&/Article version|identical editorial/.test(error.message))return c.json({error:error.message},409);throw error}
+})
+mediaApi.get('/editorial/principles',async c=>feedbackAvailable(c.env)?c.json({principles:await listPrinciples(c.env.CATALOG_DB!)}):c.json({error:'Editorial feedback unavailable.'},503))
+mediaApi.patch('/editorial/principles/:id',async c=>{
+  if(!feedbackAvailable(c.env))return c.json({error:'Editorial feedback unavailable.'},503)
+  try{return c.json(await updatePrinciple(c.env.CATALOG_DB!,c.req.param('id'),principleUpdate.parse(await json(c.req.raw,3000))))}
+  catch(error){if(error instanceof Error&&/Editorial principle|Approve the principle|identical editorial/.test(error.message))return c.json({error:error.message},409);throw error}
+})
+mediaApi.get('/editorial/versions/:jobId/:articleId',async c=>{
+  if(!feedbackAvailable(c.env))return c.json({error:'Editorial feedback unavailable.'},503)
+  return c.json(await listArticleVersions(c.env.CATALOG_DB!,c.req.param('jobId'),c.req.param('articleId')))
+})
+mediaApi.post('/editorial/revisions',async c=>{
+  if(!feedbackAvailable(c.env))return c.json({error:'Editorial feedback unavailable.'},503)
+  const input=revisionInput.parse(await json(c.req.raw,3000))
+  return c.json(await requestArticleRevision(c.env,input,c.req.header('CF-Connecting-IP')!),201)
+})
+mediaApi.post('/editorial/decisions',async c=>{
+  if(!feedbackAvailable(c.env))return c.json({error:'Editorial feedback unavailable.'},503)
+  return c.json(await decideArticleVersion(c.env,decisionInput.parse(await json(c.req.raw,2000))))
+})
 mediaApi.post('/batches',async c=>{const input=z.strictObject({sourceText:z.string().max(100000).default('')}).parse(await json(c.req.raw));return c.json({batchId:await store(c.env).createBatch(input.sourceText)},201)})
 mediaApi.post('/parse',async c=>{const input=z.strictObject({sourceText:z.string().max(100000)}).parse(await json(c.req.raw));return c.json(parseStudioText(input.sourceText))})
 mediaApi.post('/imports',async c=>c.json(await store(c.env).import(await json(c.req.raw)),201))

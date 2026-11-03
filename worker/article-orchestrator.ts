@@ -11,6 +11,7 @@ import {ARTICLE_EVIDENCE_VERSION,ARTICLE_INTERPRETATION_VERSION} from '../shared
 import {resolveArticlePreparationPolicy} from './article-preparation-policy'
 import {publicBudgetDenial} from '../shared/budget-diagnostic'
 import {editorialSources,type EditorialSource} from '../shared/editorial-sources'
+import {approvedArticleVersions} from './editorial-revisions'
 
 const JOB_VERSION='curio-article-job-demo-v2'
 // Exceeds the bounded 150-second editorial workflow plus catalog and D1 work.
@@ -79,7 +80,9 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
     job=await read()
     if(!job){
       // Expiry cleanup and insert happen once per new prompt, never on polls.
-      await db.prepare('DELETE FROM article_edition_jobs WHERE updated_at<?').bind(now-JOB_TTL_MS).run()
+      await db.prepare(env.EDITORIAL_FEEDBACK_ENABLED==='true'
+        ?'DELETE FROM article_edition_jobs WHERE updated_at<? AND NOT EXISTS(SELECT 1 FROM editorial_article_feedback f WHERE f.job_id=article_edition_jobs.id)'
+        :'DELETE FROM article_edition_jobs WHERE updated_at<?').bind(now-JOB_TTL_MS).run()
       await db.prepare(`INSERT INTO article_edition_jobs(id,ip_digest,input_digest,state,created_at,updated_at) VALUES(?,?,?,'preparing',?,?) ON CONFLICT(id) DO NOTHING`).bind(identity.id,identity.ipDigest,identity.inputDigest,now,now).run()
       job=await read()
     }
@@ -98,9 +101,10 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
     const saved=JSON.parse(job.result_json) as {articleEdition:ArticleEditionBody;generation:unknown;evidence?:{interpretations:number}|null;researchReferences?:unknown;aiDisclosure?:string}
     const research=editorialSources.parse(saved.researchReferences??[])
     if(!researchReferencesCurrent(research,env.RESEARCH_SOURCE_ORIGINS))throw Error('Research evidence expired')
-    const edition=validateArticleEdition(saved.articleEdition,pool.items,[...pool.sources,...research],pool.visualContexts,saved.articleEdition.articles.length)
+    const approved=env.EDITORIAL_FEEDBACK_ENABLED==='true'?await approvedArticleVersions(db,identity.id,saved.articleEdition):{edition:saved.articleEdition,revisedIds:[]}
+    const edition=validateArticleEdition(approved.edition,pool.items,[...pool.sources,...research],pool.visualContexts,saved.articleEdition.articles.length)
     if(job.evidence_digest!==await evidenceDigest(pool,edition,research))throw Error('Evidence changed')
-    return Response.json({format,source:'meta',retrieval:'d1',cached:true,articleEdition:edition,items:pool.items,generation:saved.generation,
+    return Response.json({format,source:'meta',retrieval:'d1',cached:true,articleEdition:edition,items:pool.items,generation:approved.revisedIds.length?{...(saved.generation as Record<string,unknown>),revisionModel:'muse-spark-1.3',confirmationModel:'muse-spark-1.3'}:saved.generation,
       ...(saved.evidence!==undefined?{evidence:saved.evidence}:{}),...(saved.aiDisclosure?{researchReferences:research,aiDisclosure:saved.aiDisclosure}:{}),inference:{attempted:false,reservedUnits:0,latencyMs:null,usage:null}})
   }catch{/* A changed version, source or grant invalidates the saved result. */}
   if(job.state==='completed'){
