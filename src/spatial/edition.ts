@@ -1,4 +1,5 @@
 import {z} from 'zod'
+import {publicBudgetDiagnostic,type PublicBudgetDiagnostic} from '../../shared/budget-diagnostic'
 import {
   defaultPreferences,editorialDemoCatalog,editorialPlan,fallbackPlan,
   type EditorialEdition,type EditorialPlan,type EditorialPreferences,
@@ -29,7 +30,7 @@ export type StagedEdition=Omit<EditorialEdition,'plan'>&{plan:StagedPlan;fullPla
 // modeError means nothing was staged and honest/edition must not render:
 // a Hybrid request the server refused is never silently swapped for Lite.
 // generation confirms the routed mode on reviewed Meta responses only.
-export type EditionFetch={edition:StagedEdition|null;honest:HonestState;fallbackReason?:string;timedOut:boolean;modeError?:'hybrid_unavailable';generation:GenerationMetadata|null}
+export type EditionFetch={edition:StagedEdition|null;honest:HonestState;fallbackReason?:string;timedOut:boolean;modeError?:'hybrid_unavailable';generation:GenerationMetadata|null;budget?:PublicBudgetDiagnostic}
 
 export function parseStagedPlan(raw:unknown):StagedPlan{
   if(typeof raw!=='object'||raw===null)throw new Error('Invalid plan')
@@ -73,6 +74,7 @@ const envelope=z.object({
   retrieval:z.enum(['d1','fictional']),
   cached:z.boolean(),
   fallbackReason:z.string().max(80).optional(),
+  budget:publicBudgetDiagnostic.optional(),
   generation:z.unknown().optional(),
 })
 
@@ -119,7 +121,7 @@ export async function fetchEdition(prompt:string,consent:boolean,fetchImpl:typeo
       :data.retrieval==='d1'?'deterministic-d1':'deterministic-fictional'
     return {
       edition:{plan:{...plan,features:staged},fullPlan:plan,items:data.items,source:data.source,retrieval:data.retrieval,cached:data.cached},
-      honest,fallbackReason:data.fallbackReason,timedOut:false,generation:parseGenerationMetadata(data.generation),
+      honest,fallbackReason:data.fallbackReason,budget:data.budget,timedOut:false,generation:parseGenerationMetadata(data.generation),
     }
   }catch{
     return fallback(bound.aborted)
