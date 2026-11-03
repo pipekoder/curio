@@ -45,7 +45,7 @@ import {publicCitationsForPlan} from './editorial-citations';
 import type { Bindings } from "./index";
 import {chiefModel, editorialModeSchema, generationMetadata, hybridAvailable, hybridConfigured, EDITORIAL_MODEL_ROUTING_VERSION, type EditorialMode} from './editorial-model-routing';
 import {articleEditorialResponse} from './editorial-articles';
-import {ARTICLE_CONTRACT_VERSION} from '../shared/editorial-articles';
+import {ARTICLE_CONTRACT_VERSION,ARTICLE_SINGLE_CONTRACT_VERSION} from '../shared/editorial-articles';
 import {articleJobResponse} from './article-orchestrator';
 // Index is never public. Only already approved compiled catalog records can be
 // hydrated from D1 hits; no returned URL, name, hint, job or source row is exposed.
@@ -137,12 +137,16 @@ editorialApi.post("/", async (c) => {
   }
   let p: EditorialPreferences;
   let editorialMode:EditorialMode='lite';
-  let articleFormat=false;
+  let articleCount:1|3|null=null;
   try {
     if(input && typeof input==='object' && !Array.isArray(input) && ('editorialMode' in input||'editionFormat' in input)){
       const {editorialMode:requested,editionFormat,...preferences}=input as Record<string,unknown>;
       if(requested!==undefined)editorialMode=editorialModeSchema.parse(requested);
-      if(editionFormat!==undefined){if(editionFormat!==ARTICLE_CONTRACT_VERSION)throw Error('Unknown edition format');articleFormat=true}
+      if(editionFormat!==undefined){
+        if(editionFormat===ARTICLE_CONTRACT_VERSION)articleCount=3
+        else if(editionFormat===ARTICLE_SINGLE_CONTRACT_VERSION)articleCount=1
+        else throw Error('Unknown edition format')
+      }
       p=resolveEditorialInput(preferences);
     }else p=resolveEditorialInput(input);
   }
@@ -155,7 +159,7 @@ editorialApi.post("/", async (c) => {
   )
     return c.json({ error: "Origin or content type not allowed." }, 403);
   if(editorialMode==='hybrid'&&!hybridConfigured(env))return c.json({error:'Hybrid editorial mode is currently unavailable.',code:'hybrid_unavailable'},503);
-  if(articleFormat)return env.EDITORIAL_ARTICLE_PREPARATION_ENABLED==='true'?articleJobResponse(c.req.raw,env,p,editorialMode):articleEditorialResponse(c.req.raw,env,p,editorialMode);
+  if(articleCount!==null)return env.EDITORIAL_ARTICLE_PREPARATION_ENABLED==='true'?articleJobResponse(c.req.raw,env,p,editorialMode,articleCount):articleEditorialResponse(c.req.raw,env,p,editorialMode,undefined,articleCount);
   const pilot=parsePilotVersions(env.EDITORIAL_PILOT_VERSION_IDS)
   const dynamicCatalog=env.EDITORIAL_PUBLIC_AI_ENABLED==='true'&&env.EDITORIAL_DYNAMIC_CATALOG_ENABLED==='true'
   const selectedPilot=dynamicCatalog?null:pilot
