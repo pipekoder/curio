@@ -83,7 +83,7 @@ export async function editorialArticlePool(env:Bindings,p:EditorialPreferences):
     seenSha.add(sha)
     verified.push({item,row,context:retrievedVisualContext(row,item,approvals)})
   }
-  const allSources=await stage('sources',()=>loadEditorialSources(db,verified.map(row=>row.item.image.id),{maxSources:300,maxBytes:96_000}))
+  const allSources=await stage('sources',()=>loadEditorialSources(db,verified.map(row=>row.item.image.id),{maxSources:300,maxBytes:524_288}))
   const sourced=verified.filter(row=>{
     const found=allSources.some(source=>source.assetId===row.item.image.id&&source.kind==='brand_name')&&allSources.some(source=>source.assetId===row.item.image.id&&source.kind==='product_description')
     if(!found)exclusions.sources++
