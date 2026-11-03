@@ -21,6 +21,15 @@ const MAX_PROVIDER_INPUT_BYTES=96_000
 const modelUsage=z.object({prompt_tokens:z.number().int().min(0).max(10_000_000),completion_tokens:z.number().int().min(0).max(10_000_000),total_tokens:z.number().int().min(0).max(10_000_000)}).optional()
 type Measurement={inputTokens:number;outputTokens:number;totalTokens:number}
 const cache=new Map<string,{expires:number;edition:EditorialArticleEdition;generation:ReturnType<typeof generationMetadata>}>()
+type ArticleStage='reservation'|'chief_editor'|'reviewer'|'revision'|'confirmation'
+type ArticleFailureCode='budget_unavailable'|'workflow_limit'|'context_limit'|'provider_http'|'provider_transport'|'provider_timeout'|'provider_response'|'response_json'|'response_schema'|'structural_validation'|'review_validation'
+class ArticleWorkflowError extends Error{
+  constructor(readonly stage:ArticleStage,readonly code:ArticleFailureCode){super(`${stage}:${code}`)}
+}
+function workflowFailure(stage:ArticleStage,error:unknown):ArticleWorkflowError{
+  if(error instanceof ArticleWorkflowError)return error
+  return new ArticleWorkflowError(stage,stage==='reservation'?'budget_unavailable':stage==='reviewer'||stage==='confirmation'?'review_validation':'structural_validation')
+}
 
 function factualSources(pool:ArticlePool){
   return pool.sources.filter(source=>['brand_name','brand_story','brand_description','product_name','product_description','product_materials','product_category','cultural_claim'].includes(source.kind))
@@ -48,15 +57,29 @@ export function validateArticleEdition(value:unknown,items:readonly CatalogItem[
   return edition
 }
 
-async function structuredMuse<T>(apiKey:string,model:string,instruction:string,input:unknown,schema:z.ZodType<T>,name:string,maxTokens:number){
+async function structuredMuse<T>(apiKey:string,model:string,instruction:string,input:unknown,schema:z.ZodType<T>,name:string,maxTokens:number,stage:ArticleStage,onAttempt:()=>void){
   const body={model,max_completion_tokens:maxTokens,reasoning_effort:'minimal',stream:false,messages:[{role:'developer',content:instruction},{role:'user',content:JSON.stringify(input)}],response_format:{type:'json_schema',json_schema:{name,schema:z.toJSONSchema(schema,{unrepresentable:'any'})}}}
-  if(new TextEncoder().encode(JSON.stringify(body)).length>MAX_PROVIDER_INPUT_BYTES)throw Error('Article context limit')
+  const payload=JSON.stringify(body)
+  if(new TextEncoder().encode(payload).length>MAX_PROVIDER_INPUT_BYTES)throw new ArticleWorkflowError(stage,'context_limit')
   const started=performance.now()
-  const response=await fetch('https://api.meta.ai/v1/chat/completions',{method:'POST',redirect:'manual',signal:AbortSignal.timeout(20000),headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify(body)})
-  if(!response.ok){await response.body?.cancel();throw Error('Article model unavailable')}
-  const envelope=z.object({choices:z.array(z.object({finish_reason:z.literal('stop'),message:z.object({content:z.string().max(100_000)})})).length(1),usage:modelUsage}).parse(JSON.parse(await boundedText(response.body,120_000)))
-  if(envelope.usage&&envelope.usage.total_tokens!==envelope.usage.prompt_tokens+envelope.usage.completion_tokens)throw Error('Invalid usage')
-  const value=schema.parse(JSON.parse(envelope.choices[0].message.content))
+  let response:Response
+  onAttempt()
+  try{response=await fetch('https://api.meta.ai/v1/chat/completions',{method:'POST',redirect:'manual',signal:AbortSignal.timeout(20000),headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},body:payload})}
+  catch(error){throw new ArticleWorkflowError(stage,error instanceof Error&&['AbortError','TimeoutError'].includes(error.name)?'provider_timeout':'provider_transport')}
+  if(!response.ok){await response.body?.cancel().catch(()=>{});throw new ArticleWorkflowError(stage,response.status===413?'context_limit':'provider_http')}
+  let raw:string
+  try{raw=await boundedText(response.body,120_000)}catch(error){throw new ArticleWorkflowError(stage,error instanceof Error&&['AbortError','TimeoutError'].includes(error.name)?'provider_timeout':'provider_response')}
+  let envelopeRaw:unknown
+  try{envelopeRaw=JSON.parse(raw)}catch{throw new ArticleWorkflowError(stage,'provider_response')}
+  const parsedEnvelope=z.object({choices:z.array(z.object({finish_reason:z.literal('stop'),message:z.object({content:z.string().max(100_000)})})).length(1),usage:modelUsage}).safeParse(envelopeRaw)
+  if(!parsedEnvelope.success)throw new ArticleWorkflowError(stage,'provider_response')
+  const envelope=parsedEnvelope.data
+  if(envelope.usage&&envelope.usage.total_tokens!==envelope.usage.prompt_tokens+envelope.usage.completion_tokens)throw new ArticleWorkflowError(stage,'provider_response')
+  let content:unknown
+  try{content=JSON.parse(envelope.choices[0].message.content)}catch{throw new ArticleWorkflowError(stage,'response_json')}
+  const parsed=schema.safeParse(content)
+  if(!parsed.success)throw new ArticleWorkflowError(stage,'response_schema')
+  const value=parsed.data
   return {value,latencyMs:Math.round(performance.now()-started),usage:envelope.usage?{inputTokens:envelope.usage.prompt_tokens,outputTokens:envelope.usage.completion_tokens,totalTokens:envelope.usage.total_tokens}:null as Measurement|null}
 }
 
@@ -113,35 +136,45 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
   const ip=request.headers.get('CF-Connecting-IP')
   if(!ip||ip.length>64)return Response.json({...base,status:'unavailable',fallbackReason:'configuration'},{status:503})
   const tester=await demoIdentity(request,env,ip)
-  let reservationId:string|undefined,outcome:'completed'|'fallback'|'error'='error',called=0
+  let reservationId:string|undefined,outcome:'completed'|'fallback'|'error'='error',called=0,reservedUnits=0,stage:ArticleStage='reservation'
   const started=performance.now(),measurements:Measurement[]=[]
-  const fallback=(reason:string,budget?:unknown)=>Response.json({...base,status:'fallback',fallbackReason:reason,...(budget?{budget}:{}),inference:{attempted:called>0,reservedUnits:reservationId?4:0,latencyMs:Math.round(performance.now()-started),usage:measurements.length?{inputTokens:measurements.reduce((n,row)=>n+row.inputTokens,0),outputTokens:measurements.reduce((n,row)=>n+row.outputTokens,0),totalTokens:measurements.reduce((n,row)=>n+row.totalTokens,0)}:null}})
+  const fallback=(reason:string,budget?:unknown,failure?:ArticleWorkflowError)=>{
+    const requestId=failure?crypto.randomUUID():null
+    if(failure)console.error(JSON.stringify({event:'article_editorial_failure',requestId,stage:failure.stage,code:failure.code}))
+    const response=Response.json({...base,status:'fallback',fallbackReason:reason,...(budget?{budget}:{}),...(failure?{requestId,validationDiagnostic:{stage:failure.stage,code:failure.code}}:{}),inference:{attempted:called>0,reservedUnits,latencyMs:Math.round(performance.now()-started),usage:measurements.length?{inputTokens:measurements.reduce((n,row)=>n+row.inputTokens,0),outputTokens:measurements.reduce((n,row)=>n+row.outputTokens,0),totalTokens:measurements.reduce((n,row)=>n+row.totalTokens,0)}:null}})
+    if(requestId)response.headers.set('X-Curio-Request-Id',requestId)
+    return response
+  }
   try{
     const budget=await reserveInference(env,ip,4,undefined,false,tester)
     if(!budget.allowed)return fallback('budget',budget.publicDenial)
+    reservedUnits=4
     reservationId=budget.reservationId
     const reservation=new InferenceReservation(4)
-    const call=async<T>(model:string,instruction:string,input:unknown,schema:z.ZodType<T>,name:string,maxTokens:number)=>{
-      if(!reservation.claim())throw Error('Workflow budget exhausted')
-      called++
-      const result=await structuredMuse(env.META_API_KEY!,model,instruction,input,schema,name,maxTokens)
+    const call=async<T>(callStage:ArticleStage,model:string,instruction:string,input:unknown,schema:z.ZodType<T>,name:string,maxTokens:number)=>{
+      stage=callStage
+      if(!reservation.claim())throw new ArticleWorkflowError(stage,'workflow_limit')
+      const result=await structuredMuse(env.META_API_KEY!,model,instruction,input,schema,name,maxTokens,stage,()=>{called++})
       if(result.usage)measurements.push(result.usage)
       return result.value
     }
     const catalog=selectedItems.map(item=>({catalogId:item.id,assetId:item.image.id,category:item.category,aestheticTags:item.lifestyleTags}))
-    const chief=await call(chiefModel(mode).model,`${chiefInstruction} ${knowledge} ${knowledge?editorialV21Guidance.chief:''}`,{preferences:p,articleCount:count,catalog,sources,visualContexts:contexts,editorialEvidence:evidencePack},editorialArticleEdition,'curio_articles_v1',8000)
-    let edition=validateArticleEdition(chief,selectedItems,sources,contexts,count)
-    const review=await call('muse-spark-1.3',`${reviewInstruction} ${knowledge} ${knowledge?editorialV21Guidance.reviewer:''}`,{edition,preferences:p,sources,visualContexts:contexts,editorialEvidence:evidencePack},editorialReviewOutput,'curio_articles_review_v1',3000)
-    let assessment=validateReview(review,edition,sources),revised=false
+    const chief=await call('chief_editor',chiefModel(mode).model,`${chiefInstruction} ${knowledge} ${knowledge?editorialV21Guidance.chief:''}`,{preferences:p,articleCount:count,catalog,sources,visualContexts:contexts,editorialEvidence:evidencePack},editorialArticleEdition,'curio_articles_v1',8000)
+    let edition:EditorialArticleEdition
+    try{edition=validateArticleEdition(chief,selectedItems,sources,contexts,count)}catch{throw new ArticleWorkflowError(stage,'structural_validation')}
+    const review=await call('reviewer','muse-spark-1.3',`${reviewInstruction} ${knowledge} ${knowledge?editorialV21Guidance.reviewer:''}`,{edition,preferences:p,sources,visualContexts:contexts,editorialEvidence:evidencePack},editorialReviewOutput,'curio_articles_review_v1',3000)
+    let assessment:ReturnType<typeof validateReview>
+    try{assessment=validateReview(review,edition,sources)}catch{throw new ArticleWorkflowError(stage,'review_validation')}
+    let revised=false
     if(assessment.decision==='REJECT'){outcome='fallback';return fallback('editorial_rejected')}
     const hard=review.featureFeedback.some(row=>row.issues.some(issue=>issue.severity==='high'))
     if(assessment.decision!=='PASS'||hard){
-      const revision=await call('muse-spark-1.3',`${revisionInstruction} ${knowledge} ${knowledge?editorialV21Guidance.revision:''}`,{edition,review,sources,visualContexts:contexts,editorialEvidence:evidencePack},editorialArticleEdition,'curio_articles_revision_v1',8000)
-      const next=validateArticleEdition(revision,selectedItems,sources,contexts,count)
-      if(stableStructure(next)!==stableStructure(edition))throw Error('Article identity changed')
+      const revision=await call('revision','muse-spark-1.3',`${revisionInstruction} ${knowledge} ${knowledge?editorialV21Guidance.revision:''}`,{edition,review,sources,visualContexts:contexts,editorialEvidence:evidencePack},editorialArticleEdition,'curio_articles_revision_v1',8000)
+      let next:EditorialArticleEdition
+      try{next=validateArticleEdition(revision,selectedItems,sources,contexts,count);if(stableStructure(next)!==stableStructure(edition))throw Error('Article identity changed')}catch{throw new ArticleWorkflowError(stage,'structural_validation')}
       edition=next;revised=true
-      const confirmation=await call('muse-spark-1.3',`${reviewInstruction} ${knowledge} ${knowledge?editorialV21Guidance.reviewer:''}`,{edition,preferences:p,sources,visualContexts:contexts,editorialEvidence:evidencePack},editorialReviewOutput,'curio_articles_confirmation_v1',3000)
-      assessment=validateReview(confirmation,edition,sources)
+      const confirmation=await call('confirmation','muse-spark-1.3',`${reviewInstruction} ${knowledge} ${knowledge?editorialV21Guidance.reviewer:''}`,{edition,preferences:p,sources,visualContexts:contexts,editorialEvidence:evidencePack},editorialReviewOutput,'curio_articles_confirmation_v1',3000)
+      try{assessment=validateReview(confirmation,edition,sources)}catch{throw new ArticleWorkflowError(stage,'review_validation')}
       if(assessment.decision!=='PASS'||confirmation.featureFeedback.some(row=>row.issues.some(issue=>issue.severity==='high'))){outcome='fallback';return fallback('editorial_rejected')}
     }
     const generation=generationMetadata(mode,revised)
@@ -149,6 +182,6 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
     cache.set(cacheKey,{edition,generation,expires:Date.now()+300_000})
     outcome='completed'
     return Response.json({format:ARTICLE_CONTRACT_VERSION,source:'meta',retrieval:'d1',cached:false,articleEdition:edition,items:selectedItems,generation,inference:{attempted:true,reservedUnits:4,latencyMs:Math.round(performance.now()-started),usage:measurements.length?{inputTokens:measurements.reduce((n,row)=>n+row.inputTokens,0),outputTokens:measurements.reduce((n,row)=>n+row.outputTokens,0),totalTokens:measurements.reduce((n,row)=>n+row.totalTokens,0)}:null}})
-  }catch{return fallback('provider_or_validation')}
+  }catch(error){return fallback('provider_or_validation',undefined,workflowFailure(stage,error))}
   finally{if(reservationId)await finishInference(env,reservationId,outcome).catch(()=>{})}
 }

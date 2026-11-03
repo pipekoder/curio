@@ -93,6 +93,59 @@ it('uses one four-unit reservation for Lite Chief and independent Reviewer and s
  expect((await post({EDITORIAL_HYBRID_ENABLED:'true',EDITORIAL_WONDER_PROVIDER_VERIFIED:'true',META_WONDER_MODEL:'muse-wonder-1.0'},{editorialMode:'hybrid'})).status).toBe(200)
  expect(JSON.parse(String(send.mock.calls[2][1].body)).model).toBe('muse-wonder-1.0')
 })
+it('reports accepted non-tester reservation and safe stage-specific provider failures',async()=>{
+ mockPool(6)
+ const budget={idFromName:()=>({}),get:()=>({fetch:async()=>Response.json({allowed:true,retryAfter:0})})}
+ const original=console.error,records:string[]=[]
+ console.error=(message:unknown)=>{records.push(String(message))}
+ try{
+  for(const [name,send,code] of [
+   ['HTTP',vi.fn(async()=>new Response('private provider detail',{status:503})),'provider_http'],
+   ['context',vi.fn(async()=>new Response('private provider detail',{status:413})),'context_limit'],
+   ['transport',vi.fn(async()=>{throw new TypeError('private network detail')}),'provider_transport'],
+   ['timeout',vi.fn(async()=>{throw new DOMException('private timeout detail','TimeoutError')}),'provider_timeout'],
+   ['envelope',vi.fn(async()=>Response.json({choices:[]})),'provider_response'],
+   ['JSON',vi.fn(async()=>Response.json({choices:[{finish_reason:'stop',message:{content:'{private'}}]})),'response_json'],
+   ['schema',vi.fn(async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({secret:'private evidence'})}}]})),'response_schema'],
+  ] as const){
+   vi.stubGlobal('fetch',send)
+   const response=await post({INFERENCE_BUDGET:budget},{interests:`Distinct ${name} failure study`})
+   const body=await response.json() as Record<string,unknown>
+   expect(body).toMatchObject({source:'deterministic',fallbackReason:'provider_or_validation',validationDiagnostic:{stage:'chief_editor',code},inference:{attempted:true,reservedUnits:4}})
+   expect(response.headers.get('X-Curio-Request-Id')).toBe(body.requestId)
+   expect(body.requestId).toMatch(/^[0-9a-f-]{36}$/)
+   expect(JSON.stringify(body)).not.toContain('private')
+  }
+  expect(records).toHaveLength(7)
+  expect(records.every(record=>!record.includes('private'))).toBe(true)
+ }finally{console.error=original}
+})
+it('distinguishes Chief structural validation from Reviewer schema and reference validation',async()=>{
+ mockPool(6)
+ for(const [name,second,stage,code] of [
+  ['structure',async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({...edition(3,2),articles:edition(3,2).articles.map((article,i)=>i?article:{...article,images:article.images.map((image,j)=>j?image:{...image,catalogId:'wrong'})})})}}]}),'chief_editor','structural_validation'],
+  ['reviewSchema',async()=>Response.json({choices:[{finish_reason:'stop',message:{content:'{}'}}]}),'reviewer','response_schema'],
+  ['reviewReferences',async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({...review(edition(3,2)),featureFeedback:review(edition(3,2)).featureFeedback.map((row,i)=>i?row:{...row,assetId:version(99)})})}}]}),'reviewer','review_validation'],
+ ] as const){
+  let calls=0
+  const first=provider()
+  vi.stubGlobal('fetch',vi.fn(async(url:string,init:RequestInit)=>{calls++;return calls===1&&name!=='structure'?first(url,init):second()}))
+  const response=await post({}, {interests:`Distinct ${name} validation study`})
+  expect(await response.json()).toMatchObject({fallbackReason:'provider_or_validation',validationDiagnostic:{stage,code},inference:{reservedUnits:4}})
+ }
+})
+it('identifies Reviewer, Revision and Confirmation failures without publishing an unapproved edition',async()=>{
+ mockPool(6)
+ for(const [failedCall,expectedStage] of [[2,'reviewer'],[3,'revision'],[4,'confirmation']] as const){
+  const successful=provider(3,5)
+  let calls=0
+  const send=vi.fn(async(url:string,init:RequestInit)=>{calls++;return calls===failedCall?new Response('private provider response',{status:503}):successful(url,init)})
+  vi.stubGlobal('fetch',send)
+  const response=await post({}, {interests:`Independent ${expectedStage} failure study`})
+  expect(await response.json()).toMatchObject({source:'deterministic',fallbackReason:'provider_or_validation',validationDiagnostic:{stage:expectedStage,code:'provider_http'},inference:{attempted:true,reservedUnits:4}})
+  expect(send).toHaveBeenCalledTimes(failedCall)
+ }
+})
 it('requires final independent confirmation after revision and falls back if that review fails',async()=>{
  mockPool();const send=provider(3,1);vi.stubGlobal('fetch',send)
  const result=await (await post({}, {interests:'A separate confirmation-failure investigation of living spaces'})).json() as Record<string,unknown>
