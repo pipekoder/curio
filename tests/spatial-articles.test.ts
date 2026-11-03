@@ -1,5 +1,5 @@
 import {describe,expect,it,vi} from 'vitest'
-import {ARTICLE_CONTRACT_VERSION} from '../shared/editorial-articles'
+import {ARTICLE_CONTRACT_VERSION,ARTICLE_SINGLE_CONTRACT_VERSION} from '../shared/editorial-articles'
 import {articleStatusCopy,fetchArticleEdition} from '../src/spatial/articles'
 import {stageArticleEdition} from '../src/spatial/staging'
 import {articleEditionFixture,articleResponseFixture} from './article-fixtures'
@@ -110,5 +110,31 @@ describe('spatial article edition fetch', () => {
     for (const status of ['disabled', 'consent_required', 'unavailable', 'insufficient_content', 'fallback', 'request_failed', null] as const) {
       expect(articleStatusCopy({status, timedOut: false} as never).detail).toContain('standard edition')
     }
+  })
+  it('sends the single-article format and parses exactly one story with one request', async () => {
+    const full = articleResponseFixture()
+    const single = {...full, format: ARTICLE_SINGLE_CONTRACT_VERSION, articleEdition: {...full.articleEdition, version: ARTICLE_SINGLE_CONTRACT_VERSION, articles: full.articleEdition.articles.slice(0, 1)}}
+    const seen: string[] = []
+    const fetcher = vi.fn(async (_url: unknown, init: {body: string}) => {seen.push(init.body); return new Response(JSON.stringify(single), {status: 200})})
+    const result = await fetchArticleEdition('quiet rooms', true, fetcher as unknown as typeof fetch, {articleCount: 1})
+    expect(JSON.parse(seen[0])).toEqual({prompt: 'quiet rooms', consent: true, editionFormat: ARTICLE_SINGLE_CONTRACT_VERSION})
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(result.articleCount).toBe(1)
+    expect(result.honest).toBe('meta')
+    expect(result.edition?.articleEdition.articles).toHaveLength(1)
+  })
+  it('reports the three-image requirement for a single story', async () => {
+    const result = await fetchArticleEdition('quiet rooms', true, err(409, {status: 'insufficient_content', fallbackReason: 'insufficient_content', eligibleImages: 2, requiredImages: 3}) as unknown as typeof fetch, {articleCount: 1})
+    expect(result.status).toBe('insufficient_content')
+    expect(articleStatusCopy(result).detail).toContain('2 of 3 required images')
+  })
+  it('stages a single dock for the one-story edition', () => {
+    const {articleEdition, items} = articleEditionFixture()
+    const single = {...articleEdition, version: ARTICLE_SINGLE_CONTRACT_VERSION, articles: articleEdition.articles.slice(0, 1)}
+    const {exhibits, skipped} = stageArticleEdition({articleEdition: single, items}, 1)
+    expect(skipped).toBe(0)
+    expect(exhibits).toHaveLength(1)
+    expect(exhibits[0].article!.storyImages).toHaveLength(3)
+    expect(exhibits[0].image).toBe(exhibits[0].article!.storyImages[0].image)
   })
 })

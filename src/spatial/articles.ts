@@ -1,6 +1,6 @@
 import {z} from 'zod'
 import {budgetExplanation,publicBudgetDiagnostic,type PublicBudgetDiagnostic} from '../../shared/budget-diagnostic'
-import {ARTICLE_CONTRACT_VERSION,ARTICLE_MIN_ELIGIBLE_IMAGES,editorialArticleEdition,type EditorialArticleEdition} from '../../shared/editorial-articles'
+import {ARTICLE_CONTRACT_VERSION,ARTICLE_MIN_ELIGIBLE_IMAGES,ARTICLE_SINGLE_CONTRACT_VERSION,ARTICLE_SINGLE_MIN_ELIGIBLE_IMAGES,editorialArticleEdition,editorialSingleArticleEdition,type ArticleEditionBody} from '../../shared/editorial-articles'
 import {catalogItem,type CatalogItem} from '../../shared/catalog'
 import {parseGenerationMetadata,type EditorialMode,type GenerationMetadata} from './editorial-mode'
 import {EDITORIAL_TIMEOUT_MS,type HonestState} from './edition'
@@ -12,18 +12,18 @@ import {EDITORIAL_TIMEOUT_MS,type HonestState} from './edition'
 // it instead of implying a model succeeded.
 export type ArticleStatus='disabled'|'consent_required'|'unavailable'|'insufficient_content'|'fallback'|'preparing'
 export type StagedArticleEdition={
-  articleEdition:EditorialArticleEdition;items:CatalogItem[];
+  articleEdition:ArticleEditionBody;items:CatalogItem[];
   source:'meta'|'deterministic';retrieval:'d1'|'fictional';cached:boolean
 }
 export type ArticleFetch={
-  edition:StagedArticleEdition|null;honest:HonestState;
+  edition:StagedArticleEdition|null;honest:HonestState;articleCount:1|3;
   status:ArticleStatus|'request_failed'|null;fallbackReason?:string;
   eligibleImages?:number;requiredImages?:number;
   timedOut:boolean;generation:GenerationMetadata|null;budget?:PublicBudgetDiagnostic
 }
 
 const envelope=z.object({
-  format:z.literal(ARTICLE_CONTRACT_VERSION),
+  format:z.union([z.literal(ARTICLE_CONTRACT_VERSION),z.literal(ARTICLE_SINGLE_CONTRACT_VERSION)]),
   source:z.enum(['meta','deterministic']),
   retrieval:z.enum(['d1','fictional']),
   cached:z.boolean(),
@@ -49,9 +49,10 @@ export function articleStatusCopy(fetch:ArticleFetch):{title:string;detail:strin
     case 'consent_required':return {title:'Article editions need AI consent.',detail:'Allow AI curation or continue with the standard edition.'}
     case 'insufficient_content':{
       const have=fetch.eligibleImages
+      const required=fetch.requiredImages??(fetch.articleCount===1?ARTICLE_SINGLE_MIN_ELIGIBLE_IMAGES:ARTICLE_MIN_ELIGIBLE_IMAGES)
       return {title:'Not enough approved imagery for an article edition.',detail:have===undefined
         ?'The standard edition below remains available.'
-        :`${have} of ${fetch.requiredImages??ARTICLE_MIN_ELIGIBLE_IMAGES} required images are currently eligible. The standard edition below remains available.`}
+        :`${have} of ${required} required images are currently eligible. The standard edition below remains available.`}
     }
     case 'preparing':return {title:'Preparing approved images for this edition.',detail:'Curio is checking saved visual evidence and analyzing only what is needed.'}
     case 'unavailable':return {title:'Article editions are currently unavailable.',detail:'The standard edition below remains available.'}
@@ -59,10 +60,12 @@ export function articleStatusCopy(fetch:ArticleFetch):{title:string;detail:strin
   }
 }
 
-export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImpl:typeof fetch=fetch,events:{onResponse?:()=>void;signal?:AbortSignal;timeoutMs?:number;editorialMode?:EditorialMode}={}):Promise<ArticleFetch>{
+export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImpl:typeof fetch=fetch,events:{onResponse?:()=>void;signal?:AbortSignal;timeoutMs?:number;editorialMode?:EditorialMode;articleCount?:1|3}={}):Promise<ArticleFetch>{
+  const articleCount=events.articleCount??3
+  const editionFormat=articleCount===1?ARTICLE_SINGLE_CONTRACT_VERSION:ARTICLE_CONTRACT_VERSION
   const bound=AbortSignal.timeout(events.timeoutMs??300000)
   const failed=(status:ArticleFetch['status'],extra:Partial<ArticleFetch>&{timedOut?:boolean}={}):ArticleFetch=>({
-    edition:null,honest:'authored-fallback',status,timedOut:false,generation:null,...extra,
+    edition:null,honest:'authored-fallback',articleCount,status,timedOut:false,generation:null,...extra,
   })
   try{
    for(let attempt=0;attempt<20;attempt++){
@@ -70,7 +73,7 @@ export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImp
     const signal=AbortSignal.any([bound,requestBound,...(events.signal?[events.signal]:[])])
     const response=await fetchImpl('/api/editorial',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({prompt,consent,editionFormat:ARTICLE_CONTRACT_VERSION,...(events.editorialMode?{editorialMode:events.editorialMode}:{})}),
+      body:JSON.stringify({prompt,consent,editionFormat,...(events.editorialMode?{editorialMode:events.editorialMode}:{})}),
       signal,
     })
     if(response.status===202){
@@ -105,13 +108,13 @@ export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImp
       const detail=parsed.success?parsed.data:{}
       return failed(detail.status??'fallback',{fallbackReason:detail.fallbackReason,budget:detail.budget,eligibleImages:detail.eligibleImages,requiredImages:detail.requiredImages})
     }
-    const articleEdition=editorialArticleEdition.parse(data.articleEdition)
+    const articleEdition=(articleCount===1?editorialSingleArticleEdition:editorialArticleEdition).parse(data.articleEdition)
     const honest:HonestState=
       data.source==='meta'?(data.cached?'meta-cached':'meta')
       :data.retrieval==='d1'?'deterministic-d1':'deterministic-fictional'
     return {
       edition:{articleEdition,items:data.items,source:data.source,retrieval:data.retrieval,cached:data.cached},
-      honest,status:null,timedOut:false,generation:parseGenerationMetadata(data.generation),
+      honest,articleCount,status:null,timedOut:false,generation:parseGenerationMetadata(data.generation),
     }
    }
    return failed('preparing',{timedOut:true})
