@@ -49,13 +49,14 @@ function markResearchClaims(edition:ArticleEditionBody,sources:readonly Editoria
 export type ArticleGenerationStage='evidence'|'planning'|'research'|'chief_editor'|'reviewer'|'revision'|'confirmation'
 type ArticleStage='reservation'|'planning'|'chief_editor'|'reviewer'|'revision'|'confirmation'
 type ArticleFailureCode='budget_unavailable'|'workflow_limit'|'context_limit'|'provider_http'|'provider_transport'|'provider_timeout'|'provider_response'|'response_json'|'response_schema'|'structural_validation'|'image_identity'|'image_identity_schema'|'brand_reference'|'visual_context'|'duplicate_image'|'invalid_source'|'cultural_claim'|'source_limit'|'review_validation'
+type ArticleFailureDetail=Record<string,number|boolean>
 class ArticleWorkflowError extends Error{
-  constructor(readonly stage:ArticleStage,readonly code:ArticleFailureCode){super(`${stage}:${code}`)}
+  constructor(readonly stage:ArticleStage,readonly code:ArticleFailureCode,readonly detail?:ArticleFailureDetail){super(`${stage}:${code}`)}
 }
 class ArticleValidationError extends Error{
-  constructor(readonly code:ArticleFailureCode){super(code)}
+  constructor(readonly code:ArticleFailureCode,readonly detail?:ArticleFailureDetail){super(code)}
 }
-function articleValidationFailure(stage:ArticleStage,error:unknown){return new ArticleWorkflowError(stage,error instanceof ArticleValidationError?error.code:'structural_validation')}
+function articleValidationFailure(stage:ArticleStage,error:unknown){return error instanceof ArticleValidationError?new ArticleWorkflowError(stage,error.code,error.detail):new ArticleWorkflowError(stage,'structural_validation')}
 function articleSchemaCode(error:z.ZodError,content:unknown):ArticleFailureCode{
   const issue=error.issues[0],path=issue?.path.map(String).join('.')??''
   if(content&&typeof content==='object'&&'articles' in content&&Array.isArray(content.articles)&&content.articles.some(article=>{
@@ -84,14 +85,17 @@ function factualSources(pool:ArticlePool){
 export function validateArticleEdition(value:unknown,items:readonly CatalogItem[],sources:readonly EditorialSource[],contexts:readonly VisualContext[],expectedCount:number):ArticleEditionBody{
   const edition=(expectedCount===1?editorialSingleArticleEdition:editorialArticleEdition).parse(value)
   if(edition.articles.length!==expectedCount)throw Error('Article count mismatch')
-  const itemByVersion=new Map(items.map(item=>[item.image.id,item]))
   const used=new Set<string>()
-  for(const article of edition.articles){
+  for(const [articleIndex,article] of edition.articles.entries()){
     const imageIds=new Set(article.images.map(image=>image.assetId))
-    for(const image of article.images){
-      const item=itemByVersion.get(image.assetId)
+    for(const [imageIndex,image] of article.images.entries()){
+      // The exact asset ID pins the approved item; the redundant catalog ID
+      // resolves deterministically (case-insensitive) and is overwritten
+      // with the canonical value below. Unknown assets and true pair
+      // mismatches still fail with their position attached.
+      const item=items.find(candidate=>candidate.image.id===image.assetId&&candidate.id.toLowerCase()===image.catalogId.trim().toLowerCase())
       const brand=sources.find(source=>source.assetId===image.assetId&&source.kind==='brand_name'&&source.id.toLowerCase()===image.brandSourceId.trim().toLowerCase())
-      if(!item||item.id!==image.catalogId.trim())throw new ArticleValidationError('image_identity')
+      if(!item)throw new ArticleValidationError('image_identity',{article:articleIndex,image:imageIndex,assetKnown:items.some(candidate=>candidate.image.id===image.assetId)})
       if(used.has(image.assetId))throw new ArticleValidationError('duplicate_image')
       if(!brand||brand.value.trim().toLowerCase()!==image.brandName.trim().toLowerCase())throw new ArticleValidationError('brand_reference')
       if(!contexts.some(context=>context.assetId===image.assetId&&context.source==='meta_image_observation'))throw new ArticleValidationError('visual_context')
@@ -240,8 +244,9 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
   const workflowSignal=AbortSignal.timeout(v3?170_000:ARTICLE_WORKFLOW_TIMEOUT_MS)
   const fallback=(reason:string,budget?:unknown,failure?:ArticleWorkflowError)=>{
     const requestId=failure?crypto.randomUUID():null
-    if(failure)console.error(JSON.stringify({event:'article_editorial_failure',requestId,stage:failure.stage,code:failure.code}))
-    const response=Response.json({...base,status:'fallback',fallbackReason:reason,...(budget?{budget}:{}),...(failure?{requestId,validationDiagnostic:{stage:failure.stage,code:failure.code}}:{}),inference:{attempted:called>0,reservedUnits,latencyMs:Math.round(performance.now()-started),usage:measurements.length?{inputTokens:measurements.reduce((n,row)=>n+row.inputTokens,0),outputTokens:measurements.reduce((n,row)=>n+row.outputTokens,0),totalTokens:measurements.reduce((n,row)=>n+row.totalTokens,0)}:null}})
+    const diagnostic=failure?{stage:failure.stage,code:failure.code,chiefModel:chiefModel(mode).model,editorialMode:mode,...(failure.detail?{detail:failure.detail}:{})}:null
+    if(diagnostic)console.error(JSON.stringify({event:'article_editorial_failure',requestId,...diagnostic}))
+    const response=Response.json({...base,status:'fallback',fallbackReason:reason,...(budget?{budget}:{}),...(diagnostic?{requestId,validationDiagnostic:diagnostic}:{}),inference:{attempted:called>0,reservedUnits,latencyMs:Math.round(performance.now()-started),usage:measurements.length?{inputTokens:measurements.reduce((n,row)=>n+row.inputTokens,0),outputTokens:measurements.reduce((n,row)=>n+row.outputTokens,0),totalTokens:measurements.reduce((n,row)=>n+row.totalTokens,0)}:null}})
     if(requestId)response.headers.set('X-Curio-Request-Id',requestId)
     return response
   }

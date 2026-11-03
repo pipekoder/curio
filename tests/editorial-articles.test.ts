@@ -112,6 +112,17 @@ it('rejects wrong catalog joins, unsupported brand attribution and reused images
  expect(validateArticleEdition(withoutProductCitations,items,sources,contexts,3).articles[0].images[0].productSourceIds).toEqual([])
  expect(()=>validateArticleEdition(edition(),items,sources,contexts.filter(context=>context.assetId!==items[0].image.id),3)).toThrow()
 })
+it('resolves redundant catalog metadata from exact asset references without weakening identity',()=>{
+ const cased=structuredClone(edition())
+ cased.articles[0].images[0].catalogId=cased.articles[0].images[0].catalogId.toUpperCase()
+ expect(validateArticleEdition(cased,items,sources,contexts,3).articles[0].images[0].catalogId).toBe(items[0].id)
+ const unknown=structuredClone(edition())
+ unknown.articles[1].images[1].assetId=version(99)
+ expect(()=>validateArticleEdition(unknown,items,sources,contexts,3)).toThrow()
+ const swapped=structuredClone(edition())
+ swapped.articles[2].images[0].catalogId=items[0].id
+ expect(()=>validateArticleEdition(swapped,items,sources,contexts,3)).toThrow()
+})
 it('keeps the public contract on pool failure while logging stage and correlation id',async()=>{
   const logged:unknown[][]=[]
   const sink=console.error
@@ -237,6 +248,22 @@ it('distinguishes Chief structural validation from Reviewer schema and reference
   const response=await post({}, {interests:`Distinct ${name} validation study`})
   expect(await response.json()).toMatchObject({fallbackReason:'provider_or_validation',validationDiagnostic:{stage,code},inference:{reservedUnits:4}})
  }
+})
+it('reports precise identity-mismatch diagnostics with chief model and mode',async()=>{
+ mockPool(6)
+ const logged:unknown[][]=[]
+ const sink=console.error
+ console.error=(...args:unknown[])=>{logged.push(args)}
+ try{
+  const bad=edition(3,2)
+  bad.articles[0].images[0].catalogId='wrong'
+  vi.stubGlobal('fetch',vi.fn(async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(bad)}}]})))
+  const body=await (await post({},{interests:'Identity mismatch diagnostic study'})).json() as Record<string,unknown>
+  expect(body).toMatchObject({fallbackReason:'provider_or_validation',validationDiagnostic:{stage:'chief_editor',code:'image_identity',detail:{article:0,image:0,assetKnown:true},chiefModel:'muse-spark-1.3',editorialMode:'lite'}})
+  expect(JSON.stringify(body)).not.toContain('version-0000')
+  const record=JSON.parse(String(logged[0][0]))
+  expect(record).toMatchObject({event:'article_editorial_failure',stage:'chief_editor',code:'image_identity',detail:{article:0,image:0,assetKnown:true},chiefModel:'muse-spark-1.3',editorialMode:'lite'})
+ }finally{console.error=sink}
 })
 it('identifies Reviewer, Revision and Confirmation failures without publishing an unapproved edition',async()=>{
  mockPool(6)
