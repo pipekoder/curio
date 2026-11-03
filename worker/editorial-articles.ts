@@ -8,7 +8,7 @@ import type {EditorialPreferences} from '../shared/editorial'
 import type {EditorialMode} from './editorial-model-routing'
 import type {Bindings} from './index'
 import {chiefModel,generationMetadata} from './editorial-model-routing'
-import {editorialArticlePool,reportArticlePoolFailure,type ArticlePool} from './editorial-article-pool'
+import {editorialArticlePool,ArticlePoolError,reportArticlePoolFailure,type ArticlePool} from './editorial-article-pool'
 import {reserveInference,finishInference,InferenceReservation} from './inference-budget'
 import {demoIdentity} from './demo-access'
 import {boundedText} from './meta'
@@ -88,8 +88,16 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
   }
   if(pool.eligibleCount<15)return Response.json({...base,status:'insufficient_content',eligibleImages:pool.eligibleCount,requiredImages:15,fallbackReason:'insufficient_content'},{status:409})
   const sources=factualSources(pool),count=Math.min(8,Math.floor(pool.items.length/3))
-  const evidencePack=env.EDITORIAL_ARTICLE_PREPARATION_ENABLED==='true'?await articleEvidenceForPrompt(env,p,pool).catch(()=>null):null
-  if(env.EDITORIAL_ARTICLE_PREPARATION_ENABLED==='true'&&!evidencePack)return Response.json({...base,status:'unavailable',fallbackReason:'evidence_unavailable'},{status:503})
+  let evidencePack:Awaited<ReturnType<typeof articleEvidenceForPrompt>>|null=null,evidenceRequestId:string|null=null
+  if(env.EDITORIAL_ARTICLE_PREPARATION_ENABLED==='true')try{evidencePack=await articleEvidenceForPrompt(env,p,pool)}catch(error){
+    evidenceRequestId=crypto.randomUUID()
+    reportArticlePoolFailure(evidenceRequestId,new ArticlePoolError('evidence',error),'article_evidence_failure')
+  }
+  if(env.EDITORIAL_ARTICLE_PREPARATION_ENABLED==='true'&&!evidencePack){
+    const unavailable=Response.json({...base,status:'unavailable',fallbackReason:'evidence_unavailable'},{status:503})
+    if(evidenceRequestId)unavailable.headers.set('X-Curio-Request-Id',evidenceRequestId)
+    return unavailable
+  }
   if(new TextEncoder().encode(JSON.stringify({sources,contexts:pool.visualContexts})).length>MAX_PROVIDER_INPUT_BYTES/2)return Response.json({...base,status:'unavailable',fallbackReason:'context_limit'},{status:503})
   const knowledge=env.EDITORIAL_KNOWLEDGE_V2_ENABLED==='true'?editorialKnowledgeInstruction(selectEditorialVoice(p.interests)):''
   const cacheKey=await catalogDigest(JSON.stringify([ARTICLE_WORKFLOW_VERSION,mode,p,knowledge?EDITORIAL_KNOWLEDGE_VERSION:null,knowledge,pool.items,pool.visualContexts,sources,evidencePack]))
