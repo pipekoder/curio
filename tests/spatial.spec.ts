@@ -364,6 +364,20 @@ test('article opt-in stages three docks and renders deck plus brand captions',as
   await expect(story).toHaveCount(0)
 })
 
+test('article budget denial names the actual limit and retry time',async({page})=>{
+  await page.route('**/api/editorial',route=>route.fulfill({status:200,json:{format:'curio-editorial-articles-v1',source:'deterministic',retrieval:'d1',cached:false,articleEdition:null,status:'fallback',fallbackReason:'budget',budget:{limitType:'per_ip_hourly',limit:4,used:4,remaining:0,requestedUnits:4,measure:'units',retryAfterSeconds:3600}}}))
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await expect(page.locator('.spatial-canvas')).toBeVisible()
+  await page.getByLabel('Allow AI curation').check()
+  await page.getByLabel(/Article edition/).check()
+  await submitPrompt(page)
+  const alert=page.getByRole('alert')
+  await expect(alert).toContainText('hourly inference allowance')
+  await expect(alert).toContainText('4 inference units')
+  await expect(alert).toContainText('3600 seconds')
+})
+
 test('insufficient article content discloses state and retries the standard edition',async({page})=>{
   const bodies:unknown[]=[]
   await page.route('**/api/editorial',route=>{

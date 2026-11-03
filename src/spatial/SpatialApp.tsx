@@ -1,4 +1,5 @@
 import {useCallback,useEffect,useRef,useState} from 'react'
+import {budgetExplanation} from '../../shared/budget-diagnostic'
 import * as THREE from 'three'
 import {SpatialFallback} from './fallback'
 import {SilverField,webglAvailable} from './SilverField'
@@ -58,6 +59,7 @@ export default function SpatialApp(){
   const [exhibits,setExhibits]=useState<StagedExhibit[]>([])
   const [editionLabel,setEditionLabel]=useState<HonestState|null>(null)
   const [fallbackReason,setFallbackReason]=useState<string|null>(null)
+  const [budgetMessage,setBudgetMessage]=useState<string|null>(null)
   // Explicit per-visit AI consent, default off, never persisted: a reload or
   // Clear returns to consent:false, and true is sent only from this checkbox.
   const [consent,setConsent]=useState(false)
@@ -437,6 +439,7 @@ export default function SpatialApp(){
     setElapsed(0)
     setModeError(null)
     setArticleError(null)
+    setBudgetMessage(null)
     setStatus('Composing your exhibition…')
     const submitId=++submitIdRef.current
     window.scrollTo(0,0)
@@ -503,7 +506,7 @@ export default function SpatialApp(){
     }else{
       // The mode propagates only to a contract backend: the current strict
       // prompt shape would 400 an extra field, so omission means Lite there.
-      const {edition,honest:baseHonest,fallbackReason:baseReason,timedOut:baseTimedOut,modeError:refused,generation:baseGeneration}=await fetchEdition(trimmed,consent,fetch,{onResponse:()=>directorRef.current.onResponse(),signal:controller.signal,editorialMode:capabilities?selectedMode:undefined})
+      const {edition,honest:baseHonest,fallbackReason:baseReason,budget:baseBudget,timedOut:baseTimedOut,modeError:refused,generation:baseGeneration}=await fetchEdition(trimmed,consent,fetch,{onResponse:()=>directorRef.current.onResponse(),signal:controller.signal,editorialMode:capabilities?selectedMode:undefined})
       if(submitId!==submitIdRef.current)return
       if(refused||!edition){
         tearDownAssembly()
@@ -520,6 +523,7 @@ export default function SpatialApp(){
         setStatus(baseTimedOut?editionStatusCopy(true,0):'No stageable exhibits right now. Refine your curiosity and try again.')
         return
       }
+      setBudgetMessage(baseBudget?budgetExplanation(baseBudget):null)
       fullPlan=edition.fullPlan
       honest=baseHonest;reason=baseReason;timedOut=baseTimedOut;generation=baseGeneration
       staged=baseStaged;skipped=baseSkipped
@@ -578,6 +582,7 @@ export default function SpatialApp(){
     setExhibits([])
     setEditionLabel(null)
     setFallbackReason(null)
+    setBudgetMessage(null)
     setInspect(null)
     setStory(null)
     setModeError(null)
@@ -842,6 +847,7 @@ export default function SpatialApp(){
       </div>
     </header>
     {editionLabel&&<p className="spatial-chip" role="note" data-testid="spatial-edition-chip">{HONEST_COPY[editionLabel]}{fallbackReason&&REASON_COPY[fallbackReason]?` (${REASON_COPY[fallbackReason]})`:''}{(editionLabel==='meta'||editionLabel==='meta-cached')&&generationMode==='hybrid'?' · Hybrid':''}{(editionLabel==='meta'||editionLabel==='meta-cached')&&exhibits.some(exhibit=>exhibit.article)?' · Article edition':''}</p>}
+    {budgetMessage&&<p className="spatial-status" role="status">{budgetMessage}</p>}
     {composing&&<div role="status" className="spatial-generating">
       <p className="spatial-eyebrow">02 · Generating</p>
       <p className="spatial-generating-title">Composing your exhibition…</p>

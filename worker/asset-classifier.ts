@@ -7,11 +7,12 @@ import { catalogDigest, CatalogConflict } from './catalog-store'
 import { reserveInference,finishInference } from './inference-budget'
 import { boundedText } from './meta'
 import type { Bindings } from './index'
+import type {BudgetDenial} from '../shared/budget-diagnostic'
 
 export const ANALYSIS_SPEC = 'curio-asset-vision-v2'
 export type AssetInference = { attempted: boolean; reservedUnits: number; latencyMs: number | null; usage: { inputTokens: number; outputTokens: number; cachedInputTokens: number | null; totalTokens: number } | null }
 const noInference = (): AssetInference => ({ attempted: false, reservedUnits: 0, latencyMs: null, usage: null })
-export class AssetAnalysisError extends Error { inference?: AssetInference; constructor(public code: string, public status: 403 | 409 | 415 | 429 | 502 | 503 | 504) { super(code) } }
+export class AssetAnalysisError extends Error { inference?: AssetInference; budget?:BudgetDenial; constructor(public code: string, public status: 403 | 409 | 415 | 429 | 502 | 503 | 504) { super(code) } }
 export function mockUnderstanding(id: string): Understanding {
   return understanding.parse({ versionId: id, imageSha256: null,
     categoryScores: Object.fromEntries(categories.map((c,i) => [c, i === 0 ? 1 : 0])), aestheticScores: Object.fromEntries(lifestyles.map((s,i) => [s,i === 0 ? 1 : 0])),
@@ -126,7 +127,7 @@ export async function runClassification(input: unknown, env: Bindings, ip: strin
       if (!current || !(currentR2 || mediaReadiness(current,deps.permits).ready) || current.analysis_revision !== row.analysis_revision) throw new AssetAnalysisError('permission_changed',403)
       controller.signal.throwIfAborted()
       const budget = await deps.reserve(env,ip,1,undefined,false,null,deps.articlePreparation)
-      if (!budget.allowed) throw new AssetAnalysisError('inference_limit_reached',429)
+      if (!budget.allowed){const denied=new AssetAnalysisError('inference_limit_reached',429);denied.budget=budget.denial;throw denied}
       if(deps.articlePreparation){if(!budget.reservationId)throw new AssetAnalysisError('preparation_lease_unavailable',503);prepLeaseId=budget.reservationId}
       inference.reservedUnits = 1
       controller.signal.throwIfAborted()

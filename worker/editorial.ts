@@ -177,6 +177,7 @@ editorialApi.post("/", async (c) => {
     },
   };
   let validationDiagnostic: EditorialDiagnostic | undefined;
+  let budgetDiagnostic: unknown;
   let callStarted = 0;
   let fallbackReason = "disabled";
   const fallback = () =>
@@ -188,6 +189,7 @@ editorialApi.post("/", async (c) => {
       cached: false,
       inference,
       fallbackReason,
+      ...(budgetDiagnostic ? { budget: budgetDiagnostic } : {}),
       ...(validationDiagnostic ? { validationDiagnostic } : {}),
       editorialSources:sources,
     });
@@ -246,6 +248,7 @@ editorialApi.post("/", async (c) => {
     const budget = await reserveInference(env, ip,4,undefined,Boolean(selectedPilot),tester);
     if (budget.allowed !== true) {
       fallbackReason = "budget";
+      budgetDiagnostic = budget.publicDenial;
       return fallback();
     }
     reservationId=budget.reservationId
