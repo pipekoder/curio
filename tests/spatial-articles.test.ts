@@ -22,6 +22,20 @@ describe('spatial article edition fetch', () => {
     expect(edition!.articleEdition.articles).toHaveLength(5)
     expect(edition!.articleEdition.articles[0].images).toHaveLength(3)
   })
+  it('continues one Generate action through truthful preparation to a reviewed edition', async () => {
+    const responses = [
+      new Response(JSON.stringify({status:'preparing',preparation:{retryAfterMs:0},eligibleImages:13,requiredImages:15}),{status:202}),
+      new Response(JSON.stringify({status:'preparing',preparation:{retryAfterMs:0},eligibleImages:15,requiredImages:15}),{status:202}),
+      new Response(JSON.stringify(articleResponseFixture()),{status:200}),
+    ]
+    const fetcher=vi.fn(async()=>responses.shift()!)
+    const onResponse=vi.fn()
+    const result=await fetchArticleEdition('quiet rooms',true,fetcher as unknown as typeof fetch,{onResponse})
+    expect(fetcher).toHaveBeenCalledTimes(3)
+    expect(onResponse).toHaveBeenCalledOnce()
+    expect(result.edition?.articleEdition.articles).toHaveLength(5)
+    expect(result.honest).toBe('meta')
+  })
   it('stages one dock per article with hero-first joined imagery', async () => {
     const {articleEdition, items} = articleEditionFixture()
     const {exhibits, skipped} = stageArticleEdition({articleEdition, items})

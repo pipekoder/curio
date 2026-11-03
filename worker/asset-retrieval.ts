@@ -56,8 +56,10 @@ export class D1AssetRetriever implements AssetRetriever {
           ELSE 0.6*category_score+0.3*aesthetic_score+0.1*tag_score END AS relevance,
         ((sequence%2147483647)*1103515245+json_extract(?1,'$.seed')*12345)%2147483647/2147483647.0 AS exploration FROM components
     ), varied AS (
+      -- Only the article-preparation caller opts into unscored records. The
+      -- existing reviewer and reader ranking behavior stays unchanged.
       SELECT scores.*,(1-json_extract(?1,'$.serendipity'))*relevance+json_extract(?1,'$.serendipity')*exploration AS score,
-        ROW_NUMBER() OVER(PARTITION BY brand_key ORDER BY relevance DESC,asset_id) AS brand_rank FROM scores WHERE relevance>0
+        ROW_NUMBER() OVER(PARTITION BY brand_key ORDER BY relevance DESC,asset_id) AS brand_rank FROM scores WHERE relevance>0 OR json_extract(?1,'$.scope')='review' AND json_extract(?1,'$.includeUnscored')=1
     ) SELECT asset_id,version_id,image_sha256,analysis_evidence,intelligence_json,image_url,verified_brand,publisher_name,campaign_title,source_page,
       classification_source,reader_eligible,editorial_ready,category_score,aesthetic_score,tag_score,relevance,
       score-CASE WHEN json_extract(?1,'$.brandDiversity') THEN 0.12*(brand_rank-1) ELSE 0 END AS ranking_score

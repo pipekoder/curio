@@ -12,7 +12,6 @@ import {fetchCapabilities,type EditorialCapabilities,type EditorialMode,type Gen
 import {INTEREST_SEEDS,SEED_DISPLAY,drawSurprise,pickSuggestions,type InterestSeed} from './prompt-library'
 import StoryReader from './StoryReader'
 import {stageArticleEdition,stageEdition,type StagedExhibit} from './staging'
-import {articleStatusCopy,fetchArticleEdition} from './articles'
 import {AssemblyDirector} from './assembly'
 import {AssemblyField} from './AssemblyField'
 import {exhibitLayout,lateralBias,splinePosition,type Waypoint} from './camera-math'
@@ -481,6 +480,8 @@ export default function SpatialApp(){
     let honest:HonestState,reason:string|undefined,timedOut:boolean,generation:GenerationMetadata|null
     let staged:StagedExhibit[],skipped:number
     if(wantArticles){
+      const {articleStatusCopy,fetchArticleEdition}=await import('./articles')
+      if(submitId!==submitIdRef.current)return
       const result=await fetchArticleEdition(trimmed,consent,fetch,{onResponse:()=>directorRef.current.onResponse(),signal:controller.signal,editorialMode:capabilities?selectedMode:undefined})
       if(submitId!==submitIdRef.current)return
       if(!result.edition){
