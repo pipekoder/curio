@@ -9,12 +9,9 @@ const nodes:CatalogNode[]=Array.from({length:12},(_,index)=>({
   assetId:`node-${index}`,kind:'exhibit',label:`Node ${index}`,thumbnail:'',
 }))
 
-function roles(chamber:NetworkChamber,role:string):THREE.Sprite[]{
-  const found:THREE.Sprite[]=[]
-  chamber.group.traverse(object=>{
-    if((object as THREE.Sprite).isSprite&&(object.userData as {role?:string}).role===role)found.push(object as THREE.Sprite)
-  })
-  return found.sort((a,b)=>((a.userData as {index:number}).index-(b.userData as {index:number}).index))
+type ChamberNodeView={dot:THREE.Sprite;thumb:THREE.Sprite}
+function roles(chamber:NetworkChamber,role:'dot'|'thumb'):THREE.Sprite[]{
+  return (chamber as unknown as {nodes:ChamberNodeView[]}).nodes.map(node=>node[role])
 }
 
 function setup():{chamber:NetworkChamber;scene:THREE.Scene;camera:THREE.PerspectiveCamera}{

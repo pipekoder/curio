@@ -109,7 +109,6 @@ export default function SpatialApp(){
   const orbitRef=useRef({yaw:0.5,pitch:0.15,radius:ORBIT_DEFAULT})
   const transitRef=useRef<Transit|null>(null)
   const flyRef=useRef<FlyTo|null>(null)
-  const interactingRef=useRef(false)
   const modeRef=useRef(mode)
   modeRef.current=mode
   const selectedRef=useRef(selected)
@@ -190,19 +189,16 @@ export default function SpatialApp(){
         const dist=Math.hypot(a.x-b.x,a.y-b.y)
         if(pinchDist>0)orbitRef.current.radius*=pinchDist/Math.max(1,dist)
         pinchDist=dist
-        interactingRef.current=true
         return
       }
       const orbit=orbitRef.current
       orbit.yaw-=(event.clientX-down.x)*0.005
       orbit.pitch+=(event.clientY-down.y)*0.005
       down={x:event.clientX,y:event.clientY}
-      interactingRef.current=true
     }
     const onUp=(event:PointerEvent)=>{
       pointers.delete(event.pointerId)
       if(pointers.size<2)pinchDist=0
-      interactingRef.current=pointers.size>0
       if(!down||!anchor)return
       const moved=Math.hypot(event.clientX-anchor.x,event.clientY-anchor.y)
       down=null
@@ -266,7 +262,7 @@ export default function SpatialApp(){
         chamber.update(rig.camera)
       }else{
         rig.update(dt)
-        if(layoutRef.current.docks.length)mounts.setDepthFocus(rig.state.distance,layoutRef.current.docks)
+        mounts.setDepthFocus(rig.state.distance,layoutRef.current.docks)
         const director=directorRef.current,assembly=assemblyRef.current
         if(assembly){
           const {phase,t,holdMs}=director.update()

@@ -57,11 +57,12 @@ export class ExhibitMounts{
       const slab=new THREE.ExtrudeGeometry(roundedRect(FRAME_W,FRAME_H,FRAME_R),{depth:BOARD_D,bevelEnabled:false})
       slab.translate(0,0,-BOARD_D/2)
       const fades:{mat:THREE.Material&{opacity:number};base:number}[]=[]
+      const fade=(mat:THREE.Material&{opacity:number},base=1)=>fades.push({mat,base})
       const board=new THREE.Mesh(
         slab,
         new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.9,metalness:0,transparent:true}),
       )
-      fades.push({mat:board.material as THREE.Material&{opacity:number},base:1})
+      fade(board.material)
       board.position.y=2.6
       mount.add(board)
       // Artwork shares the slab's rounded silhouette exactly, so no square
@@ -79,7 +80,7 @@ export class ExhibitMounts{
         artGeo,
         new THREE.MeshBasicMaterial({color:0xe8ecf1,transparent:true}),
       )
-      fades.push({mat:art.material as THREE.Material&{opacity:number},base:1})
+      fade(art.material)
       art.position.set(0,2.6,ART_Z)
       art.userData={assetId:exhibit.assetId} as Pick
       mount.add(art)
@@ -100,19 +101,19 @@ export class ExhibitMounts{
       const glass=new THREE.Mesh(bandGeo,new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,opacity:1}))
       glass.position.set(0,2.6,RING_Z)
       mount.add(glass)
-      fades.push({mat:glass.material as THREE.Material&{opacity:number},base:1})
+      fade(glass.material)
       for(const [fx,fy] of [[-1,-1],[1,-1],[-1,1],[1,1]] as const){
         const flare=new THREE.Sprite(new THREE.SpriteMaterial({map:ExhibitMounts.flare(),transparent:true,opacity:0.85,depthWrite:false}))
         flare.scale.setScalar(1.6)
         flare.position.set(fx*(FRAME_W/2-0.25),2.6+fy*(FRAME_H/2-0.25),RING_Z+0.003)
         mount.add(flare)
-        fades.push({mat:flare.material as THREE.Material&{opacity:number},base:0.85})
+        fade(flare.material,0.85)
       }
       const frame=new THREE.LineLoop(
         new THREE.BufferGeometry().setFromPoints(roundedRect(FRAME_W-0.05,FRAME_H-0.05,FRAME_R-0.02).getPoints(24)),
         new THREE.LineBasicMaterial({color:0x101219,transparent:true}),
       )
-      fades.push({mat:frame.material as THREE.Material&{opacity:number},base:1})
+      fade(frame.material)
       frame.position.set(0,2.6,RING_Z)
       mount.add(frame)
       this.loader.load(exhibit.image,texture=>{
@@ -134,7 +135,7 @@ export class ExhibitMounts{
           new THREE.TorusGeometry(0.16,0.028,12,32),
           new THREE.MeshBasicMaterial({color:0xb98a3e,transparent:true}),
         )
-        fades.push({mat:ring.material as THREE.Material&{opacity:number},base:1})
+        fade(ring.material)
         ring.position.set((hotspot.x-0.5)*FRAME_W,2.6+(0.5-hotspot.y)*FRAME_H,HOT_Z)
         mount.add(ring)
         const hit=new THREE.Mesh(
@@ -153,7 +154,7 @@ export class ExhibitMounts{
       shadow.rotation.x=-Math.PI/2
       shadow.position.y=0.02
       mount.add(shadow)
-      fades.push({mat:shadow.material as THREE.Material&{opacity:number},base:0.35})
+      fade(shadow.material,0.35)
       this.group.add(mount)
       this.floats.push({group:mount,baseY:0,phase:index*1.3})
       this.faders.push(fades)
@@ -161,7 +162,7 @@ export class ExhibitMounts{
   }
 
   private static flareTexture:THREE.Texture|null=null
-  private static flare():THREE.Texture{
+  static flare():THREE.Texture{
     if(!ExhibitMounts.flareTexture){
       const canvas=document.createElement('canvas')
       canvas.width=64;canvas.height=64
