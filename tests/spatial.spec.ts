@@ -121,7 +121,7 @@ test('exhibit decor keeps only approved markers and an animated scroll cue',asyn
   await expect(page.locator('.exhibit-decor .decor-scroll-dot')).toHaveCount(1)
 })
 
-test('reading a story expands in place and returns without moving the camera',async({page})=>{
+test('the card reads the full story inline and expand returns without moving the camera',async({page})=>{
   await page.setViewportSize({width:1440,height:900})
   await page.goto('/spatial')
   await submitPrompt(page)
@@ -136,18 +136,24 @@ test('reading a story expands in place and returns without moving the camera',as
     return settled
   },{timeout:15000,polling:400})
   const before=await page.evaluate(()=>window.__spatial?.().distance)
-  await page.getByRole('button',{name:'Read story'}).click()
-  const story=page.locator('.spatial-story')
-  await expect(story).toBeVisible()
-  await expect(story.getByRole('heading',{name:/A closer look/})).toBeFocused()
-  await expect(story.locator('.spatial-story-hero img')).toBeVisible()
-  await expect(story).toContainText('Story · Exhibit 1 of')
-  // Scrolling the article never dismisses it.
-  await story.evaluate(el=>{el.scrollTop=el.scrollHeight})
-  await expect(story).toBeVisible()
+  const card=page.locator('#spatial-rail .rail-story')
+  await expect(card).toBeVisible()
+  // The full article reads inline: no Read Story step remains.
+  await expect(card.getByRole('heading',{name:/A closer look/})).toBeVisible()
+  await expect(card).toContainText('Story · Exhibit 1 of')
+  await expect(card.locator('.object-frame img')).toBeVisible()
+  // Scrolling the card never moves the camera or dismisses the card.
+  await card.evaluate(el=>{el.scrollTop=el.scrollHeight})
+  await expect(card).toBeVisible()
+  await card.getByRole('button',{name:'Expand story'}).click()
+  const expanded=page.locator('.spatial-story.is-expanded')
+  await expect(expanded).toBeVisible()
+  await expect(expanded.getByRole('heading',{name:/A closer look/})).toBeFocused()
+  await expect(expanded.locator('.object-frame img')).toBeVisible()
+  await expect(expanded).toContainText('Story · Exhibit 1 of')
   await page.keyboard.press('Escape')
-  await expect(story).toHaveCount(0)
-  await expect(page.getByRole('button',{name:'Read story'})).toBeFocused()
+  await expect(expanded).toHaveCount(0)
+  await expect(page.getByRole('button',{name:'Expand story'})).toBeFocused()
   const after=await page.evaluate(()=>window.__spatial?.().distance)
   expect(after).toBeCloseTo(before!,6)
   await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of')
@@ -159,8 +165,7 @@ test('a story without V3 claims offers no Sources affordance',async({page})=>{
   await submitPrompt(page)
   await expect(page.getByTestId('spatial-edition-chip')).toBeVisible()
   await page.waitForFunction(()=>window.__spatial?.().assembly==='idle',{timeout:30000})
-  await page.getByRole('button',{name:'Read story'}).click()
-  await expect(page.locator('.spatial-story')).toBeVisible()
+  await expect(page.locator('#spatial-rail .rail-story')).toContainText('A closer look')
   await expect(page.locator('.spatial-sources')).toHaveCount(0)
 })
 
@@ -201,8 +206,9 @@ test('V3 sources open on demand with reviewed claims only',async({page})=>{
   await submitPrompt(page)
   await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of',{timeout:15000})
   await page.waitForFunction(()=>window.__spatial?.().assembly==='idle',{timeout:30000})
-  await page.getByRole('button',{name:'Read story'}).click()
-  const sources=page.locator('.spatial-sources')
+  const card=page.locator('#spatial-rail .rail-story')
+  await expect(card).toContainText('A closer look')
+  const sources=card.locator('.spatial-sources')
   await expect(sources).toHaveCount(1)
   // No lookup happens before the visitor opens Sources.
   expect(citationsBody).toBe('unset')
@@ -213,8 +219,8 @@ test('V3 sources open on demand with reviewed claims only',async({page})=>{
   await expect(sources.getByRole('link',{name:'Open source ↗'})).toHaveAttribute('href','https://example.org/article')
   // The lookup POSTs the plan alone: no prompt, preferences, or token.
   expect(Object.keys(citationsBody as Record<string,unknown>)).toEqual(['plan'])
-  // Sources & References is the separated bottom section of the story frame.
-  const order=await page.locator('.spatial-story').evaluate(el=>[...el.children].map(child=>child.className))
+  // Sources & References is the separated bottom section of the story card.
+  const order=await card.evaluate(el=>[...el.children].map(child=>child.className))
   expect(order[order.length-1]).toContain('spatial-sources')
 })
 
@@ -226,12 +232,12 @@ test('unavailable citations hide gracefully without blocking the story',async({p
   await submitPrompt(page)
   await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of',{timeout:15000})
   await page.waitForFunction(()=>window.__spatial?.().assembly==='idle',{timeout:30000})
-  await page.getByRole('button',{name:'Read story'}).click()
-  const sources=page.locator('.spatial-sources')
+  const card=page.locator('#spatial-rail .rail-story')
+  const sources=card.locator('.spatial-sources')
   await sources.getByRole('button',{name:/Sources/}).click()
   // An empty lookup hides the section instead of leaving a placeholder.
   await expect(sources).toHaveCount(0)
-  await expect(page.locator('.spatial-story')).toContainText('A closer look: Ochre Arc Chair')
+  await expect(card).toContainText('A closer look: Ochre Arc Chair')
 })
 
 test('the inspiration row fills the prompt with a sentence without generating',async({page})=>{
@@ -350,18 +356,18 @@ test('article opt-in stages three docks and renders deck plus brand captions',as
   await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of 3',{timeout:15000})
   expect((body as Record<string,unknown>).editionFormat).toBe('curio-editorial-articles-v1')
   await expect(page.getByTestId('spatial-edition-chip')).toContainText('AI-curated edition · Meta AI · Article edition')
-  await expect(page.locator('#spatial-rail')).toContainText('A short introduction to demo article 1.')
-  await page.getByRole('button',{name:'Read story'}).click()
-  const story=page.locator('.spatial-story')
-  await expect(story).toContainText('The quiet craft of demo article 1')
-  await expect(story).toContainText('A short introduction to demo article 1.')
-  await expect(story.locator('figure')).toHaveCount(3)
-  await expect(story).toContainText('Atelier Nord')
-  await expect(story).toContainText('Casa Lumen')
+  const card=page.locator('#spatial-rail .rail-story')
+  await expect(card).toContainText('The quiet craft of demo article 1')
+  await expect(card).toContainText('A short introduction to demo article 1.')
+  await expect(card.locator('figure')).toHaveCount(3)
+  await expect(card).toContainText('Atelier Nord')
+  await expect(card).toContainText('Casa Lumen')
   // Article editions carry no EditorialPlan, so Sources stays hidden.
-  await expect(story.getByRole('button',{name:/Sources/})).toHaveCount(0)
+  await expect(card.getByRole('button',{name:/Sources/})).toHaveCount(0)
+  await card.getByRole('button',{name:'Expand story'}).click()
+  await expect(page.locator('.spatial-story.is-expanded')).toContainText('The quiet craft of demo article 1')
   await page.keyboard.press('Escape')
-  await expect(story).toHaveCount(0)
+  await expect(page.locator('.spatial-story.is-expanded')).toHaveCount(0)
 })
 
 test('insufficient article content discloses state and retries the standard edition',async({page})=>{
@@ -466,22 +472,27 @@ test('promenade visits every dock with its story rail',async({page})=>{
   }
 })
 
-test('inspecting an exhibit shows its authored detail and releases',async({page})=>{
+test('a hotspot marker shows its authored detail and releases',async({page})=>{
+  await page.route('**/api/editorial',route=>route.fulfill({status:200,json:{plan:metaPlan,items:groundedItems,source:'meta',retrieval:'d1',cached:false}}))
   await page.setViewportSize({width:1440,height:900})
   await page.goto('/spatial')
   await submitPrompt(page)
   await expect(page.getByTestId('spatial-edition-chip')).toBeVisible()
   await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight*0.22))
   await expect(page.locator('.spatial-rail')).toBeVisible()
-  await page.locator('.spatial-rail-card').first().getByRole('button',{name:'Inspect exhibit'}).click()
-  await expect(page.locator('.spatial-inspect')).toBeVisible()
-  await expect(page.locator('.spatial-inspect h2')).not.toBeEmpty()
-  await page.screenshot({path:'test-results/spatial-inspect-1440.png'})
+  const card=page.locator('#spatial-rail .rail-story')
+  await card.getByRole('button',{name:/^Inspect /}).first().click()
+  const popover=card.locator('.object-popover')
+  await expect(popover).toBeVisible()
+  await expect(popover.locator('h3')).not.toBeEmpty()
+  await expect(popover).toContainText('no SAM inference')
+  await page.screenshot({path:'test-results/spatial-hotspot-1440.png'})
   await page.keyboard.press('Escape')
-  await expect(page.locator('.spatial-inspect')).toBeHidden()
+  await expect(popover).toHaveCount(0)
 })
 
-test('clicking a staged mount opens inspection through the scene',async({page})=>{
+test('clicking a staged mount keeps reading inline without a separate panel',async({page})=>{
+  await page.route('**/api/editorial',route=>route.fulfill({status:200,json:{plan:metaPlan,items:groundedItems,source:'meta',retrieval:'d1',cached:false}}))
   await page.setViewportSize({width:1440,height:900})
   await page.goto('/spatial')
   await submitPrompt(page)
@@ -489,7 +500,15 @@ test('clicking a staged mount opens inspection through the scene',async({page})=
   await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight*0.22))
   await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of',{timeout:10000})
   await page.mouse.click(720,420)
-  await expect(page.locator('.spatial-inspect')).toBeVisible({timeout:5000})
+  // A mount or ring hit travels to that exhibit or spotlights its hotspot
+  // inline; a separate inspection surface never opens.
+  await expect(page.locator('.spatial-inspect:not(.spatial-node-panel)')).toHaveCount(0)
+  await expect(page.locator('#spatial-rail .rail-story')).toBeVisible()
+  if(await page.locator('.object-popover').count()){
+    await expect(page.locator('.object-popover h3')).not.toBeEmpty()
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.object-popover')).toHaveCount(0)
+  }
 })
 
 test('a grounded meta edition shows Meta provenance and consent off by default',async({page})=>{
@@ -765,10 +784,12 @@ test('ai-length headlines and narratives stay readable without overflow',async({
     await expect(page.locator('.spatial-rail-card h2').first()).toContainText('A closer look')
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true)
     await expect(page.getByRole('button',{name:'Journey',exact:true})).toBeVisible()
-    await page.locator('.spatial-rail-card').first().getByRole('button',{name:'Inspect exhibit'}).click()
-    await expect(page.locator('.spatial-inspect')).toBeVisible()
-    await expect(page.locator('.spatial-inspect p').first()).not.toBeEmpty()
+    const card=page.locator('.spatial-rail-card').first()
+    await card.getByRole('button',{name:/^Inspect /}).first().click()
+    await expect(card.locator('.object-popover')).toBeVisible()
+    await expect(card.locator('.object-popover p').first()).not.toBeEmpty()
     await page.keyboard.press('Escape')
+    await expect(card.locator('.object-popover')).toHaveCount(0)
   }
 })
 
