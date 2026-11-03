@@ -10,7 +10,7 @@ export const budgetLimitType=z.enum([
 export type BudgetLimitType=z.infer<typeof budgetLimitType>
 export const budgetDenial=z.strictObject({
   limitType:budgetLimitType,limit:z.number().int().nonnegative(),used:z.number().int().nonnegative(),
-  remaining:z.number().int().nonnegative(),requestedUnits:z.number().int().min(1).max(4),
+  remaining:z.number().int().nonnegative(),requestedUnits:z.number().int().min(1).max(5),
   measure:z.enum(['units','requests','concurrent']),retryAfterSeconds:z.number().int().min(1).max(86400).optional(),
   resetAt:z.string().datetime().optional(),
 })
@@ -26,7 +26,7 @@ export function publicBudgetDenial(denial:BudgetDenial){
   return denial
 }
 
-export const publicBudgetDiagnostic=z.object({limitType:budgetLimitType,limit:z.number().int().nonnegative().optional(),used:z.number().int().nonnegative().optional(),remaining:z.number().int().nonnegative(),requestedUnits:z.number().int().min(1).max(4),measure:z.enum(['units','requests','concurrent']),retryAfterSeconds:z.number().int().min(1).max(86400).optional(),resetAt:z.string().datetime().optional()})
+export const publicBudgetDiagnostic=z.object({limitType:budgetLimitType,limit:z.number().int().nonnegative().optional(),used:z.number().int().nonnegative().optional(),remaining:z.number().int().nonnegative(),requestedUnits:z.number().int().min(1).max(5),measure:z.enum(['units','requests','concurrent']),retryAfterSeconds:z.number().int().min(1).max(86400).optional(),resetAt:z.string().datetime().optional()})
 export type PublicBudgetDiagnostic=z.infer<typeof publicBudgetDiagnostic>
 const labels:Record<BudgetLimitType,string>={
   global_lifetime:'shared lifetime inference budget',global_daily:'shared daily inference budget',

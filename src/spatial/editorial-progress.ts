@@ -18,10 +18,12 @@ export function stageTone(stage:ProgressStage):StageTone{
   return stage.fraction>=0.5?'advancing':'running'
 }
 
-const GEN_ORDER:Record<string,number>={evidence:0,chief_editor:1,reviewer:2,revision:3,confirmation:4}
-const GEN_ROWS:Record<string,string>={evidence:'evidence',chief_editor:'chief',reviewer:'review',revision:'revision',confirmation:'confirmation'}
+const GEN_ORDER:Record<string,number>={evidence:0,planning:1,research:2,chief_editor:3,reviewer:4,revision:5,confirmation:6}
+const GEN_ROWS:Record<string,string>={evidence:'evidence',planning:'planning',research:'research',chief_editor:'chief',reviewer:'review',revision:'revision',confirmation:'confirmation'}
 const GEN_START:Record<string,string>={
   evidence:'Gathering editorial evidence.',
+  planning:'Chief Editor is planning the story.',
+  research:'Checking relevant cultural sources.',
   chief_editor:'Chief Editor is composing your story…',
   reviewer:'Independent Reviewer is evaluating the draft.',
   revision:'Revision Editor is refining the narrative.',
@@ -29,6 +31,8 @@ const GEN_START:Record<string,string>={
 }
 const GEN_DONE:Record<string,string>={
   evidence:'Editorial evidence ready.',
+  planning:'Editorial direction chosen.',
+  research:'Cultural research finished.',
   chief_editor:'Chief Editor finished the draft.',
   reviewer:'Independent Reviewer finished the assessment.',
   revision:'Revision complete.',
@@ -42,13 +46,15 @@ export function createArticleTracker(){
     {id:'verify',label:'Image & Catalog Verification',status:'RUNNING',fraction:null,meta:null},
     {id:'analyze',label:'Visual Analysis',status:'QUEUED',fraction:null,meta:null},
     {id:'evidence',label:'Editorial Evidence Preparation',status:'QUEUED',fraction:null,meta:null},
+    {id:'planning',label:'Chief Editor — Planning',status:'QUEUED',fraction:null,meta:null},
+    {id:'research',label:'Culture Research',status:'QUEUED',fraction:null,meta:null},
     {id:'chief',label:'Chief Editor — Story Composition',status:'QUEUED',fraction:null,meta:null},
     {id:'review',label:'Independent Reviewer — Editorial Assessment',status:'QUEUED',fraction:null,meta:null},
     {id:'revision',label:'Revision Editor',status:'QUEUED',fraction:null,meta:null},
     {id:'confirm',label:'Final Confirmation',status:'QUEUED',fraction:null,meta:null},
     {id:'story',label:'Story Ready',status:'QUEUED',fraction:null,meta:null},
   ]
-  const hidden=new Set(['revision','confirm'])
+  const hidden=new Set(['planning','research','revision','confirm'])
   const seen=new Set<string>()
   const events:ProgressEvent[]=[]
   let genIndex=-1,finished=false
@@ -96,6 +102,7 @@ export function createArticleTracker(){
           // Evidence is optional: a later required stage proves the required
           // chain ran, but never proves the evidence pack was built.
           if(stage==='evidence')continue
+          if((stage==='planning'||stage==='research')&&!seen.has(`${stage}-run`))continue
           complete(GEN_ROWS[stage],`${stage}-done`,GEN_DONE[stage])
         }
         const row=byId(GEN_ROWS[input.generationStage!])
@@ -118,7 +125,7 @@ export function createArticleTracker(){
         emit('frozen','Stopped waiting for the editorial team.')
         return snapshot()
       }
-      const rowFor=(stage:string|null|undefined)=>stage==='chief_editor'?'chief':stage==='reviewer'?'review':stage==='revision'?'revision':stage==='confirmation'?'confirmation':null
+      const rowFor=(stage:string|null|undefined)=>stage==='planning'?'planning':stage==='research'?'research':stage==='chief_editor'?'chief':stage==='reviewer'?'review':stage==='revision'?'revision':stage==='confirmation'?'confirmation':null
       if(input.ok){
         complete('verify','verify-done','Approved imagery verified.')
         complete('analyze','analyze-done','Visual observations ready.')
@@ -129,6 +136,7 @@ export function createArticleTracker(){
           if(input.evidence!==undefined)evidence.meta=input.evidence.interpretations===1?'1 observation':`${input.evidence.interpretations} observations`
           emit('evidence-done',GEN_DONE.evidence)
         }
+        for(const stage of ['planning','research'])if(seen.has(`${stage}-run`))complete(stage,`${stage}-done`,GEN_DONE[stage])
         complete('chief','chief-done',GEN_DONE.chief_editor)
         complete('review','review-done',GEN_DONE.reviewer)
         if(input.revised){
@@ -146,7 +154,7 @@ export function createArticleTracker(){
       }
       const fail=(id:string)=>{hidden.delete(id);const row=byId(id);if(row.status!=='COMPLETE'){row.status='FAILED'}}
       const skipRest=(after:string)=>{
-        const order=['verify','analyze','evidence','chief','review','revision','confirm']
+        const order=['verify','analyze','evidence','planning','research','chief','review','revision','confirm']
         for(const id of order.slice(order.indexOf(after)+1))if(byId(id).status==='QUEUED')byId(id).status='SKIPPED'
       }
       if(input.fallbackReason==='insufficient_content'){
