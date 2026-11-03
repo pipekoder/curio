@@ -4,7 +4,7 @@ import type {ArticleEditionBody} from '../../shared/editorial-articles'
 import type {CatalogItem} from '../../shared/catalog'
 
 export type StagedHotspot={id:string;label:string;x:number;y:number;productName:string;brandName:string;priceUsd:number;assumptions:readonly string[]}
-export type StagedArticleImage={catalogId:string;assetId:string;image:string;alt:string;brandName:string;attribution:string;rights:string}
+export type StagedArticleImage={catalogId:string;assetId:string;image:string;alt:string;brandName:string;attribution:string;rights:string;width?:number;height?:number}
 export type StagedArticle={id:string;deck:string;storyImages:StagedArticleImage[]}
 export type StagedExhibit={
   assetId:string;title:string;narrative:string;image:string;
@@ -72,6 +72,7 @@ export function stageArticleEdition(edition:{articleEdition:ArticleEditionBody;i
         alt:item.image.alt,brandName:reference.brandName,
         attribution:item.provenance.attribution,
         rights:`${item.licensing.rightsHolder??'Rights holder unlisted'} · ${item.image.id}`,
+        width:item.image.width,height:item.image.height,
       })
     }
     if(!complete||storyImages.length<2){skipped++;continue}
