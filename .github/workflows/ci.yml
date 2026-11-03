@@ -6,9 +6,11 @@ on:
 permissions:
   contents: read
 jobs:
+  # Core verification. The job id stays `verify` so the existing required
+  # branch-protection check "CI / verify" keeps working unchanged.
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     env:
       WRANGLER_SEND_METRICS: 'false'
     steps:
@@ -25,6 +27,21 @@ jobs:
       - run: npm run build
       - run: npm run worker:check
       - run: npm run test:integration
+  # Browser verification runs in parallel with `verify` (no `needs:`).
+  # It builds first because the suite serves `vite preview` from dist/.
+  # NOTE: this adds a new "CI / browser" check — add it to the branch
+  # protection required checks, or browser results stay advisory-only.
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
       - uses: actions/upload-artifact@v4
