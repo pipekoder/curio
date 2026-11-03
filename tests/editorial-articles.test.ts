@@ -133,6 +133,27 @@ it('reports whether a mismatched catalog id belongs to another candidate',()=>{
  try{validateArticleEdition(fabricated,items,sources,contexts,3);expect.unreachable()}
  catch(error){expect((error as {detail?:unknown}).detail).toMatchObject({article:0,image:1,assetKnown:true,catalogKnown:false})}
 })
+it('reports which brand requirement failed without exposing values',()=>{
+ const reused=structuredClone(edition())
+ reused.articles[0].images[0].brandSourceId=data[1].sources[0].id
+ try{validateArticleEdition(reused,items,sources,contexts,3);expect.unreachable()}
+ catch(error){expect((error as {detail?:unknown}).detail).toMatchObject({article:0,image:0,sourceFound:false,nameMatches:false})}
+ const renamed=structuredClone(edition())
+ renamed.articles[1].images[1].brandName='Invented Brand'
+ try{validateArticleEdition(renamed,items,sources,contexts,3);expect.unreachable()}
+ catch(error){expect((error as {detail?:unknown}).detail).toMatchObject({article:1,image:1,sourceFound:true,nameMatches:false})}
+})
+it('instructs the chief to use per-image brand attribution',async()=>{
+ for(const count of [1,3] as const){
+  mockPool(count===1?3:24)
+  const send=count===1?singleProvider():provider();vi.stubGlobal('fetch',send)
+  const request=new Request(origin,{method:'POST',headers:{Origin:origin,'CF-Connecting-IP':'192.0.2.9'}})
+  const response=await articleEditorialResponse(request,environment(),{...preferences,interests:'A brand-attribution study in quiet interiors'},'lite',undefined,count)
+  expect(response.status).toBe(200)
+  const instruction=(JSON.parse(String(send.mock.calls[0][1].body)) as {messages:{content:string}[]}).messages[0].content
+  expect(instruction).toContain('never reuse a brand source ID from another image')
+ }
+})
 it('instructs the chief to keep supplied catalog pairs intact for single and triple editions',async()=>{
  for(const count of [1,3] as const){
   mockPool(count===1?3:24)
