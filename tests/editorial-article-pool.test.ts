@@ -85,9 +85,10 @@ it('stages the analyzed version and classifies the failed job without throwing',
   const sqlite=seed()
   const sizes=new Map([[`pool/1.jpg`,1001],[`pool/2.jpg`,1002]])
   const shas=new Map([[`pool/1.jpg`,sha1],[`pool/2.jpg`,sha2]])
+  let r2Heads=0
   const env={
     CATALOG_DB:d1(sqlite),
-    MEDIA_BUCKET:{head:async(key:string)=>sizes.has(key)?{size:sizes.get(key),customMetadata:{sha256:shas.get(key),versionId:key==='pool/1.jpg'?v1:v2}}:null},
+    MEDIA_BUCKET:{head:async(key:string)=>{r2Heads++;return sizes.has(key)?{size:sizes.get(key),customMetadata:{sha256:shas.get(key),versionId:key==='pool/1.jpg'?v1:v2}}:null}},
     CATALOG_PUBLIC_ENABLED:'true',
   } as never
   const pool=await editorialArticlePool(env,{interests:'quiet light and soft rooms',aesthetics:['Scandinavian'],allocations:{home:100,fashion:0,travel:0},mode:'Balanced',consent:true})
@@ -96,4 +97,5 @@ it('stages the analyzed version and classifies the failed job without throwing',
   expect(pool.preparation?.failed).toBe(1)
   expect(pool.preparation?.exclusions.analysis_failed).toBe(1)
   expect(pool.preparation?.rankedCount).toBe(2)
+  expect(r2Heads).toBe(2)
 })

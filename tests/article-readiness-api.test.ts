@@ -16,7 +16,7 @@ it('exposes bounded exclusion counts only through existing operator authenticati
  expect(result.status).toBe(200)
  const text=await result.text()
  expect(text).not.toContain('version-')
- expect(JSON.parse(text)).toMatchObject({eligibleImages:1,requiredImages:15,ready:false,pendingAnalysis:1,processingAnalysis:2,failedAnalysis:1,preparationEnabled:false,exclusions:{relevance_or_window:0,publication:3,permissions:2,metadata:4,sources:1,image_integrity:2,observations:14}})
+ expect(JSON.parse(text)).toMatchObject({eligibleImages:1,requiredImages:6,ready:false,pendingAnalysis:1,processingAnalysis:2,failedAnalysis:1,preparationEnabled:false,exclusions:{relevance_or_window:0,publication:3,permissions:2,metadata:4,sources:1,image_integrity:2,observations:14}})
  expect(editorialArticlePool).toHaveBeenCalledOnce()
 })
 it('rejects malformed prompts without querying private catalog data',async()=>{

@@ -1,7 +1,7 @@
 import type {EditorialPreferences} from '../shared/editorial'
 import type {EditorialMode} from './editorial-model-routing'
 import type {Bindings} from './index'
-import {ARTICLE_CONTRACT_VERSION} from '../shared/editorial-articles'
+import {ARTICLE_CONTRACT_VERSION,ARTICLE_MIN_ELIGIBLE_IMAGES} from '../shared/editorial-articles'
 import type {EditorialArticleEdition} from '../shared/editorial-articles'
 import {articleEditorialResponse,validateArticleEdition} from './editorial-articles'
 import {editorialArticlePool,reportArticlePoolFailure,type ArticlePool} from './editorial-article-pool'
@@ -10,15 +10,25 @@ import {catalogDigest} from './catalog-store'
 import {ARTICLE_EVIDENCE_VERSION,ARTICLE_INTERPRETATION_VERSION} from '../shared/article-evidence'
 import {resolveArticlePreparationPolicy} from './article-preparation-policy'
 
-const JOB_VERSION='curio-article-job-v1'
+const JOB_VERSION='curio-article-job-demo-v2'
 const LEASE_MS=120_000
 const JOB_TTL_MS=7*86_400_000
 
 type JobRow={id:string;ip_digest:string;input_digest:string;state:'preparing'|'generating'|'completed'|'failed';lease_token:string|null;lease_until:number|null;result_json:string|null;evidence_digest:string|null}
 const base={format:ARTICLE_CONTRACT_VERSION,source:'deterministic' as const,retrieval:'d1' as const,cached:false,articleEdition:null}
-const pendingResponse=(pool:ArticlePool,outcome:string,retryAfterMs:number)=>Response.json({...base,status:'preparing',fallbackReason:'analysis_pending',eligibleImages:pool.eligibleCount,requiredImages:15,
-  preparation:{outcome,remainingCandidates:pool.preparation?.pendingVersionIds.length??0,processing:pool.preparation?.processing??0,retryAfterMs}},{status:202})
-const failedResponse=(pool:ArticlePool)=>Response.json({...base,status:'insufficient_content',fallbackReason:'insufficient_content',eligibleImages:pool.eligibleCount,requiredImages:15},{status:409})
+type Progress={eligibleImages:number;remainingCandidates:number;processing:number}
+const emptyProgress:Progress={eligibleImages:0,remainingCandidates:0,processing:0}
+const progressFromPool=(pool:ArticlePool):Progress=>({eligibleImages:pool.eligibleCount,remainingCandidates:pool.preparation?.pendingVersionIds.length??0,processing:pool.preparation?.processing??0})
+const storedProgress=(job:JobRow):Progress=>{
+  try{
+    const value=(JSON.parse(job.result_json??'{}') as {progress?:Progress}).progress
+    if(value&&Number.isInteger(value.eligibleImages)&&Number.isInteger(value.remainingCandidates)&&Number.isInteger(value.processing))return value
+  }catch{/* No saved progress yet. */}
+  return emptyProgress
+}
+const pendingResponse=(progress:Progress,outcome:string,retryAfterMs:number)=>Response.json({...base,status:'preparing',fallbackReason:'analysis_pending',eligibleImages:progress.eligibleImages,requiredImages:ARTICLE_MIN_ELIGIBLE_IMAGES,
+  preparation:{outcome,remainingCandidates:progress.remainingCandidates,processing:progress.processing,retryAfterMs}},{status:202})
+const failedResponse=(eligibleImages:number)=>Response.json({...base,status:'insufficient_content',fallbackReason:'insufficient_content',eligibleImages,requiredImages:ARTICLE_MIN_ELIGIBLE_IMAGES},{status:409})
 const evidenceDigest=(pool:ArticlePool,edition:EditorialArticleEdition)=>{
   const ids=new Set(edition.articles.flatMap(article=>article.images.map(image=>image.assetId)))
   return catalogDigest(JSON.stringify([ARTICLE_EVIDENCE_VERSION,ARTICLE_INTERPRETATION_VERSION,pool.items.filter(item=>ids.has(item.image.id)),pool.sources.filter(source=>ids.has(source.assetId)),pool.visualContexts.filter(context=>ids.has(context.assetId))]))
@@ -49,20 +59,25 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
   const read=()=>db.prepare('SELECT * FROM article_edition_jobs WHERE id=?').bind(identity.id).first<JobRow>()
   let job:JobRow|null
   try{
-    await db.prepare('DELETE FROM article_edition_jobs WHERE updated_at<?').bind(now-JOB_TTL_MS).run()
-    await db.prepare(`INSERT INTO article_edition_jobs(id,ip_digest,input_digest,state,created_at,updated_at) VALUES(?,?,?,'preparing',?,?) ON CONFLICT(id) DO NOTHING`).bind(identity.id,identity.ipDigest,identity.inputDigest,now,now).run()
     job=await read()
+    if(!job){
+      // Expiry cleanup and insert happen once per new prompt, never on polls.
+      await db.prepare('DELETE FROM article_edition_jobs WHERE updated_at<?').bind(now-JOB_TTL_MS).run()
+      await db.prepare(`INSERT INTO article_edition_jobs(id,ip_digest,input_digest,state,created_at,updated_at) VALUES(?,?,?,'preparing',?,?) ON CONFLICT(id) DO NOTHING`).bind(identity.id,identity.ipDigest,identity.inputDigest,now,now).run()
+      job=await read()
+    }
   }catch{return Response.json({...base,status:'unavailable',fallbackReason:'job_storage_unavailable'},{status:503})}
   if(!job||job.ip_digest!==identity.ipDigest||job.input_digest!==identity.inputDigest)return Response.json({...base,status:'unavailable',fallbackReason:'job_unavailable'},{status:503})
-  let pool:ArticlePool
-  try{pool=await editorialArticlePool(env,p)}catch(error){
+  let pool:ArticlePool|null=null
+  if(job.state==='completed')try{pool=await editorialArticlePool(env,p)}catch(error){
     const requestId=crypto.randomUUID()
     reportArticlePoolFailure(requestId,error)
-    const failed=Response.json({...base,status:'unavailable',fallbackReason:'catalog_unavailable'},{status:503})
-    failed.headers.set('X-Curio-Request-Id',requestId)
-    return failed
+    const unavailable=Response.json({...base,status:'unavailable',fallbackReason:'catalog_unavailable'},{status:503})
+    unavailable.headers.set('X-Curio-Request-Id',requestId)
+    return unavailable
   }
   if(job.state==='completed'&&job.result_json)try{
+    if(!pool)throw Error('Article pool unavailable')
     const saved=JSON.parse(job.result_json) as {articleEdition:EditorialArticleEdition;generation:unknown}
     const edition=validateArticleEdition(saved.articleEdition,pool.items,pool.sources,pool.visualContexts,saved.articleEdition.articles.length)
     if(job.evidence_digest!==await evidenceDigest(pool,edition))throw Error('Evidence changed')
@@ -79,16 +94,32 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
       const saved=JSON.parse(job.result_json??'') as {failure?:{status?:unknown;body?:unknown}}
       if(saved?.failure&&typeof saved.failure.status==='number'&&saved.failure.body!==null&&typeof saved.failure.body==='object')return Response.json(saved.failure.body,{status:saved.failure.status})
     }catch{/* A preparation failure without a stored outcome stays insufficient. */}
-    return failedResponse(pool)
+    return failedResponse(storedProgress(job).eligibleImages)
   }
   if(job.state==='generating'&&(!job.lease_until||job.lease_until<now))return Response.json({...base,status:'fallback',fallbackReason:'generation_interrupted'},{status:503})
-  if(job.lease_until&&job.lease_until>=now)return pendingResponse(pool,job.state==='generating'?'reviewing':'processing',15_000)
+  if(job.lease_until&&job.lease_until>=now)return pendingResponse(storedProgress(job),job.state==='generating'?'reviewing':'processing',15_000)
   const token=crypto.randomUUID()
   const claimed=await db.prepare(`UPDATE article_edition_jobs SET lease_token=?,lease_until=?,updated_at=? WHERE id=? AND (lease_until IS NULL OR lease_until<?) AND state='preparing' RETURNING id`).bind(token,now+LEASE_MS,now,identity.id,now).first()
-  if(!claimed)return pendingResponse(pool,'processing',15_000)
+  if(!claimed)return pendingResponse(storedProgress(job),'processing',15_000)
   try{
-    if(pool.eligibleCount>=15){
-      await db.prepare(`UPDATE article_edition_jobs SET state='generating',updated_at=? WHERE id=? AND lease_token=?`).bind(Date.now(),identity.id,token).run()
+    // Only the lease owner rebuilds the pool. Waiting pollers read the job row.
+    try{pool=await editorialArticlePool(env,p)}catch(error){
+      const requestId=crypto.randomUUID()
+      reportArticlePoolFailure(requestId,error)
+      const failed=Response.json({...base,status:'unavailable',fallbackReason:'catalog_unavailable'},{status:503})
+      failed.headers.set('X-Curio-Request-Id',requestId)
+      return failed
+    }
+    if(!pool)throw Error('Article pool unavailable')
+    const progress=progressFromPool(pool)
+    await db.prepare(`UPDATE article_edition_jobs SET result_json=? WHERE id=? AND lease_token=? AND state='preparing' AND (result_json IS NULL OR result_json<>?)`)
+      .bind(JSON.stringify({progress}),identity.id,token,JSON.stringify({progress})).run()
+    if(pool.eligibleCount>=ARTICLE_MIN_ELIGIBLE_IMAGES){
+      // The conditional D1 update is atomic across Worker isolates. Existing
+      // jobs remain readable when the two-generation ceiling is reached.
+      const generationClaim=await db.prepare(`UPDATE article_edition_jobs SET state='generating',updated_at=? WHERE id=? AND lease_token=? AND (SELECT COUNT(*) FROM article_edition_jobs WHERE updated_at>? AND state='generating' AND lease_until>?)<2 RETURNING id`)
+        .bind(Date.now(),identity.id,token,Date.now()-LEASE_MS,Date.now()).first()
+      if(!generationClaim)return pendingResponse(progress,'waiting_for_capacity',15_000)
       const result=await articleEditorialResponse(request,env,p,mode,pool)
       const payload=await result.clone().json() as {source?:string;articleEdition?:unknown;generation?:unknown}
       if(payload.source==='meta'&&payload.articleEdition){
@@ -97,21 +128,27 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
       }else await db.prepare(`UPDATE article_edition_jobs SET state='failed',result_json=?,lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(JSON.stringify({failure:{status:result.status,body:payload}}),Date.now(),identity.id,token).run()
       return result
     }
-    const selected=(pool.preparation?.pendingVersionIds??[]).slice(0,Math.min(policy.concurrency,15-pool.eligibleCount))
+    const selected=(pool.preparation?.pendingVersionIds??[]).slice(0,Math.min(policy.concurrency,ARTICLE_MIN_ELIGIBLE_IMAGES-pool.eligibleCount))
     if(!selected.length){
-      if(pool.preparation?.processing)return pendingResponse(pool,'processing',15_000)
+      if(pool.preparation?.processing)return pendingResponse(progress,'processing',15_000)
       await db.prepare(`UPDATE article_edition_jobs SET state='failed',lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(Date.now(),identity.id,token).run()
-      return failedResponse(pool)
+      return failedResponse(pool.eligibleCount)
     }
     const settled=await Promise.allSettled(selected.map(versionId=>runClassification({versionId,mode:'meta',consent:true,retryFailed:false},env,identity.ip,{articlePreparation:true})))
     const budgetPaused=settled.every(row=>row.status==='rejected'&&row.reason instanceof AssetAnalysisError&&row.reason.code==='inference_limit_reached')
-    pool=await editorialArticlePool(env,p)
-    if(budgetPaused)return Response.json({...base,status:'unavailable',fallbackReason:'budget',eligibleImages:pool.eligibleCount,requiredImages:15},{status:429})
-    if(pool.eligibleCount<15&&!pool.preparation?.pendingVersionIds.length&&!pool.preparation?.processing){
-      await db.prepare(`UPDATE article_edition_jobs SET state='failed',lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(Date.now(),identity.id,token).run()
-      return failedResponse(pool)
+    if(budgetPaused){
+      const body={...base,status:'unavailable',fallbackReason:'budget',eligibleImages:progress.eligibleImages,requiredImages:ARTICLE_MIN_ELIGIBLE_IMAGES}
+      return Response.json(body,{status:429})
     }
-    return pendingResponse(pool,pool.eligibleCount>=15?'evidence_ready':'processing',pool.eligibleCount>=15?0:policy.windowSeconds*1000)
+    pool=await editorialArticlePool(env,p)
+    const nextProgress=progressFromPool(pool)
+    await db.prepare(`UPDATE article_edition_jobs SET result_json=? WHERE id=? AND lease_token=? AND state='preparing' AND result_json<>?`)
+      .bind(JSON.stringify({progress:nextProgress}),identity.id,token,JSON.stringify({progress:nextProgress})).run()
+    if(pool.eligibleCount<ARTICLE_MIN_ELIGIBLE_IMAGES&&!pool.preparation?.pendingVersionIds.length&&!pool.preparation?.processing){
+      await db.prepare(`UPDATE article_edition_jobs SET state='failed',lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(Date.now(),identity.id,token).run()
+      return failedResponse(pool.eligibleCount)
+    }
+    return pendingResponse(nextProgress,pool.eligibleCount>=ARTICLE_MIN_ELIGIBLE_IMAGES?'evidence_ready':'processing',pool.eligibleCount>=ARTICLE_MIN_ELIGIBLE_IMAGES?0:policy.windowSeconds*1000)
   }catch{
     await db.prepare(`UPDATE article_edition_jobs SET state='failed',lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(Date.now(),identity.id,token).run().catch(()=>{})
     return Response.json({...base,status:'fallback',fallbackReason:'job_unavailable'},{status:503})

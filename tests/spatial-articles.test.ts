@@ -19,13 +19,13 @@ describe('spatial article edition fetch', () => {
     const {edition, honest, status} = await call(ok(articleResponseFixture()))
     expect(honest).toBe('meta')
     expect(status).toBeNull()
-    expect(edition!.articleEdition.articles).toHaveLength(5)
+    expect(edition!.articleEdition.articles).toHaveLength(3)
     expect(edition!.articleEdition.articles[0].images).toHaveLength(3)
   })
   it('continues one Generate action through truthful preparation to a reviewed edition', async () => {
     const responses = [
-      new Response(JSON.stringify({status:'preparing',preparation:{retryAfterMs:0},eligibleImages:13,requiredImages:15}),{status:202}),
-      new Response(JSON.stringify({status:'preparing',preparation:{retryAfterMs:0},eligibleImages:15,requiredImages:15}),{status:202}),
+      new Response(JSON.stringify({status:'preparing',preparation:{retryAfterMs:0},eligibleImages:4,requiredImages:6}),{status:202}),
+      new Response(JSON.stringify({status:'preparing',preparation:{retryAfterMs:0},eligibleImages:6,requiredImages:6}),{status:202}),
       new Response(JSON.stringify(articleResponseFixture()),{status:200}),
     ]
     const fetcher=vi.fn(async()=>responses.shift()!)
@@ -33,14 +33,14 @@ describe('spatial article edition fetch', () => {
     const result=await fetchArticleEdition('quiet rooms',true,fetcher as unknown as typeof fetch,{onResponse})
     expect(fetcher).toHaveBeenCalledTimes(3)
     expect(onResponse).toHaveBeenCalledOnce()
-    expect(result.edition?.articleEdition.articles).toHaveLength(5)
+    expect(result.edition?.articleEdition.articles).toHaveLength(3)
     expect(result.honest).toBe('meta')
   })
   it('stages one dock per article with hero-first joined imagery', async () => {
     const {articleEdition, items} = articleEditionFixture()
     const {exhibits, skipped} = stageArticleEdition({articleEdition, items})
     expect(skipped).toBe(0)
-    expect(exhibits).toHaveLength(5)
+    expect(exhibits).toHaveLength(3)
     for (const exhibit of exhibits) {
       expect(exhibit.article!.storyImages).toHaveLength(3)
       expect(exhibit.image).toBe(exhibit.article!.storyImages[0].image)
@@ -56,13 +56,21 @@ describe('spatial article edition fetch', () => {
       }
     }
   })
+  it('stages the two-image Demo minimum without a third-image placeholder', () => {
+    const {articleEdition, items} = articleEditionFixture()
+    const twoImageEdition = structuredClone(articleEdition)
+    twoImageEdition.articles.forEach(article => { article.images.pop() })
+    const result = stageArticleEdition({articleEdition: twoImageEdition, items})
+    expect(result.exhibits).toHaveLength(3)
+    expect(result.exhibits.every(exhibit => exhibit.article?.storyImages.length === 2)).toBe(true)
+  })
   it('skips articles with unresolvable images instead of patching them', async () => {
     const {articleEdition, items} = articleEditionFixture()
     const broken = structuredClone(articleEdition)
     broken.articles[0].images[1] = {...broken.articles[0].images[1], catalogId: 'no-such-record'}
     const {exhibits, skipped} = stageArticleEdition({articleEdition: broken, items})
     expect(skipped).toBe(1)
-    expect(exhibits).toHaveLength(4)
+    expect(exhibits).toHaveLength(2)
     expect(exhibits.some(exhibit => exhibit.article!.id === broken.articles[0].id)).toBe(false)
   })
   it('keeps server non-AI states machine-readable', async () => {
@@ -93,7 +101,7 @@ describe('spatial article edition fetch', () => {
   it('discloses every article state with a baseline way out', () => {
     expect(articleStatusCopy({status: 'disabled'} as never).title).toContain('disabled')
     expect(articleStatusCopy({status: 'consent_required'} as never).title).toContain('consent')
-    expect(articleStatusCopy({status: 'insufficient_content', eligibleImages: 9, requiredImages: 15} as never).detail).toContain('9 of 15')
+    expect(articleStatusCopy({status: 'insufficient_content', eligibleImages: 9, requiredImages: 6} as never).detail).toContain('9 of 6')
     expect(articleStatusCopy({timedOut: true} as never).title).toContain('still being reviewed')
     for (const status of ['disabled', 'consent_required', 'unavailable', 'insufficient_content', 'fallback', 'request_failed', null] as const) {
       expect(articleStatusCopy({status, timedOut: false} as never).detail).toContain('standard edition')
