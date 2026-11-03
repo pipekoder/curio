@@ -20,7 +20,10 @@ export class InferenceBudget {
       if(!parsed.success||!parsed.data.demo&&(parsed.data.ceiling>100||parsed.data.daily>100))return Response.json({error:'Invalid status policy'},{status:400})
       const {ceiling,daily,ip,demoTester,rates,articlePreparationPolicy:prep}=parsed.data
       const counterCache=new Map<string,{count:number;expires:number}>()
-      const counter=(key:string)=>{if(!counterCache.has(key))counterCache.set(key,this.state.storage.sql.exec<{count:number;expires:number}>('SELECT count,expires FROM counters WHERE key = ?',key).toArray()[0]??{count:0,expires:0});return counterCache.get(key)!}
+      const counter=(key:string)=>{if(!counterCache.has(key)){
+        const row=this.state.storage.sql.exec<{count:number;expires:number}>('SELECT count,expires FROM counters WHERE key = ?',key).toArray()[0]
+        counterCache.set(key,row&&row.expires>0&&row.expires<=now?{count:0,expires:0}:row??{count:0,expires:0})
+      }return counterCache.get(key)!}
       const used=(key:string)=>counter(key).count
       const lifetimeUsed=used('lifetime'),dayUsed=used(`day:${Math.floor(now/day)}`)
       const recent=this.state.storage.sql.exec<{at:number;units:number;outcome:string;policy:string}>('SELECT at,units,outcome,policy FROM reservation_events ORDER BY id DESC LIMIT 20').toArray()
