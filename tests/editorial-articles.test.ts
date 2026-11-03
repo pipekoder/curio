@@ -123,6 +123,27 @@ it('resolves redundant catalog metadata from exact asset references without weak
  swapped.articles[2].images[0].catalogId=items[0].id
  expect(()=>validateArticleEdition(swapped,items,sources,contexts,3)).toThrow()
 })
+it('reports whether a mismatched catalog id belongs to another candidate',()=>{
+ const swapped=structuredClone(edition())
+ swapped.articles[2].images[0].catalogId=items[0].id
+ try{validateArticleEdition(swapped,items,sources,contexts,3);expect.unreachable()}
+ catch(error){expect((error as {detail?:unknown}).detail).toMatchObject({article:2,image:0,assetKnown:true,catalogKnown:true})}
+ const fabricated=structuredClone(edition())
+ fabricated.articles[0].images[1].catalogId='wrong'
+ try{validateArticleEdition(fabricated,items,sources,contexts,3);expect.unreachable()}
+ catch(error){expect((error as {detail?:unknown}).detail).toMatchObject({article:0,image:1,assetKnown:true,catalogKnown:false})}
+})
+it('instructs the chief to keep supplied catalog pairs intact for single and triple editions',async()=>{
+ for(const count of [1,3] as const){
+  mockPool(count===1?3:24)
+  const send=count===1?singleProvider():provider();vi.stubGlobal('fetch',send)
+  const request=new Request(origin,{method:'POST',headers:{Origin:origin,'CF-Connecting-IP':'192.0.2.9'}})
+  const response=await articleEditorialResponse(request,environment(),{...preferences,interests:'A pairing-integrity study in quiet interiors'},'lite',undefined,count)
+  expect(response.status).toBe(200)
+  const instruction=(JSON.parse(String(send.mock.calls[0][1].body)) as {messages:{content:string}[]}).messages[0].content
+  expect(instruction).toContain('never attach a catalogId from one entry to the assetId of another')
+ }
+})
 it('keeps the public contract on pool failure while logging stage and correlation id',async()=>{
   const logged:unknown[][]=[]
   const sink=console.error
