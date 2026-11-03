@@ -30,5 +30,5 @@ it('preserves budgets, models, and bindings',()=>{
 })
 
 it('keeps secrets out of the committed config',()=>{
-  for(const key of Object.keys(config.vars))expect(key,/no secrets in git/).not.toMatch(/TOKEN|SECRET|API_KEY|SALT/)
+  for(const key of Object.keys(config.vars))expect(key,'no secrets in git').not.toMatch(/TOKEN|SECRET|API_KEY|SALT/)
 })
