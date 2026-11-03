@@ -510,7 +510,7 @@ export default function SpatialApp(){
       }
       honest=result.honest;reason=result.fallbackReason;timedOut=result.timedOut;generation=result.generation
       staged=articleStaged.exhibits;skipped=articleStaged.skipped
-      setProgress(tracker.finish({ok:true,evidence:result.evidence,revised:result.generation?.revisionModel!=null}))
+      setProgress(tracker.finish({ok:true,staged:true,evidence:result.evidence,revised:result.generation?.revisionModel!=null}))
     }else{
       // The mode propagates only to a contract backend: the current strict
       // prompt shape would 400 an extra field, so omission means Lite there.

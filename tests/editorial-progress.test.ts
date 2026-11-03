@@ -10,7 +10,7 @@ it('starts with verification running and conditional rows hidden',()=>{
   const snap=createArticleTracker().snapshot()
   expect(statusOf(snap,'verify')).toBe('RUNNING')
   expect(statusOf(snap,'analyze')).toBe('QUEUED')
-  expect(statusOf(snap,'story')).toBe('RUNNING')
+  expect(statusOf(snap,'story')).toBe('QUEUED')
   expect(snap.stages.some(stage=>stage.id==='revision')).toBe(false)
   expect(snap.stages.some(stage=>stage.id==='confirm')).toBe(false)
   expect(snap).toMatchObject({done:0,total:6})
@@ -47,7 +47,7 @@ it('advances generation stages monotonically and completes what they pass',()=>{
   expect(statusOf(tracker.snapshot(),'evidence')).toBe('RUNNING')
   tracker.poll(poll({outcome:'reviewing',eligibleImages:6,requiredImages:6,generationStage:'reviewer'}))
   const snap=tracker.snapshot()
-  expect(statusOf(snap,'evidence')).toBe('COMPLETE')
+  expect(statusOf(snap,'evidence')).toBe('RUNNING')
   expect(statusOf(snap,'chief')).toBe('COMPLETE')
   expect(statusOf(snap,'review')).toBe('RUNNING')
   expect(snap.events.map(event=>event.text)).toContain('Chief Editor finished the draft.')
@@ -70,7 +70,7 @@ it('reveals revision rows only when the revision stage is observed',()=>{
 it('completes a clean edition with measured evidence',()=>{
   const tracker=createArticleTracker()
   tracker.poll(poll({outcome:'processing',eligibleImages:2,requiredImages:6}))
-  const snap=tracker.finish({ok:true,evidence:{interpretations:5},revised:false})
+  const snap=tracker.finish({ok:true,staged:true,evidence:{interpretations:5},revised:false})
   expect(rowOf(snap,'evidence')).toMatchObject({status:'COMPLETE',meta:'5 observations'})
   expect(statusOf(snap,'chief')).toBe('COMPLETE')
   expect(statusOf(snap,'review')).toBe('COMPLETE')
@@ -82,20 +82,20 @@ it('completes a clean edition with measured evidence',()=>{
 
 it('marks evidence skipped when the direct path never builds it',()=>{
   const tracker=createArticleTracker()
-  const snap=tracker.finish({ok:true,evidence:null,revised:false})
+  const snap=tracker.finish({ok:true,staged:true,evidence:null,revised:false})
   expect(statusOf(snap,'evidence')).toBe('SKIPPED')
   expect(statusOf(snap,'story')).toBe('COMPLETE')
 })
 
 it('completes cached replays without inventing an evidence count',()=>{
   const tracker=createArticleTracker()
-  const snap=tracker.finish({ok:true,evidence:undefined,revised:false})
+  const snap=tracker.finish({ok:true,staged:true,evidence:undefined,revised:false})
   expect(rowOf(snap,'evidence')).toMatchObject({status:'COMPLETE',meta:null})
 })
 
 it('reveals revision and confirmation from the completion metadata',()=>{
   const tracker=createArticleTracker()
-  const snap=tracker.finish({ok:true,evidence:{interpretations:3},revised:true})
+  const snap=tracker.finish({ok:true,staged:true,evidence:{interpretations:3},revised:true})
   expect(statusOf(snap,'revision')).toBe('COMPLETE')
   expect(statusOf(snap,'confirm')).toBe('COMPLETE')
   expect(snap).toMatchObject({done:8,total:8})
@@ -141,7 +141,7 @@ it('freezes rows on budget stops and poll timeouts instead of inventing failure'
   paused.poll(poll({outcome:'processing',eligibleImages:2,requiredImages:6}))
   const frozen=paused.finish({ok:false,revised:false,fallbackReason:'preparing',frozen:true})
   expect(statusOf(frozen,'analyze')).toBe('RUNNING')
-  expect(statusOf(frozen,'story')).toBe('RUNNING')
+  expect(statusOf(frozen,'story')).toBe('QUEUED')
   expect(frozen.events.map(event=>event.text)).toContain('Stopped waiting for the editorial team.')
 })
 
