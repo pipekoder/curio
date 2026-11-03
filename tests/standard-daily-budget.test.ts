@@ -28,6 +28,18 @@ it('uses the existing shared DO and preserves 17 historical units when lifting b
  }finally{db.close()}
 })
 
+it('reserves five V3 steps atomically without changing legacy four-unit traffic or global usage',async()=>{
+ const {db,env}=fixture()
+ try{
+  const v3={...env,EDITORIAL_WORKFLOW_V3_ENABLED:'true'}
+  expect((await reserveInference(v3,'192.0.2.20',5)).allowed).toBe(true)
+  expect(await inferenceBudgetStatus(v3)).toMatchObject({lifetime:{used:5,remaining:95},day:{used:5,remaining:95}})
+  await expect(reserveInference(env,'192.0.2.21',5)).rejects.toThrow('Article V3 budget unavailable')
+  expect((await reserveInference(env,'192.0.2.21',4)).allowed).toBe(true)
+  expect(await inferenceBudgetStatus(env)).toMatchObject({lifetime:{used:9,remaining:91}})
+ }finally{db.close()}
+})
+
 it('enforces 100 daily units independently of the lifetime counter and resets only the UTC day',async()=>{
  vi.useFakeTimers();vi.setSystemTime(new Date('2026-11-02T08:00:00Z'))
  const {db,env}=fixture()

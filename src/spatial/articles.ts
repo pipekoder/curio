@@ -2,6 +2,7 @@ import {z} from 'zod'
 import {budgetExplanation,publicBudgetDiagnostic,type PublicBudgetDiagnostic} from '../../shared/budget-diagnostic'
 import {ARTICLE_CONTRACT_VERSION,ARTICLE_MIN_ELIGIBLE_IMAGES,ARTICLE_SINGLE_CONTRACT_VERSION,ARTICLE_SINGLE_MIN_ELIGIBLE_IMAGES,editorialArticleEdition,editorialSingleArticleEdition,type ArticleEditionBody} from '../../shared/editorial-articles'
 import {catalogItem,type CatalogItem} from '../../shared/catalog'
+import {editorialSources,type EditorialSource} from '../../shared/editorial-sources'
 import {parseGenerationMetadata,type EditorialMode,type GenerationMetadata} from './editorial-mode'
 import type {HonestState} from './edition'
 
@@ -19,6 +20,7 @@ export type ArticleStatus='disabled'|'consent_required'|'unavailable'|'insuffici
 export type StagedArticleEdition={
   articleEdition:ArticleEditionBody;items:CatalogItem[];
   source:'meta'|'deterministic';retrieval:'d1'|'fictional';cached:boolean
+  researchReferences?:EditorialSource[];aiDisclosure?:string
 }
 export type ArticleFetch={
   edition:StagedArticleEdition|null;honest:HonestState;articleCount:1|3;
@@ -36,6 +38,7 @@ const envelope=z.object({
   items:z.array(catalogItem).optional(),
   generation:z.unknown().optional(),
   evidence:z.object({interpretations:z.number().int().min(0)}).nullable().optional(),
+  researchReferences:editorialSources.optional(),aiDisclosure:z.string().max(300).optional(),
 })
 
 const failure=z.object({
@@ -44,7 +47,7 @@ const failure=z.object({
   budget:publicBudgetDiagnostic.optional(),
   eligibleImages:z.number().int().min(0).optional(),
   requiredImages:z.number().int().min(0).optional(),
-  generationStage:z.enum(['evidence','chief_editor','reviewer','revision','confirmation']).optional(),
+  generationStage:z.enum(['evidence','planning','research','chief_editor','reviewer','revision','confirmation']).optional(),
   validationDiagnostic:z.object({stage:z.string().max(40),code:z.string().max(40)}).passthrough().optional(),
   preparation:z.object({retryAfterMs:z.number().int().min(0).max(60000),outcome:z.string().max(40).optional(),remainingCandidates:z.number().int().min(0).optional(),processing:z.number().int().min(0).optional()}).passthrough().optional(),
 })
@@ -124,7 +127,7 @@ export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImp
       data.source==='meta'?(data.cached?'meta-cached':'meta')
       :data.retrieval==='d1'?'deterministic-d1':'deterministic-fictional'
     return {
-      edition:{articleEdition,items:data.items,source:data.source,retrieval:data.retrieval,cached:data.cached},
+      edition:{articleEdition,items:data.items,source:data.source,retrieval:data.retrieval,cached:data.cached,researchReferences:data.researchReferences,aiDisclosure:data.aiDisclosure},
       honest,articleCount,status:null,timedOut:false,generation:parseGenerationMetadata(data.generation),evidence:data.evidence,
     }
    }
