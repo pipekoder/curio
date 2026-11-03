@@ -2,10 +2,11 @@ import {demoMediaFor} from '../editorial-demo-media'
 import type {EditorialEdition} from '../../shared/editorial'
 import type {ArticleEditionBody} from '../../shared/editorial-articles'
 import type {CatalogItem} from '../../shared/catalog'
+import type {EditorialSource} from '../../shared/editorial-sources'
 
 export type StagedHotspot={id:string;label:string;x:number;y:number;productName:string;brandName:string;priceUsd:number;assumptions:readonly string[]}
 export type StagedArticleImage={catalogId:string;assetId:string;image:string;alt:string;brandName:string;attribution:string;rights:string;width?:number;height?:number}
-export type StagedArticle={id:string;deck:string;storyImages:StagedArticleImage[]}
+export type StagedArticle={id:string;deck:string;storyImages:StagedArticleImage[];researchReferences?:EditorialSource[];aiDisclosure?:string}
 export type StagedExhibit={
   assetId:string;title:string;narrative:string;image:string;
   attribution:string;rights:string;hotspots:StagedHotspot[];thread?:string
@@ -56,7 +57,7 @@ export function stageEdition(edition:EditorialEdition,max=6):{exhibits:StagedExh
 // IDs with approved artwork; brand captions come from the article record,
 // while URLs, alt text and attribution come only from joined items. An
 // article with any unresolvable image is skipped whole, never patched.
-export function stageArticleEdition(edition:{articleEdition:ArticleEditionBody;items:CatalogItem[]},max=3):{exhibits:StagedExhibit[];skipped:number}{
+export function stageArticleEdition(edition:{articleEdition:ArticleEditionBody;items:CatalogItem[];researchReferences?:EditorialSource[];aiDisclosure?:string},max=3):{exhibits:StagedExhibit[];skipped:number}{
   const exhibits:StagedExhibit[]=[]
   let skipped=0
   for(const [index,article] of edition.articleEdition.articles.entries()){
@@ -86,7 +87,7 @@ export function stageArticleEdition(edition:{articleEdition:ArticleEditionBody;i
         id:media.product.id,label:media.product.hotspot.label,x:media.product.hotspot.x,y:media.product.hotspot.y,
         productName:media.product.name,brandName:media.product.brandName,priceUsd:media.product.priceUsd,assumptions:media.product.assumptions,
       }]:[],
-      article:{id:article.id,deck:article.deck,storyImages},
+      article:{id:article.id,deck:article.deck,storyImages,researchReferences:[...new Set(article.culturalClaims?.map(claim=>claim.sourceId)??[])].flatMap(id=>edition.researchReferences?.find(source=>source.id===id)?[edition.researchReferences.find(source=>source.id===id)!]:[]),aiDisclosure:edition.aiDisclosure},
     })
   }
   const unique=[...new Map(exhibits.map(exhibit=>[exhibit.article!.id,exhibit])).values()].slice(0,3)

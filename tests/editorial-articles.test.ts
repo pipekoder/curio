@@ -44,6 +44,56 @@ function provider(firstScore=5,finalScore=5,high=false){let calls=0;return vi.fn
 function singleProvider(){const base=provider();let calls=0;return vi.fn(async(url:string,init:RequestInit)=>{const response=await base(url,init) as Response;calls++;if(calls!==1)return response;const raw=await response.json() as {choices:{message:{content:string}}[]};const value={...JSON.parse(raw.choices[0].message.content),version:ARTICLE_SINGLE_CONTRACT_VERSION};return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})})}
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();vi.mocked(editorialArticlePool).mockReset();vi.mocked(runClassification).mockReset()})
 
+it('runs one V3 Chief plan, skips unrequested research, and retains the reviewed Single Story contract',async()=>{
+ mockPool(3)
+ const calls:string[]=[]
+ const send=vi.fn(async(_url:string,init:RequestInit)=>{
+  const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content)
+  calls.push(body.response_format.json_schema.name)
+  const value=calls.length===1?{topic:'The everyday chair',angle:'How seating shapes daily rituals',argument:'Seating gives ordinary reflection a physical place.',selectedAssetIds:[version(1),version(2)],researchQuestions:[]}
+   :calls.length===2?{...edition(1,2),version:ARTICLE_SINGLE_CONTRACT_VERSION}
+   :review(input.edition)
+  return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
+ })
+ vi.stubGlobal('fetch',send)
+ const result=await post({EDITORIAL_WORKFLOW_V3_ENABLED:'true'},{interests:'A V3 chair story without external history',editionFormat:ARTICLE_SINGLE_CONTRACT_VERSION})
+ expect(result.status).toBe(200)
+ expect(await result.json()).toMatchObject({format:ARTICLE_SINGLE_CONTRACT_VERSION,source:'meta',researchReferences:[],inference:{attempted:true,reservedUnits:5}})
+ expect(calls).toEqual(['curio_article_plan_v3','curio_article_v1','curio_articles_review_v1'])
+})
+
+it('binds retrieved cultural evidence to a reviewed article and returns only its cited source',async()=>{
+ mockPool(3)
+ let museCalls=0
+ const send=vi.fn(async(url:string,init:RequestInit)=>{
+  if(url.includes('w/api.php'))return url.includes('list=search')
+   ?Response.json({query:{search:[{title:'Bauhaus'}]}})
+   :Response.json({query:{pages:{'1':{title:'Bauhaus',fullurl:'https://en.wikipedia.org/wiki/Bauhaus',extract:'Bauhaus was a German art school that combined crafts and the fine arts.'}}}})
+  if(!url.includes('api.meta.ai'))return Response.json({objectIDs:[]})
+  museCalls++
+  const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content)
+  let value:unknown
+  if(museCalls===1)value={topic:'The everyday chair',angle:'Craft and domestic attention',argument:'A chair can connect everyday utility with design education.',selectedAssetIds:[version(1),version(2)],researchQuestions:[{question:'How did Bauhaus combine crafts and fine arts?',why:'A direct historical comparison deepens the angle.',query:'Bauhaus crafts fine arts',complex:false}]}
+  else if(museCalls===2){
+   const cited=(input.sources as EditorialSource[]).find(source=>source.source==='cultural_research')!
+   const editionValue={...edition(1,2),version:ARTICLE_SINGLE_CONTRACT_VERSION}
+   editionValue.articles[0].narrative+=' Bauhaus was a German art school that combined crafts and the fine arts.'
+   editionValue.articles[0].sourceIds.push(cited.id)
+   editionValue.articles[0].culturalClaims=[{sourceId:cited.id,narrativeText:'Bauhaus was a German art school that combined crafts and the fine arts.'}]
+   value=editionValue
+  }else value=review(input.edition)
+  return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
+ })
+ vi.stubGlobal('fetch',send)
+ const result=await post({EDITORIAL_WORKFLOW_V3_ENABLED:'true',RESEARCH_SOURCE_ORIGINS:'https://en.wikipedia.org'},{interests:'Connect a chair to verified design education',editionFormat:ARTICLE_SINGLE_CONTRACT_VERSION})
+ expect(result.status).toBe(200)
+ const body=await result.json() as {researchReferences:EditorialSource[];articleEdition:EditorialArticleEdition;aiDisclosure:string}
+ expect(body.researchReferences).toMatchObject([{source:'cultural_research',citations:[{url:'https://en.wikipedia.org/wiki/Bauhaus',publication:'Wikipedia'}]}])
+ expect(body.articleEdition.articles[0].narrative).toContain('[1]')
+ expect(body.aiDisclosure).toContain('AI assistance')
+ expect(museCalls).toBe(3)
+})
+
 it('validates exactly three articles with two or three unique exact-version images',()=>{
  const three=edition();expect(validateArticleEdition(three,items,sources,contexts,3)).toEqual(three)
  const two=structuredClone(three);two.articles.forEach(article=>{article.images.pop();article.sourceIds.splice(-3)})

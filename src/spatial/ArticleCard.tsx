@@ -1,10 +1,11 @@
-import {useCallback,useEffect,useRef,useState,type ReactNode} from 'react'
+import {lazy,Suspense,useCallback,useEffect,useRef,useState,type ReactNode} from 'react'
 import type {StagedArticleImage,StagedExhibit} from './staging'
 import type {StagedPlan} from './edition'
 import ObjectDiscovery from './ObjectDiscovery'
-import Sources from './Sources'
 import {loadEditorialFont,normalizeTemplate,templateOf,type BookTemplate} from './editorial-book'
 import './editorial-book.css'
+const Sources=lazy(()=>import('./Sources'))
+const ResearchSources=lazy(()=>import('./ResearchSources'))
 
 // One editorial reading surface in two sizes: the compact promenade card
 // and the expanded overlay share this exact content and component. Article
@@ -78,7 +79,7 @@ export default function ArticleCard({exhibit,plan,index,total,expanded,onToggle,
         {exhibit.thread&&<p className="article-thread">{exhibit.thread}</p>}
         <p className="spatial-fine">{exhibit.attribution} · {exhibit.rights}</p>
       </div>
-      <Sources exhibit={exhibit} plan={plan}/>
+      {plan?<Suspense fallback={null}><Sources exhibit={exhibit} plan={plan}/></Suspense>:null}
     </>
     if(expanded)return <div className="spatial-story-backdrop is-expanded" onClick={onToggle}>
       <article ref={ref} role="dialog" aria-modal="true" aria-label={`${exhibit.title}, expanded story`}
@@ -133,7 +134,8 @@ export default function ArticleCard({exhibit,plan,index,total,expanded,onToggle,
     </div>
     <div className="eb-flow">{flow}</div>
     {exhibit.thread&&<p className="article-thread eb-thread">{exhibit.thread}</p>}
-    <Sources exhibit={exhibit} plan={plan}/>
+    {plan?<Suspense fallback={null}><Sources exhibit={exhibit} plan={plan}/></Suspense>:null}
+    {article.researchReferences?.length||article.aiDisclosure?<Suspense fallback={null}><ResearchSources references={article.researchReferences??[]} disclosure={article.aiDisclosure}/></Suspense>:null}
   </>
   const bookClass=`editorial-book is-${variant}${expanded?'':' is-compact'}`
   if(expanded)return <div className="spatial-story-backdrop is-expanded" onClick={onToggle}>

@@ -75,6 +75,17 @@ describe('spatial article edition fetch', () => {
     expect(result.exhibits).toHaveLength(3)
     expect(result.exhibits.every(exhibit => exhibit.article?.storyImages.length === 2)).toBe(true)
   })
+  it('keeps cited research attached only to its article and preserves disclosure',()=>{
+    const {articleEdition,items}=articleEditionFixture()
+    const article=articleEdition.articles[0]
+    const sourceId=`${article.heroAssetId}:cultural_claim:research:${'a'.repeat(32)}`
+    article.culturalClaims=[{sourceId,narrativeText:'A documented cultural fact'}]
+    const source={id:sourceId,assetId:article.heroAssetId,kind:'cultural_claim',label:'Retrieved cultural context',value:'A documented cultural fact appears in the retrieved passage.',authority:'retrieved_public_source',source:'cultural_research',retrievedAt:new Date().toISOString(),citations:[{sourceId:'research:'+ 'a'.repeat(32),passageId:'passage:'+ 'a'.repeat(32),url:'https://en.wikipedia.org/wiki/Design',publication:'Wikipedia',title:'Design'}]}
+    const staged=stageArticleEdition({articleEdition,items,researchReferences:[source] as never,aiDisclosure:'AI disclosure'})
+    expect(staged.exhibits[0].article?.researchReferences).toHaveLength(1)
+    expect(staged.exhibits[0].article?.aiDisclosure).toBe('AI disclosure')
+    expect(staged.exhibits[1].article?.researchReferences).toEqual([])
+  })
   it('skips articles with unresolvable images instead of patching them', async () => {
     const {articleEdition, items} = articleEditionFixture()
     const broken = structuredClone(articleEdition)

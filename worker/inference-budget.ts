@@ -21,7 +21,7 @@ function budgetLimits(env:Bindings,demo:boolean){
 
 // Shared namespace/name and unchanged ceilings for magazine and Decoder calls.
 // Multi-model operations reserve every possible call atomically, never refund.
-export async function reserveInference(env: Bindings, ip: string, units: 1 | 2 | 3 | 4 = 1, samAssetId?: string,editorialPilot=false,demoTester:string|null=null,articlePreparation=false) {
+export async function reserveInference(env: Bindings, ip: string, units: 1 | 2 | 3 | 4 | 5 = 1, samAssetId?: string,editorialPilot=false,demoTester:string|null=null,articlePreparation=false) {
   if (!env.RATE_LIMIT_SALT || env.RATE_LIMIT_SALT.length < 32 || !env.INFERENCE_BUDGET) throw new Error('Budget unavailable')
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.RATE_LIMIT_SALT), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
   const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(ip))
@@ -35,10 +35,13 @@ export async function reserveInference(env: Bindings, ip: string, units: 1 | 2 |
   if(articlePreparation&&(units!==1||samAssetId||editorialPilot||env.EDITORIAL_ARTICLE_PREPARATION_ENABLED!=='true'))throw new Error('Article preparation unavailable')
   const preparationPolicy=articlePreparation?resolveArticlePreparationPolicy(env):null
   const rates=resolveRatePolicy(env)
+  const articleV3=units===5&&env.EDITORIAL_WORKFLOW_V3_ENABLED==='true'&&!samAssetId&&!editorialPilot&&!articlePreparation
+  if(units===5&&!articleV3)throw Error('Article V3 budget unavailable')
+  if(articleV3)rates.reviewedHourlyUnits=Math.max(5,rates.reviewedHourlyUnits)
   const testerHash=demo&&demoTester?await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(`demo-tester:${demoTester}`)):null
   const testerKey=testerHash?Array.from(new Uint8Array(testerHash),value=>value.toString(16).padStart(2,'0')).join(''):null
-  const testingActive=Boolean(testing&&demo&&testerKey&&units===4&&!samAssetId&&!articlePreparation)
-  const response = await stub.fetch('https://budget/reserve', { method: 'POST', body: JSON.stringify({ ip: hash, ceiling, daily, demo, rates, ...(testerKey&&units===4?{demoTester:testerKey}:{}), ...(testingActive?{demoTestingPolicy:testing}:{}), ...(units > 1 ? { units } : {}), ...(samAssetId ? { samAssetId } : {}),...(editorialPilot?{editorialPilot:true}:{}),...(preparationPolicy?{articlePreparation:true,articlePreparationPolicy:preparationPolicy}:{}) }) })
+  const testingActive=Boolean(testing&&demo&&testerKey&&(units===4||articleV3)&&!samAssetId&&!articlePreparation)
+  const response = await stub.fetch('https://budget/reserve', { method: 'POST', body: JSON.stringify({ ip: hash, ceiling, daily, demo, rates, ...(testerKey&&(units===4||articleV3)?{demoTester:testerKey}:{}), ...(testingActive?{demoTestingPolicy:testing}:{}), ...(units > 1 ? { units } : {}),...(articleV3?{articleV3:true}:{}), ...(samAssetId ? { samAssetId } : {}),...(editorialPilot?{editorialPilot:true}:{}),...(preparationPolicy?{articlePreparation:true,articlePreparationPolicy:preparationPolicy}:{}) }) })
   if (!response.ok) throw new Error('Budget unavailable')
   const result = await response.json() as { allowed?: boolean; retryAfter?: number; reservationId?: string;denial?:unknown }
   if (typeof result.allowed !== 'boolean') throw new Error('Invalid budget result')
@@ -59,6 +62,7 @@ export async function inferenceBudgetStatus(env:Bindings,request?:Request){
   const demo=env.EDITORIAL_DEMO_BUDGET_ENABLED==='true', {ceiling,daily}=budgetLimits(env,demo)
   const testing=resolveDemoTestingPolicy(env)
   const rates=resolveRatePolicy(env)
+  if(env.EDITORIAL_WORKFLOW_V3_ENABLED==='true')rates.reviewedHourlyUnits=Math.max(5,rates.reviewedHourlyUnits)
   const preparationPolicy=env.EDITORIAL_ARTICLE_PREPARATION_ENABLED==='true'?resolveArticlePreparationPolicy(env):null
   const stub=env.INFERENCE_BUDGET.get(env.INFERENCE_BUDGET.idFromName('magazine-v1'))
   let ip:string|undefined,testerKey:string|undefined
