@@ -69,7 +69,10 @@
 .spatial-story-hero .spatial-fine{padding:2px 14px 12px;margin:0}
 .spatial-story button{min-height:40px;padding:8px 16px;border:1px solid #c6ceda;border-radius:9999px;background:#fff;color:#101219;cursor:pointer;font:inherit;font-size:12px;margin:4px 8px 4px 0}
 .spatial-story-close{position:absolute;top:12px;right:12px;width:40px;height:40px;padding:0!important;margin:0!important;border-radius:50%!important;font-size:20px}
-.spatial-sources{margin:18px 0 6px;border-top:1px solid #e0e5ed;padding-top:14px}
+.spatial-sources{margin:22px 0 6px;border-top:1px solid #e0e5ed;padding-top:16px}
+.spatial-sources>button{min-height:36px!important;font-size:11px!important;letter-spacing:.12em;text-transform:uppercase;color:#626b7a!important}
+.spatial-sources-list p{font-size:13px!important}
+.spatial-sources .spatial-fine{font-size:10.5px!important}
 .spatial-sources-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:14px}
 .spatial-sources-claim{margin:0 0 6px!important}
 .spatial-sources-item{margin:8px 0 0 12px;padding-left:12px;border-left:2px solid #e0e5ed}

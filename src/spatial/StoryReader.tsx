@@ -62,8 +62,8 @@ export default function StoryReader({exhibit,plan,index,total,onClose,onInspect}
       {exhibit.thread&&<p className="spatial-story-thread">{exhibit.thread}</p>}
       {!exhibit.article&&<p className="spatial-fine">{exhibit.attribution} · {exhibit.rights}</p>}
       {exhibit.hotspots.length>0&&<button type="button" onClick={()=>onInspect(exhibit.assetId)}>Explore object details →</button>}
-      <Sources exhibit={exhibit} plan={plan}/>
       <p className="spatial-fine">Scroll to read · Press Esc to return to the exhibition.</p>
+      <Sources exhibit={exhibit} plan={plan}/>
     </div>
   </div>
 }

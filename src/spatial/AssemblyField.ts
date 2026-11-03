@@ -15,7 +15,7 @@ export class AssemblyField{
   private grid:Float32Array
   private seed:Float32Array
 
-  constructor(scene:THREE.Scene,private target:{x:number;y:number;z:number}={x:-3.4,y:2.6,z:-52}){
+  constructor(scene:THREE.Scene,private target:{x:number;y:number;z:number}={x:0,y:2.6,z:-52}){
     this.start=new Float32Array(COUNT*3)
     this.control=new Float32Array(COUNT*3)
     this.grid=new Float32Array(COUNT*3)

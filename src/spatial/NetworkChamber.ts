@@ -1,27 +1,45 @@
 import * as THREE from 'three'
 import type {CatalogNode} from './contracts'
+import {ExhibitMounts} from './ExhibitMounts'
 import {NETWORK_CENTER,NETWORK_RADIUS,buildEdges,layoutNetwork,nodeScale,relevanceWeights} from './network-math'
 
-// The Curiosity Journey constellation: one sprite per real catalog node,
-// edges only where edge hints resolve on both ends. No invented records,
-// no decorative filler nodes; the chamber scales with the catalog.
-const NODE_SIZE=3.4
-const RING_SIZE=4.4
+// The Curiosity Journey constellation: one refined particle per real catalog
+// node, edges only where edge hints resolve on both ends. No invented
+// records, no decorative filler nodes; the chamber scales with the catalog.
+//
+// The constellation is stationary unless the visitor acts: no idle rotation,
+// drift, or zoom. Drag rotates, wheel/pinch zooms, tap selects. Image
+// previews stay hidden at rest and reveal progressively — for the selected
+// node, plus the nearest few when zoomed in — while the node panel carries
+// the full label, artwork, and Enter/Curate actions.
+const DOT_SIZE=1.15
+const RING_SIZE=2.3
+const THUMB_SIZE=3.0
+const HIT_SIZE=4.6
 const DETAIL=0x7a8ca8
 const BRASS=0xb98a3e
 const ACCENT=0xa9c5ff
+const PEARL=0xf6f9fd
+const FAINT=0xd9e2f0
+// Zoomed-in reveal: only when the camera is this close to the chamber
+// center may nearby nodes show previews, capped so the view stays calm.
+const REVEAL_RADIUS=56
+const REVEAL_DIST=52
+const REVEAL_MAX=8
+
+type ChamberNode={
+  dot:THREE.Sprite;ring:THREE.Sprite;thumb:THREE.Sprite;hit:THREE.Sprite;
+  url:string;loaded:boolean;base:THREE.Vector3;dotBase:number;assetId:string
+}
 
 export class NetworkChamber{
   readonly group=new THREE.Group()
   private raycaster=new THREE.Raycaster()
-  private thumbs:THREE.Sprite[]=[]
-  private rings:THREE.Sprite[]=[]
-  private base:THREE.Vector3[]=[]
-  private ringBase:number[]=[]
+  private nodes:ChamberNode[]=[]
   private edges:THREE.LineSegments|null=null
   private selected=-1
   private staged=new Set<string>()
-  private idleMs=0
+  private center=new THREE.Vector3(...NETWORK_CENTER)
 
   constructor(scene:THREE.Scene){
     this.group.visible=false
@@ -36,22 +54,26 @@ export class NetworkChamber{
     const stagedIndexes=new Set(nodes.map((node,index)=>stagedIds.has(node.assetId)?index:-1).filter(i=>i>=0))
     const weights=relevanceWeights(stagedIndexes,edgePairs,nodes.length)
     const positions=layoutNetwork(nodes.length,NETWORK_CENTER,NETWORK_RADIUS,weights)
+    const dotMap=ExhibitMounts.flare()
+    const make=(material:THREE.SpriteMaterial,size:number,index:number)=>{
+      const sprite=new THREE.Sprite(material)
+      sprite.scale.setScalar(size)
+      sprite.position.set(...positions[index])
+      sprite.userData={index}
+      return sprite
+    }
     nodes.forEach((node,index)=>{
-      const [x,y,z]=positions[index]
       const scale=nodeScale(weights[index])
-      const thumb=new THREE.Sprite(new THREE.SpriteMaterial({color:0xe8ecf1,transparent:true,fog:false}))
-      thumb.scale.set(NODE_SIZE*scale,NODE_SIZE*scale,1)
-      thumb.position.set(x,y,z)
-      thumb.userData={index,assetId:node.assetId}
-      const ring=new THREE.Sprite(new THREE.SpriteMaterial({map:NetworkChamber.ringTexture(),transparent:true,fog:false,depthWrite:false}))
-      ring.scale.set(RING_SIZE*scale,RING_SIZE*scale,1)
-      ring.position.set(x,y,z)
-      this.group.add(thumb,ring)
-      this.loadThumb(node.thumbnail,thumb)
-      this.thumbs.push(thumb)
-      this.rings.push(ring)
-      this.ringBase.push(RING_SIZE*scale)
-      this.base.push(new THREE.Vector3(x,y,z))
+      const dot=make(new THREE.SpriteMaterial({map:dotMap,transparent:true,fog:false,depthWrite:false}),DOT_SIZE*scale,index)
+      ;(dot.material as THREE.SpriteMaterial).color.set(stagedIds.has(node.assetId)?PEARL:FAINT)
+      const dotBase=0.72+0.28*weights[index]
+      ;(dot.material as THREE.SpriteMaterial).opacity=dotBase
+      const ring=make(new THREE.SpriteMaterial({map:NetworkChamber.ringTexture(),transparent:true,fog:false,depthWrite:false,opacity:0.8}),RING_SIZE*scale,index)
+      const thumb=make(new THREE.SpriteMaterial({color:0xe8ecf1,transparent:true,fog:false}),THUMB_SIZE*scale,index)
+      thumb.visible=false
+      const hit=make(new THREE.SpriteMaterial({colorWrite:false,depthWrite:false}),HIT_SIZE,index)
+      this.group.add(dot,ring,thumb,hit)
+      this.nodes.push({dot,ring,thumb,hit,url:node.thumbnail,loaded:false,base:new THREE.Vector3(...positions[index]),dotBase,assetId:node.assetId})
       this.paintRing(index)
     })
     if(edgePairs.length){
@@ -61,24 +83,27 @@ export class NetworkChamber{
       })
       const geometry=new THREE.BufferGeometry()
       geometry.setAttribute('position',new THREE.BufferAttribute(array,3))
-      this.edges=new THREE.LineSegments(geometry,new THREE.LineBasicMaterial({color:0x7a8ca8,transparent:true,opacity:0.45,fog:false}))
+      this.edges=new THREE.LineSegments(geometry,new THREE.LineBasicMaterial({color:0x7a8ca8,transparent:true,opacity:0.3,fog:false}))
       this.group.add(this.edges)
     }
   }
 
-  // Circular-cropped artwork so nodes read as discs inside their rings.
-  // Same-origin imagery needs no CORS handling; on failure the graphite
-  // disc stays and the HUD panel carries the label.
-  private loadThumb(url:string,thumb:THREE.Sprite):void{
-    if(!url)return
+  // Circular-cropped artwork so revealed nodes read as discs. Same-origin
+  // imagery needs no CORS handling; on failure the pearl dot stays and the
+  // HUD panel carries the label. Textures load lazily on first reveal, so a
+  // zoomed-out chamber fetches no thumbnails at all.
+  private loadThumb(node:ChamberNode):void{
+    if(node.loaded||!node.url)return
+    node.loaded=true
+    const thumb=node.thumb
     const image=new Image()
     // Anonymous CORS: a tainted canvas would throw at WebGL upload time, so
-    // uncooperative hosts fail here instead and keep the graphite disc.
+    // uncooperative hosts fail here instead and keep the pearl dot.
     image.crossOrigin='anonymous'
-    image.onerror=()=>{/* Graphite disc stays; the HUD panel carries the label. */}
+    image.onerror=()=>{/* Pearl dot stays; the HUD panel carries the label. */}
     image.onload=()=>{
-      // A pruned node is detached before its thumbnail arrives; the graphite
-      // disc stays and nothing revoked is ever drawn.
+      // A pruned node is detached before its thumbnail arrives; the pearl
+      // dot stays and nothing revoked is ever drawn.
       if(!thumb.parent)return
       const size=256,canvas=document.createElement('canvas')
       canvas.width=size;canvas.height=size
@@ -96,7 +121,7 @@ export class NetworkChamber{
       material.color.set(0xffffff)
       material.needsUpdate=true
     }
-    image.src=url
+    image.src=node.url
   }
 
   private static ring:THREE.Texture|null=null
@@ -118,43 +143,52 @@ export class NetworkChamber{
   setSelected(index:number):void{
     const previous=this.selected
     this.selected=index
-    if(previous>=0&&this.rings[previous])this.paintRing(previous)
-    if(index>=0&&this.rings[index])this.paintRing(index)
+    if(previous>=0&&this.nodes[previous])this.paintRing(previous)
+    if(index>=0&&this.nodes[index])this.paintRing(index)
   }
 
   private paintRing(index:number):void{
-    const ring=this.rings[index]
-    if(!ring)return
-    const thumb=this.thumbs[index]
-    const stagedNode=thumb!==undefined&&this.staged.has((thumb.userData as {assetId?:string}).assetId??'')
-    ;(ring.material as THREE.SpriteMaterial).color.set(index===this.selected?ACCENT:stagedNode?BRASS:DETAIL)
+    const node=this.nodes[index]
+    if(!node)return
+    ;(node.ring.material as THREE.SpriteMaterial).color.set(index===this.selected?ACCENT:this.staged.has(node.assetId)?BRASS:DETAIL)
   }
 
-  // Slow constellation drift; pauses while the visitor orbits, resumes idle.
-  update(elapsed:number,dt:number,interacting:boolean,reducedMotion:boolean):void{
+  // Stationary by default: reveal state follows the camera and selection,
+  // but nothing moves on its own. Reduced motion needs no special case.
+  update(camera?:THREE.Camera):void{
     if(!this.group.visible)return
-    this.idleMs=interacting?0:this.idleMs+dt*1000
-    if(!reducedMotion&&!interacting&&this.idleMs>2500)this.group.rotation.y+=dt*0.025
-    if(this.selected>=0&&this.rings[this.selected]&&!reducedMotion){
-      const pulse=1+Math.sin(elapsed*3.2)*0.07
-      const base=this.ringBase[this.selected]??RING_SIZE
-      this.rings[this.selected].scale.set(base*pulse,base*pulse,1)
+    const nearby:number[]=[]
+    if(camera&&camera.position.distanceTo(this.center)<REVEAL_RADIUS){
+      const scored:[number,number][]=[]
+      for(let i=0;i<this.nodes.length;i++){
+        const dist=this.nodes[i].base.distanceTo(camera.position)
+        if(dist<REVEAL_DIST)scored.push([dist,i])
+      }
+      scored.sort((a,b)=>a[0]-b[0])
+      for(let k=0;k<scored.length&&k<REVEAL_MAX;k++)nearby.push(scored[k][1])
     }
+    this.nodes.forEach((node,index)=>{
+      const revealed=index===this.selected||nearby.includes(index)
+      if(revealed&&!node.loaded)this.loadThumb(node)
+      node.thumb.visible=revealed
+      node.dot.visible=!revealed
+    })
   }
 
   // Clear exhale: the constellation breathes outward and dissolves.
   disperse(t:number):void{
     const clamped=Math.min(1,Math.max(0,t))
     const eased=1-Math.pow(1-clamped,2)
-    this.thumbs.forEach((thumb,i)=>{
-      const direction=this.base[i].clone().sub(new THREE.Vector3(...NETWORK_CENTER))
-      thumb.position.copy(this.base[i].clone().add(direction.multiplyScalar(eased*1.6)))
-      ;(thumb.material as THREE.SpriteMaterial).opacity=1-eased
-      const ring=this.rings[i]
-      ring.position.copy(thumb.position)
-      ;(ring.material as THREE.SpriteMaterial).opacity=1-eased
+    this.nodes.forEach(node=>{
+      const position=node.base.clone().sub(this.center).multiplyScalar(eased*1.6).add(node.base)
+      const sprites=[node.dot,node.ring,node.thumb],bases=[node.dotBase,0.8,1]
+      sprites.forEach((sprite,i)=>{
+        sprite.position.copy(position)
+        ;(sprite.material as THREE.SpriteMaterial).opacity=bases[i]*(1-eased)
+      })
+      node.hit.position.copy(position)
     })
-    if(this.edges)(this.edges.material as THREE.LineBasicMaterial).opacity=0.45*(1-eased)
+    if(this.edges)(this.edges.material as THREE.LineBasicMaterial).opacity=0.3*(1-eased)
   }
 
   pick(clientX:number,clientY:number,camera:THREE.Camera,rect:{left:number;top:number;width:number;height:number}):number{
@@ -163,24 +197,18 @@ export class NetworkChamber{
       ((clientX-rect.left)/rect.width)*2-1,
       -((clientY-rect.top)/rect.height)*2+1,
     ),camera)
-    const hits=this.raycaster.intersectObjects(this.thumbs,false)
+    const hits=this.raycaster.intersectObjects(this.nodes.map(node=>node.hit),false)
     return (hits[0]?.object.userData as {index?:number}|undefined)?.index??-1
   }
 
-  get count():number{
-    return this.thumbs.length
-  }
-
   private clear():void{
-    for(const sprite of [...this.thumbs,...this.rings]){
-      const material=sprite.material as THREE.SpriteMaterial
-      if(material.map&&material.map!==NetworkChamber.ring)material.map.dispose()
-      material.dispose()
+    // Only thumbnails own their textures; dots and rings share statics.
+    for(const node of this.nodes){
+      const owned=(node.thumb.material as THREE.SpriteMaterial).map
+      if(owned)owned.dispose()
+      for(const sprite of [node.dot,node.ring,node.thumb,node.hit])(sprite.material as THREE.Material).dispose()
     }
-    this.thumbs=[]
-    this.rings=[]
-    this.base=[]
-    this.ringBase=[]
+    this.nodes=[]
     this.edges?.geometry.dispose()
     ;(this.edges?.material as THREE.Material|undefined)?.dispose()
     this.edges=null

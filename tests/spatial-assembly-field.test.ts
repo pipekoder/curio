@@ -3,7 +3,7 @@ import {beforeEach,describe,expect,it} from 'vitest'
 import * as THREE from 'three'
 import {AssemblyField} from '../src/spatial/AssemblyField'
 
-const TARGET={x:-3.4,y:2.6,z:-52}
+const TARGET={x:0,y:2.6,z:-52}
 
 function settledPositions():Float32Array{
   const scene=new THREE.Scene()
