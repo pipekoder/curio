@@ -14,7 +14,7 @@ import {hydrateChiefDraft} from '../worker/chief-draft'
 import {editorialApi} from '../worker/editorial'
 import {editorialArticlePool,ArticlePoolError,reportArticlePoolFailure} from '../worker/editorial-article-pool'
 import {runClassification,AssetAnalysisError} from '../worker/asset-classifier'
-import {articleChiefTimeoutMs} from '../worker/article-provider-timeout'
+import {ARTICLE_REVIEW_STEP_TIMEOUT_MS,articleChiefTimeoutMs,articleReviewTimeoutMs} from '../worker/article-provider-timeout'
 
 vi.mock('../worker/editorial-article-pool',async importOriginal=>({...await importOriginal<typeof import('../worker/editorial-article-pool')>(),editorialArticlePool:vi.fn()}))
 vi.mock('../worker/asset-classifier',async importOriginal=>({...await importOriginal<typeof import('../worker/asset-classifier')>(),runClassification:vi.fn()}))
@@ -250,11 +250,11 @@ it('uses one four-unit reservation for Lite Chief and independent Reviewer and s
  expect((await post({EDITORIAL_HYBRID_ENABLED:'true',EDITORIAL_WONDER_PROVIDER_VERIFIED:'true',META_WONDER_MODEL:'muse-wonder-1.0'},{editorialMode:'hybrid'})).status).toBe(200)
  expect(JSON.parse(String(send.mock.calls[2][1].body)).model).toBe('muse-wonder-1.0')
 })
-it('uses a bounded 60-second Chief timeout for both one- and three-story editions without lengthening Reviewer calls',async()=>{
+it('uses a bounded 60-second Chief timeout and 30-second Reviewer timeout for both one- and three-story editions',async()=>{
  mockPool(9)
  const originalTimeout=AbortSignal.timeout
  const limits:number[]=[]
- vi.spyOn(AbortSignal,'timeout').mockImplementation(ms=>{limits.push(ms);return originalTimeout(ms===60000?80:ms===20000?20:ms)})
+ vi.spyOn(AbortSignal,'timeout').mockImplementation(ms=>{limits.push(ms);return originalTimeout(ms===60000?80:ms===30000?30:ms)})
  for(const count of [1,3] as const){
   const base=provider()
   const send=vi.fn(async(url:string,init:RequestInit)=>{
@@ -270,7 +270,7 @@ it('uses a bounded 60-second Chief timeout for both one- and three-story edition
   expect(send).toHaveBeenCalledTimes(2)
  }
  expect(limits.filter(ms=>ms===60000)).toHaveLength(2)
- expect(limits.filter(ms=>ms===20000)).toHaveLength(2)
+ expect(limits.filter(ms=>ms===30000)).toHaveLength(2)
  expect(limits.filter(ms=>ms===150000)).toHaveLength(2)
 })
 it('reports a bounded Chief provider timeout without calling Reviewer or refunding accepted units',async()=>{
@@ -296,6 +296,41 @@ it('rejects unsafe Chief timeout settings before reserving or calling Meta',asyn
  expect(response.status).toBe(503)
  expect(await response.json()).toMatchObject({fallbackReason:'configuration'})
  expect(send).not.toHaveBeenCalled()
+})
+it('rejects unsafe Reviewer timeout settings before reserving or calling Meta',async()=>{
+ expect(articleReviewTimeoutMs({} as never)).toBe(30000)
+ expect(articleReviewTimeoutMs({ARTICLE_REVIEW_TIMEOUT_MS:'25000'} as never)).toBe(25000)
+ for(const value of ['0','19999','40001','abc','20.5'])expect(()=>articleReviewTimeoutMs({ARTICLE_REVIEW_TIMEOUT_MS:value} as never)).toThrow()
+ expect(ARTICLE_REVIEW_STEP_TIMEOUT_MS).toBe(20000)
+ mockPool(6)
+ const send=provider();vi.stubGlobal('fetch',send)
+ const response=await post({ARTICLE_REVIEW_TIMEOUT_MS:'90000'})
+ expect(response.status).toBe(503)
+ expect(await response.json()).toMatchObject({fallbackReason:'configuration'})
+ expect(send).not.toHaveBeenCalled()
+})
+it('reports a bounded Reviewer provider timeout after Chief hydration succeeds',async()=>{
+ mockPool(6)
+ const originalTimeout=AbortSignal.timeout,seen:number[]=[]
+ vi.spyOn(AbortSignal,'timeout').mockImplementation(ms=>{seen.push(ms);return originalTimeout(ms===30000?25:ms)})
+ const send=vi.fn(async(_url:string,init:RequestInit)=>{
+  if(send.mock.calls.length===1){const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content);return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(toDraft(edition(input.articleCount,input.catalog.length>=9?3:2)))}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})}
+  return new Promise<Response>((_resolve,reject)=>{const signal=init.signal as AbortSignal;signal.addEventListener('abort',()=>reject(signal.reason),{once:true})})
+ })
+ vi.stubGlobal('fetch',send)
+ const original=console.error,records:string[]=[]
+ console.error=(message:unknown)=>{records.push(String(message))}
+ let body:Record<string,unknown>
+ try{
+  const response=await post({},{interests:'Bounded delayed Reviewer timeout test'})
+  body=await response.json() as Record<string,unknown>
+ }finally{console.error=original}
+ expect(body).toMatchObject({source:'deterministic',fallbackReason:'provider_or_validation',validationDiagnostic:{stage:'reviewer',code:'provider_timeout'},inference:{attempted:true,reservedUnits:4}})
+ expect(send).toHaveBeenCalledTimes(2)
+ expect(seen).toContain(30000)
+ const event=JSON.parse(records.find(record=>record.includes('article_editorial_failure'))!) as Record<string,unknown>
+ expect(event).toMatchObject({stage:'reviewer',code:'provider_timeout'})
+ expect(event.elapsedMs).toEqual(expect.any(Number))
 })
 it('reports accepted non-tester reservation and safe stage-specific provider failures',async()=>{
  mockPool(6)
