@@ -10,6 +10,7 @@ import type {VisualContext} from '../shared/visual-observations'
 import {ARTICLE_CONTRACT_VERSION,ARTICLE_SINGLE_CONTRACT_VERSION,type EditorialArticleEdition} from '../shared/editorial-articles'
 import {editorialDimensions,EDITORIAL_STANDARD_VERSION} from '../shared/editorial-standard'
 import {articleEditorialResponse,validateArticleEdition} from '../worker/editorial-articles'
+import {hydrateChiefDraft} from '../worker/chief-draft'
 import {editorialApi} from '../worker/editorial'
 import {editorialArticlePool,ArticlePoolError,reportArticlePoolFailure} from '../worker/editorial-article-pool'
 import {runClassification,AssetAnalysisError} from '../worker/asset-classifier'
@@ -40,8 +41,9 @@ function environment(overrides:Record<string,unknown>={}){
 const post=(overrides:Record<string,unknown>={},extra:Record<string,unknown>={})=>editorialApi.request(`${origin}/`,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json','CF-Connecting-IP':'192.0.2.9'},body:JSON.stringify({...preferences,editionFormat:ARTICLE_CONTRACT_VERSION,...extra})},environment(overrides))
 const mockPool=(length=24)=>vi.mocked(editorialArticlePool).mockResolvedValue({items:items.slice(0,length),visualContexts:contexts.slice(0,length),sources:sources.filter(s=>items.slice(0,length).some(item=>item.image.id===s.assetId)),eligibleCount:length})
 function review(value:EditorialArticleEdition,score=5,high=false){return {rubricVersion:EDITORIAL_STANDARD_VERSION,dimensions:Object.fromEntries(editorialDimensions.map(key=>[key,{score,reason:'Independent assessment against supplied evidence.',evidenceRefs:[`feature:${value.articles[0].heroAssetId}`]}])),magazineFeedback:'The edition is assessed.',featureFeedback:value.articles.map((article,i)=>({assetId:article.heroAssetId,strengths:[],issues:high&&i===0?[{severity:'high',code:'fact_integrity',evidenceRefs:[article.images[0].brandSourceId],instruction:'Remove the unsupported claim.'}]:[]})),revisionInstructions:high?['Remove the unsupported claim.']:[]}}
-function provider(firstScore=5,finalScore=5,high=false){let calls=0;return vi.fn(async(_url:string,init:RequestInit)=>{const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content);calls++;const value=calls===1?edition(input.articleCount,input.catalog.length>=9?3:2):calls===2?review(input.edition,firstScore,high):calls===3?input.edition:review(input.edition,finalScore);return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})})}
-function singleProvider(){const base=provider();let calls=0;return vi.fn(async(url:string,init:RequestInit)=>{const response=await base(url,init) as Response;calls++;if(calls!==1)return response;const raw=await response.json() as {choices:{message:{content:string}}[]};const value={...JSON.parse(raw.choices[0].message.content),version:ARTICLE_SINGLE_CONTRACT_VERSION};return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})})}
+const refOf=(assetId:string)=>'ABCDEFGHI'[items.findIndex(item=>item.image.id===assetId)]!
+function toDraft(edition:EditorialArticleEdition){return {title:edition.title,deck:edition.deck,articles:edition.articles.map(article=>({headline:article.headline,deck:article.deck,narrative:article.narrative,culturalClaims:[] as {ref:string;narrativeText:string}[],images:article.images.map(image=>({ref:refOf(image.assetId),products:image.productSourceIds.map(id=>id.split(':').pop()!)}))}))}}
+function provider(firstScore=5,finalScore=5,high=false){let calls=0;return vi.fn(async(_url:string,init:RequestInit)=>{const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content);calls++;const value=calls===1?toDraft(edition(input.articleCount,input.catalog.length>=9?3:2)):calls===2?review(input.edition,firstScore,high):calls===3?input.edition:review(input.edition,finalScore);return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})})}
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();vi.mocked(editorialArticlePool).mockReset();vi.mocked(runClassification).mockReset()})
 
 it('runs one V3 Chief plan, skips unrequested research, and retains the reviewed Single Story contract',async()=>{
@@ -51,7 +53,7 @@ it('runs one V3 Chief plan, skips unrequested research, and retains the reviewed
   const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content)
   calls.push(body.response_format.json_schema.name)
   const value=calls.length===1?{topic:'The everyday chair',angle:'How seating shapes daily rituals',argument:'Seating gives ordinary reflection a physical place.',selectedAssetIds:[version(1),version(2)],researchQuestions:[]}
-   :calls.length===2?{...edition(1,2),version:ARTICLE_SINGLE_CONTRACT_VERSION}
+   :calls.length===2?toDraft(edition(1,2))
    :review(input.edition)
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
  })
@@ -75,12 +77,11 @@ it('binds retrieved cultural evidence to a reviewed article and returns only its
   let value:unknown
   if(museCalls===1)value={topic:'The everyday chair',angle:'Craft and domestic attention',argument:'A chair can connect everyday utility with design education.',selectedAssetIds:[version(1),version(2)],researchQuestions:[{question:'How did Bauhaus combine crafts and fine arts?',why:'A direct historical comparison deepens the angle.',query:'Bauhaus crafts fine arts',complex:false}]}
   else if(museCalls===2){
-   const cited=(input.sources as EditorialSource[]).find(source=>source.source==='cultural_research')!
-   const editionValue={...edition(1,2),version:ARTICLE_SINGLE_CONTRACT_VERSION}
-   editionValue.articles[0].narrative+=' Bauhaus was a German art school that combined crafts and the fine arts.'
-   editionValue.articles[0].sourceIds.push(cited.id)
-   editionValue.articles[0].culturalClaims=[{sourceId:cited.id,narrativeText:'Bauhaus was a German art school that combined crafts and the fine arts.'}]
-   value=editionValue
+   const cited=(input.sources as (EditorialSource&{claimRef:string})[]).find(source=>source.source==='cultural_research')!
+   const draftValue=toDraft(edition(1,2))
+   draftValue.articles[0].narrative+=' Bauhaus was a German art school that combined crafts and the fine arts.'
+   draftValue.articles[0].culturalClaims=[{ref:cited.claimRef,narrativeText:'Bauhaus was a German art school that combined crafts and the fine arts.'}]
+   value=draftValue
   }else value=review(input.edition)
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
  })
@@ -143,27 +144,74 @@ it('reports which brand requirement failed without exposing values',()=>{
  try{validateArticleEdition(renamed,items,sources,contexts,3);expect.unreachable()}
  catch(error){expect((error as {detail?:unknown}).detail).toMatchObject({article:1,image:1,sourceFound:true,nameMatches:false})}
 })
-it('instructs the chief to use per-image brand attribution',async()=>{
+it('instructs the chief that brand attribution resolves from selected refs',async()=>{
  for(const count of [1,3] as const){
   mockPool(count===1?3:24)
-  const send=count===1?singleProvider():provider();vi.stubGlobal('fetch',send)
+  const send=provider();vi.stubGlobal('fetch',send)
   const request=new Request(origin,{method:'POST',headers:{Origin:origin,'CF-Connecting-IP':'192.0.2.9'}})
   const response=await articleEditorialResponse(request,environment(),{...preferences,interests:'A brand-attribution study in quiet interiors'},'lite',undefined,count)
   expect(response.status).toBe(200)
   const instruction=(JSON.parse(String(send.mock.calls[0][1].body)) as {messages:{content:string}[]}).messages[0].content
-  expect(instruction).toContain('never reuse a brand source ID from another image')
+  expect(instruction).toContain('Brand attribution is resolved automatically from your selected refs')
  }
 })
-it('instructs the chief to keep supplied catalog pairs intact for single and triple editions',async()=>{
+it('instructs the chief to select images by ref for single and triple editions',async()=>{
  for(const count of [1,3] as const){
   mockPool(count===1?3:24)
-  const send=count===1?singleProvider():provider();vi.stubGlobal('fetch',send)
+  const send=provider();vi.stubGlobal('fetch',send)
   const request=new Request(origin,{method:'POST',headers:{Origin:origin,'CF-Connecting-IP':'192.0.2.9'}})
   const response=await articleEditorialResponse(request,environment(),{...preferences,interests:'A pairing-integrity study in quiet interiors'},'lite',undefined,count)
   expect(response.status).toBe(200)
   const instruction=(JSON.parse(String(send.mock.calls[0][1].body)) as {messages:{content:string}[]}).messages[0].content
-  expect(instruction).toContain('never attach a catalogId from one entry to the assetId of another')
+  expect(instruction).toContain('Select images by ref ONLY')
  }
+})
+it('hydrates candidate refs to exact identities and derives hero, article and source IDs',()=>{
+ const hydrated=hydrateChiefDraft(toDraft(edition(3,3)),3,items,sources)
+ expect(hydrated.articles).toHaveLength(3)
+ expect(hydrated.articles[0].id).toBe(`article-${items[0].image.id}`)
+ expect(hydrated.articles[0].heroAssetId).toBe(items[0].image.id)
+ expect(hydrated.articles[0].images[0]).toMatchObject({catalogId:items[0].id,assetId:items[0].image.id,brandName:data[0].sources[0].value,brandSourceId:data[0].sources[0].id})
+ expect(hydrated.articles[0].images[0].productSourceIds).toEqual([data[0].sources[2].id])
+ expect(hydrated.articles[0].sourceIds).toEqual(expect.arrayContaining([data[0].sources[0].id]))
+ expect(()=>validateArticleEdition(hydrated,items,sources,contexts,3)).not.toThrow()
+ const one=hydrateChiefDraft(toDraft(edition(1,2)),1,items,sources)
+ expect(one.version).toBe(ARTICLE_SINGLE_CONTRACT_VERSION)
+ expect(one.articles).toHaveLength(1)
+ const lenient=toDraft(edition(1,2))
+ lenient.articles[0].images[0].products=['product_missing_kind']
+ expect(hydrateChiefDraft(lenient,1,items,sources).articles[0].images[0].productSourceIds).toEqual([])
+})
+it('rejects unknown refs, duplicate refs and unresolvable brands without guessing',()=>{
+ const unknown=toDraft(edition(1,2))
+ unknown.articles[0].images[1].ref='Z'
+ try{hydrateChiefDraft(unknown,1,items,sources);expect.unreachable()}
+ catch(error){expect((error as {code?:unknown;detail?:unknown}).code).toBe('image_identity');expect((error as {detail?:unknown}).detail).toMatchObject({article:0,image:1,refKnown:false})}
+ const dup=toDraft(edition(1,2))
+ dup.articles[0].images[1].ref=dup.articles[0].images[0].ref
+ try{hydrateChiefDraft(dup,1,items,sources);expect.unreachable()}
+ catch(error){expect((error as {code?:unknown}).code).toBe('duplicate_image')}
+ expect(()=>hydrateChiefDraft(toDraft(edition(1,2)),1,items,sources.filter(source=>source.kind!=='brand_name'))).toThrow()
+})
+it('fails closed when two refs resolve to the same asset',()=>{
+ const dupItems=[items[0],{...items[0],id:'catalog-duplicate'}]
+ const draft=toDraft(edition(1,2))
+ const hydrated=hydrateChiefDraft(draft,1,dupItems,sources)
+ expect(hydrated.articles[0].images[0].assetId).toBe(hydrated.articles[0].images[1].assetId)
+ expect(()=>validateArticleEdition(hydrated,dupItems,sources,contexts,1)).toThrow()
+})
+it('resolves cultural claim refs and rejects unknown claims',()=>{
+ const claimSource={id:`${items[0].image.id}:cultural_claim:claim-1`,assetId:items[0].image.id,kind:'cultural_claim',label:'Reviewed cultural fact',value:'Bauhaus combined crafts.',authority:'operator_reviewed_cultural',source:'cultural_evidence_pack'} as EditorialSource
+ const withClaims=[...sources,claimSource]
+ const draft=toDraft(edition(1,2))
+ draft.articles[0].culturalClaims=[{ref:'S1',narrativeText:'Bauhaus combined crafts.'}]
+ const hydrated=hydrateChiefDraft(draft,1,items,withClaims)
+ expect(hydrated.articles[0].culturalClaims).toEqual([{sourceId:claimSource.id,narrativeText:'Bauhaus combined crafts.'}])
+ expect(hydrated.articles[0].sourceIds).toContain(claimSource.id)
+ const bad=toDraft(edition(1,2))
+ bad.articles[0].culturalClaims=[{ref:'S9',narrativeText:'Bauhaus combined crafts.'}]
+ try{hydrateChiefDraft(bad,1,items,withClaims);expect.unreachable()}
+ catch(error){expect((error as {code?:unknown}).code).toBe('cultural_claim')}
 })
 it('keeps the public contract on pool failure while logging stage and correlation id',async()=>{
   const logged:unknown[][]=[]
@@ -208,7 +256,7 @@ it('uses a bounded 60-second Chief timeout for both one- and three-story edition
  const limits:number[]=[]
  vi.spyOn(AbortSignal,'timeout').mockImplementation(ms=>{limits.push(ms);return originalTimeout(ms===60000?80:ms===20000?20:ms)})
  for(const count of [1,3] as const){
-  const base=count===1?singleProvider():provider()
+  const base=provider()
   const send=vi.fn(async(url:string,init:RequestInit)=>{
    if(send.mock.calls.length===1){
     await new Promise(resolve=>setTimeout(resolve,40))
@@ -279,8 +327,8 @@ it('reports accepted non-tester reservation and safe stage-specific provider fai
 it('distinguishes Chief structural validation from Reviewer schema and reference validation',async()=>{
  mockPool(6)
  for(const [name,second,stage,code] of [
-  ['structure',async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({...edition(3,2),articles:edition(3,2).articles.map((article,i)=>i?article:{...article,images:article.images.map((image,j)=>j?image:{...image,catalogId:'wrong'})})})}}]}),'chief_editor','image_identity'],
-  ['identitySchema',async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({...edition(3,2),articles:edition(3,2).articles.map((article,i)=>i?article:{...article,heroAssetId:version(7)})})}}]}),'chief_editor','image_identity_schema'],
+  ['structure',async()=>{const draft=toDraft(edition(3,2));draft.articles[0].images[0].ref='Z';return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(draft)}}]})},'chief_editor','image_identity'],
+  ['identitySchema',async()=>{const draft=toDraft(edition(3,2));draft.articles[0].images=draft.articles[0].images.slice(0,1);return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(draft)}}]})},'chief_editor','image_identity_schema'],
   ['reviewSchema',async()=>Response.json({choices:[{finish_reason:'stop',message:{content:'{}'}}]}),'reviewer','response_schema'],
   ['reviewReferences',async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({...review(edition(3,2)),featureFeedback:review(edition(3,2)).featureFeedback.map((row,i)=>i?row:{...row,assetId:version(99)})})}}]}),'reviewer','review_validation'],
  ] as const){
@@ -297,14 +345,14 @@ it('reports precise identity-mismatch diagnostics with chief model and mode',asy
  const sink=console.error
  console.error=(...args:unknown[])=>{logged.push(args)}
  try{
-  const bad=edition(3,2)
-  bad.articles[0].images[0].catalogId='wrong'
+  const bad=toDraft(edition(3,2))
+  bad.articles[0].images[0].ref='Z'
   vi.stubGlobal('fetch',vi.fn(async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(bad)}}]})))
   const body=await (await post({},{interests:'Identity mismatch diagnostic study'})).json() as Record<string,unknown>
-  expect(body).toMatchObject({fallbackReason:'provider_or_validation',validationDiagnostic:{stage:'chief_editor',code:'image_identity',detail:{article:0,image:0,assetKnown:true},chiefModel:'muse-spark-1.3',editorialMode:'lite'}})
+  expect(body).toMatchObject({fallbackReason:'provider_or_validation',validationDiagnostic:{stage:'chief_editor',code:'image_identity',detail:{article:0,image:0,refKnown:false},chiefModel:'muse-spark-1.3',editorialMode:'lite'}})
   expect(JSON.stringify(body)).not.toContain('version-0000')
   const record=JSON.parse(String(logged[0][0]))
-  expect(record).toMatchObject({event:'article_editorial_failure',stage:'chief_editor',code:'image_identity',detail:{article:0,image:0,assetKnown:true},chiefModel:'muse-spark-1.3',editorialMode:'lite'})
+  expect(record).toMatchObject({event:'article_editorial_failure',stage:'chief_editor',code:'image_identity',detail:{article:0,image:0,refKnown:false},chiefModel:'muse-spark-1.3',editorialMode:'lite'})
  }finally{console.error=sink}
 })
 it('identifies Reviewer, Revision and Confirmation failures without publishing an unapproved edition',async()=>{
@@ -552,7 +600,7 @@ it('re-serves the stored generation failure for a failed job instead of reportin
 })
 it('generates exactly one reviewed story from a three-image pool in single-article mode',async()=>{
   mockPool(3)
-  const send=singleProvider();vi.stubGlobal('fetch',send)
+  const send=provider();vi.stubGlobal('fetch',send)
   const result=await (await post({},{editionFormat:ARTICLE_SINGLE_CONTRACT_VERSION})).json() as Record<string,unknown>
   expect(result).toMatchObject({format:ARTICLE_SINGLE_CONTRACT_VERSION,source:'meta',retrieval:'d1',inference:{reservedUnits:4,attempted:true}})
   expect((result.articleEdition as {articles:unknown[]}).articles).toHaveLength(1)
@@ -564,7 +612,7 @@ it('generates exactly one reviewed story from a three-image pool in single-artic
 })
 it('requires three eligible images for a single story without inference',async()=>{
   mockPool(2)
-  const send=singleProvider();vi.stubGlobal('fetch',send)
+  const send=provider();vi.stubGlobal('fetch',send)
   const result=await post({},{editionFormat:ARTICLE_SINGLE_CONTRACT_VERSION})
   expect(result.status).toBe(409)
   expect(await result.json()).toMatchObject({format:ARTICLE_SINGLE_CONTRACT_VERSION,status:'insufficient_content',requiredImages:3,eligibleImages:2})
@@ -582,7 +630,7 @@ it('keeps single-story and three-story jobs for the same prompt separate',async(
   const {sqlite,db}=preparationDb()
   try{
     vi.mocked(editorialArticlePool).mockResolvedValue(prepared(5,[]))
-    const send=singleProvider();vi.stubGlobal('fetch',send)
+    const send=provider();vi.stubGlobal('fetch',send)
     const config={EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db}
     const interests='A same-prompt study in one and three stories'
     const three=await post(config,{interests})
@@ -628,8 +676,8 @@ it('schedules hotspot processing only after validated editions lock images',asyn
   expect(tasks).toHaveLength(1)
   await expect(tasks[0]).resolves.toBeUndefined()
   mockPool()
-  const bad=edition(3,2)
-  bad.articles[0].images[0].catalogId='wrong'
+  const bad=toDraft(edition(3,2))
+  bad.articles[0].images[0].ref='Z'
   vi.stubGlobal('fetch',vi.fn(async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(bad)}}]})))
   const failed=await articleEditorialResponse(new Request(origin,{method:'POST',headers:{Origin:origin,'CF-Connecting-IP':'192.0.2.9'}}),environment(),{...preferences,interests:'An identity-breaking study in quiet interiors'},'lite',undefined,3,undefined,task=>{tasks.push(task)})
   expect(await failed.json()).toMatchObject({fallbackReason:'provider_or_validation'})
