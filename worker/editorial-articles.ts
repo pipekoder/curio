@@ -24,7 +24,7 @@ type Measurement={inputTokens:number;outputTokens:number;totalTokens:number}
 const cache=new Map<string,{expires:number;edition:ArticleEditionBody;generation:ReturnType<typeof generationMetadata>;evidence:{interpretations:number}|null}>()
 export type ArticleGenerationStage='evidence'|'chief_editor'|'reviewer'|'revision'|'confirmation'
 type ArticleStage='reservation'|'chief_editor'|'reviewer'|'revision'|'confirmation'
-type ArticleFailureCode='budget_unavailable'|'workflow_limit'|'context_limit'|'provider_http'|'provider_transport'|'provider_timeout'|'provider_response'|'response_json'|'response_schema'|'structural_validation'|'image_identity'|'brand_reference'|'visual_context'|'duplicate_image'|'invalid_source'|'cultural_claim'|'source_limit'|'review_validation'
+type ArticleFailureCode='budget_unavailable'|'workflow_limit'|'context_limit'|'provider_http'|'provider_transport'|'provider_timeout'|'provider_response'|'response_json'|'response_schema'|'structural_validation'|'image_identity'|'image_identity_schema'|'brand_reference'|'visual_context'|'duplicate_image'|'invalid_source'|'cultural_claim'|'source_limit'|'review_validation'
 class ArticleWorkflowError extends Error{
   constructor(readonly stage:ArticleStage,readonly code:ArticleFailureCode){super(`${stage}:${code}`)}
 }
@@ -43,7 +43,7 @@ function articleSchemaCode(error:z.ZodError,content:unknown):ArticleFailureCode{
   if(path.toLowerCase().includes('sourceids')&&issue?.code==='too_big')return'source_limit'
   if(path.includes('culturalClaims'))return'cultural_claim'
   if(path.includes('brandSourceId')||path.includes('brandName'))return'brand_reference'
-  if(path.includes('images')||path.includes('heroAssetId')||path.endsWith('.id')||issue?.message.includes('hero and image identity'))return'image_identity'
+  if(path.includes('images')||path.includes('heroAssetId')||path.endsWith('.id')||issue?.message.includes('hero and image identity'))return'image_identity_schema'
   return'response_schema'
 }
 function workflowFailure(stage:ArticleStage,error:unknown):ArticleWorkflowError{
