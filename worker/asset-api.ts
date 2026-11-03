@@ -29,12 +29,12 @@ const body = async (request: Request) => {
 assetApi.onError((error,c) => {
   if (error instanceof z.ZodError || error instanceof SyntaxError) return c.json({ error: 'Invalid asset intelligence input.' },400)
   if (error instanceof RangeError) return c.json({ error: error.message === 'Discovery run exceeds 256,000 bytes.' ? error.message : 'Body exceeds 64 KiB.' },413)
-  if (error instanceof AssetAnalysisError) return c.json({ status: error.code, ...(error.inference ? { inference: error.inference } : {}) },error.status)
+  if (error instanceof AssetAnalysisError) return c.json({ status: error.code, ...(error.inference ? { inference: error.inference } : {}),...(error.budget?{budget:error.budget}:{}) },error.status)
   if (error instanceof CatalogConflict) return c.json({ error: error.message },409)
   return c.json({ error: 'Asset intelligence operation unavailable. Check local schema/configuration.' },503)
 })
 assetApi.get('/stages', async c => c.json(await new AssetStore(c.env.CATALOG_DB!).stages()))
-assetApi.get('/budget/status',async c=>c.json(await inferenceBudgetStatus(c.env)))
+assetApi.get('/budget/status',async c=>c.json(await inferenceBudgetStatus(c.env,c.req.raw)))
 assetApi.get('/articles/readiness',async c=>{
   const prompt=c.req.query('prompt')??''
   let preferences

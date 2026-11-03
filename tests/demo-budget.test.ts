@@ -4,6 +4,8 @@ import {afterEach,expect,it,vi} from 'vitest'
 import {InferenceBudget} from '../worker/budget'
 import {demoIdentity,issueDemoSession} from '../worker/demo-access'
 import app from '../worker/index'
+import {publicBudgetDenial} from '../shared/budget-diagnostic'
+import {resolveRatePolicy} from '../worker/budget-policy'
 
 function budget(){
   const db=new DatabaseSync(':memory:')
@@ -54,7 +56,7 @@ it('limits concurrent tester leases to two, releases them, and retains charges a
     expect(await (await reserve(value,ip(3),tester)).json()).toMatchObject({allowed:true})
     const status=await (await value.fetch(new Request('https://budget/status?ceiling=500&daily=160&demo=true'))).json() as {lifetime:{used:number};recent:{outcome:string}[]}
     expect(status.lifetime.used).toBe(12)
-    expect(status.recent.map(row=>row.outcome)).toContain('concurrency_denied')
+    expect(status.recent.map(row=>row.outcome)).toContain('denied:demo_tester_concurrency')
   }finally{db.close()}
 })
 
@@ -138,15 +140,135 @@ it('exposes only bounded aggregate status behind existing operator authenticatio
   try{
     const token='operator-test-token-at-least-32-bytes'
     const namespace={idFromName:()=>({}),get:()=>({fetch:(request:Request|string)=>value.fetch(typeof request==='string'?new Request(request):request)})} as unknown as DurableObjectNamespace
-    const env={CATALOG_DB:{} as D1Database,CATALOG_OPERATOR_ENABLED:'true',CATALOG_OPERATOR_TOKEN:token,PUBLIC_APP_ORIGIN:'https://curio.test',INFERENCE_BUDGET:namespace,MAGAZINE_MAX_CALLS:'20'}
+    const env={CATALOG_DB:{} as D1Database,CATALOG_OPERATOR_ENABLED:'true',CATALOG_OPERATOR_TOKEN:token,PUBLIC_APP_ORIGIN:'https://curio.test',INFERENCE_BUDGET:namespace,MAGAZINE_MAX_CALLS:'20',RATE_LIMIT_SALT:'test-only-32-byte-or-longer-rate-limit-secret'}
     const headers={Origin:'https://curio.test','CF-Connecting-IP':'192.0.2.1'}
     const path='https://curio.test/api/operator/catalog/intelligence/budget/status'
     expect((await app.request(path,{headers:{...headers,Authorization:'Bearer incorrect'}},env)).status).toBe(403)
     const response=await app.request(path,{headers:{...headers,Authorization:`Bearer ${token}`}},env)
     expect(response.status).toBe(200)
-    expect(await response.json()).toMatchObject({mode:'standard',lifetime:{total:20,used:0,remaining:20},day:{total:20,used:0,remaining:20},recent:[]})
+    const status=await response.json() as Record<string,unknown>
+    expect(status).toMatchObject({mode:'standard',lifetime:{total:20,used:0,remaining:20},day:{total:20,used:0,remaining:20},perIp:{hourly:{reviewedLimit:4,used:0}},effectiveWorkerConfig:{rates:{reviewedHourlyUnits:4}},recentDenials:{},recent:[]})
+    expect(JSON.stringify(status)).not.toContain('192.0.2.1')
     const disabled=await app.request(path,{headers:{...headers,Authorization:`Bearer ${token}`}},{...env,EDITORIAL_DEMO_BUDGET_ENABLED:'true',EDITORIAL_DEMO_DAILY_UNITS:'160',EDITORIAL_DEMO_LIFETIME_UNITS:'500',MAGAZINE_AI_ENABLED:'false'})
     expect(disabled.status).toBe(200)
     expect(await disabled.json()).toMatchObject({mode:'demo',demoActive:false,inferenceEnabled:false,lifetime:{total:500,used:0}})
+  }finally{db.close()}
+})
+
+it('status treats expired cooldown and preparation windows as reset without clearing lifetime usage',async()=>{
+  vi.useFakeTimers();vi.setSystemTime(new Date('2026-11-01T08:00:00Z'))
+  const {db,value}=budget()
+  try{
+    const now=Date.now(),address=ip(1)
+    const insert=db.prepare('INSERT INTO counters(key,count,expires) VALUES(?,?,?)')
+    insert.run('lifetime',7,0)
+    insert.run(`day:${Math.floor(now/86400000)}`,5,(Math.floor(now/86400000)+1)*86400000)
+    insert.run(`cooldown:${address}`,1,now+60000)
+    insert.run(`article-prep-cooldown:${address}`,2,now+16000)
+    const input={ceiling:100,daily:100,demo:false,ip:address,articlePreparationPolicy:{maxPerHour:16,maxPerDay:24,windowLimit:2,windowSeconds:16,concurrency:2}}
+    const status=async()=>await (await value.fetch(new Request('https://budget/status',{method:'POST',body:JSON.stringify(input)}))).json() as {lifetime:{used:number;remaining:number};day:{used:number};perIp:{cooldown:{used:number;remaining:number;resetAt:string|null};articlePreparation:{window:{used:number;remaining:number;resetAt:string|null}}}}
+    expect(await status()).toMatchObject({lifetime:{used:7,remaining:93},day:{used:5},perIp:{cooldown:{used:1,remaining:0},articlePreparation:{window:{used:2,remaining:0}}}})
+    vi.advanceTimersByTime(16000)
+    expect(await status()).toMatchObject({lifetime:{used:7,remaining:93},day:{used:5},perIp:{cooldown:{used:1},articlePreparation:{window:{used:0,remaining:2,resetAt:null}}}})
+    vi.advanceTimersByTime(44000)
+    expect(await status()).toMatchObject({lifetime:{used:7,remaining:93},day:{used:5},perIp:{cooldown:{used:0,remaining:1,resetAt:null},articlePreparation:{window:{used:0,remaining:2}}}})
+  }finally{db.close()}
+})
+
+it('returns exact safe diagnostics for lifetime, day, hourly and cooldown denials',async()=>{
+  vi.useFakeTimers();vi.setSystemTime(new Date('2026-11-01T08:00:00Z'))
+  const cases=[
+    {key:'lifetime',count:500,expires:0,type:'global_lifetime',limit:500},
+    {key:`day:${Math.floor(Date.now()/86400000)}`,count:160,expires:Date.now()+86400000,type:'global_daily',limit:160},
+    {key:`hour:${ip(1)}:${Math.floor(Date.now()/3600000)}`,count:40,expires:Date.now()+3600000,type:'per_ip_hourly',limit:40},
+    {key:`cooldown:${ip(1)}`,count:2,expires:Date.now()+60000,type:'per_ip_cooldown',limit:2},
+  ]
+  for(const entry of cases){
+    const {db,value}=budget()
+    try{
+      db.prepare('INSERT INTO counters(key,count,expires) VALUES(?,?,?)').run(entry.key,entry.count,entry.expires)
+      const result=await (await reserve(value,ip(1),tester)).json() as {allowed:boolean;denial:Record<string,unknown>}
+      expect(result.allowed).toBe(false)
+      expect(result.denial).toMatchObject({limitType:entry.type,limit:entry.limit,used:entry.count,remaining:0,requestedUnits:4})
+      expect(JSON.stringify(result)).not.toContain(ip(1))
+      const publicValue=publicBudgetDenial(result.denial as never)
+      if(entry.type.startsWith('global_')){expect(publicValue).not.toHaveProperty('used');expect(publicValue).not.toHaveProperty('limit')}
+      else expect(publicValue).toHaveProperty('used',entry.count)
+      if(entry.expires)expect(result.denial).toHaveProperty('resetAt')
+      else expect(result.denial).not.toHaveProperty('resetAt')
+    }finally{db.close()}
+  }
+})
+
+it('identifies tester hourly, daily and concurrent denials independently',async()=>{
+  vi.useFakeTimers();vi.setSystemTime(new Date('2026-11-01T08:00:00Z'))
+  for(const entry of [
+    {key:`tester-hour:${tester}:${Math.floor(Date.now()/3600000)}`,count:40,type:'demo_tester_hourly'},
+    {key:`tester-day:${tester}:${Math.floor(Date.now()/86400000)}`,count:120,type:'demo_tester_daily'},
+  ]){
+    const {db,value}=budget()
+    try{
+      db.prepare('INSERT INTO counters(key,count,expires) VALUES(?,?,?)').run(entry.key,entry.count,Date.now()+3600000)
+      const result=await (await reserve(value,ip(1),tester)).json() as {denial:{limitType:string}}
+      expect(result.denial.limitType).toBe(entry.type)
+    }finally{db.close()}
+  }
+  const {db,value}=budget()
+  try{
+    const first=await (await reserve(value,ip(1),tester)).json() as {reservationId:string}
+    await reserve(value,ip(2),tester)
+    const denied=await (await reserve(value,ip(3),tester)).json() as {denial:Record<string,unknown>}
+    expect(denied.denial).toMatchObject({limitType:'demo_tester_concurrency',limit:2,used:2,remaining:0})
+    await value.fetch(new Request('https://budget/finish',{method:'POST',body:JSON.stringify({id:first.reservationId,outcome:'completed'})}))
+  }finally{db.close()}
+})
+
+it('distinguishes article preparation and SAM limits without changing their counters',async()=>{
+  vi.useFakeTimers();vi.setSystemTime(new Date('2026-11-01T08:00:00Z'))
+  const prep={maxPerHour:16,maxPerDay:24,windowLimit:2,windowSeconds:16,concurrency:2}
+  const cases=[
+    {key:`article-prep-hour:${ip(1)}:${Math.floor(Date.now()/3600000)}`,count:16,type:'article_preparation_hourly'},
+    {key:`article-prep-day:${ip(1)}:${Math.floor(Date.now()/86400000)}`,count:24,type:'article_preparation_daily'},
+    {key:`article-prep-cooldown:${ip(1)}`,count:2,type:'article_preparation_window'},
+  ]
+  for(const entry of cases){
+    const {db,value}=budget()
+    try{
+      db.prepare('INSERT INTO counters(key,count,expires) VALUES(?,?,?)').run(entry.key,entry.count,Date.now()+3600000)
+      const response=await value.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:ip(1),ceiling:100,daily:100,units:1,articlePreparation:true,articlePreparationPolicy:prep})}))
+      expect((await response.json() as {denial:{limitType:string}}).denial.limitType).toBe(entry.type)
+    }finally{db.close()}
+  }
+  const {db,value}=budget()
+  try{
+    db.prepare('INSERT INTO counters(key,count,expires) VALUES(?,?,?)').run('sam-once:asset-one',1,0)
+    const response=await value.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:ip(1),ceiling:100,daily:100,samAssetId:'asset-one'})}))
+    expect((await response.json() as {denial:{limitType:string}}).denial.limitType).toBe('sam_once_per_asset')
+  }finally{db.close()}
+})
+
+it('accepts bounded rate configuration while rejecting unsafe values',()=>{
+  expect(resolveRatePolicy({} as never)).toMatchObject({reviewedHourlyUnits:4,testerHourlyUnits:40,cooldownSeconds:60})
+  expect(resolveRatePolicy({INFERENCE_REVIEWED_HOURLY_UNITS:'8',INFERENCE_TESTER_HOURLY_UNITS:'48',INFERENCE_TESTER_DAILY_UNITS:'120'} as never)).toMatchObject({reviewedHourlyUnits:8,testerHourlyUnits:48})
+  for(const env of [{INFERENCE_REVIEWED_HOURLY_UNITS:'0'},{INFERENCE_REVIEWED_HOURLY_UNITS:'9'},{INFERENCE_TESTER_DAILY_UNITS:'10',INFERENCE_TESTER_HOURLY_UNITS:'40'},{INFERENCE_COOLDOWN_SECONDS:'30'},{INFERENCE_TESTER_CONCURRENT:'3'}])expect(()=>resolveRatePolicy(env as never)).toThrow()
+})
+
+it('enforces a configured reviewed per-IP cap without changing the shared budget or demo tester defaults',async()=>{
+  vi.useFakeTimers();vi.setSystemTime(new Date('2026-11-01T08:00:00Z'))
+  const {db,value}=budget()
+  try{
+    const rates={...resolveRatePolicy({} as never),reviewedHourlyUnits:8}
+    const send=()=>value.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:ip(1),ceiling:100,daily:100,units:4,rates})}))
+    expect(await (await send()).json()).toMatchObject({allowed:true})
+    vi.advanceTimersByTime(61000)
+    expect(await (await send()).json()).toMatchObject({allowed:true})
+    vi.advanceTimersByTime(61000)
+    expect(await (await send()).json()).toMatchObject({allowed:false,denial:{limitType:'per_ip_hourly',limit:8,used:8,remaining:0,requestedUnits:4}})
+    const status=await (await value.fetch(new Request('https://budget/status',{method:'POST',body:JSON.stringify({ceiling:100,daily:100,demo:false,rates,ip:ip(1)})}))).json() as {lifetime:{used:number};perIp:{hourly:{remainingForReviewed:number}};recentDenials:Record<string,number>}
+    expect(status.lifetime.used).toBe(8)
+    expect(status.perIp.hourly.remainingForReviewed).toBe(0)
+    expect(status.recentDenials.per_ip_hourly).toBe(1)
+    const invalid=await value.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:ip(2),ceiling:100,daily:100,units:4,rates:{...rates,reviewedHourlyUnits:100}})}))
+    expect(invalid.status).toBe(400)
   }finally{db.close()}
 })
