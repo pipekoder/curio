@@ -148,6 +148,22 @@ it('does not retry failed analysis, and keeps budget refusal explicit',async()=>
   expect(runClassification).toHaveBeenCalledOnce()
  }finally{sqlite.close()}
 })
+it('uses the runtime preparation concurrency limit without exceeding the 15-image threshold',async()=>{
+ const {sqlite,db}=preparationDb()
+ try{
+  vi.mocked(editorialArticlePool).mockResolvedValue(prepared(11,[version(12),version(13),version(14),version(15),version(16)]))
+  vi.mocked(runClassification).mockResolvedValue({origin:'meta',cached:false} as never)
+  const config={EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db,ARTICLE_PREP_MAX_PER_HOUR:'24',ARTICLE_PREP_MAX_PER_DAY:'48',ARTICLE_PREP_WINDOW_LIMIT:'4',ARTICLE_PREP_WINDOW_SECONDS:'16',ARTICLE_PREP_CONCURRENCY:'4'}
+  const response=await post(config,{interests:'Four concurrent room studies'})
+  expect(response.status).toBe(202)
+  expect(await response.json()).toMatchObject({status:'preparing',preparation:{retryAfterMs:16000}})
+  expect(runClassification).toHaveBeenCalledTimes(4)
+  const invalid=await post({...config,ARTICLE_PREP_CONCURRENCY:'5'},{interests:'Invalid preparation policy'})
+  expect(invalid.status).toBe(503)
+  expect(await invalid.json()).toMatchObject({fallbackReason:'configuration'})
+  expect(runClassification).toHaveBeenCalledTimes(4)
+ }finally{sqlite.close()}
+})
 it('stores distinct source-linked perspectives for different curiosity prompts and reuses identical evidence',async()=>{
  const {sqlite,db}=preparationDb()
  try{

@@ -48,8 +48,12 @@ it('includes authorized, metadata-ready R2 images before analysis and reuses exa
  expect(after.eligibleCount).toBe(1)
  expect(after.items[0].image.id).toBe(first.versionId)
  expect(after.preparation?.pendingVersionIds).toContain(second.versionId)
+ const release=vi.fn(async()=>Response.json({released:true}))
+ await runClassification({versionId:second.versionId,mode:'meta',retryFailed:false,consent:true},{CATALOG_DB:db,MEDIA_BUCKET:bucket,EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',META_SPARK_MODEL:'muse-spark-1.3',META_API_KEY:'test-key',INFERENCE_BUDGET:{idFromName:()=>({}),get:()=>({fetch:release})}} as never,'192.0.2.8',{articlePreparation:true,reserve:vi.fn().mockResolvedValue({allowed:true,reservationId:'00000000-0000-4000-8000-000000000001'}),classify:vi.fn(async()=>({...mockUnderstanding(second.versionId),imageSha256:second.sha256,observations:{subjects:['seating' as const],materialAppearance:[],environments:['interior-like' as const],relationships:[]}}))})
+ expect(release).toHaveBeenCalledWith('https://budget/finish',expect.objectContaining({method:'POST'}))
+ expect((await editorialArticlePool(env,p)).eligibleCount).toBe(2)
  await store.remove(first.versionId)
- expect((await editorialArticlePool(env,p)).items).toHaveLength(0)
+ expect((await editorialArticlePool(env,p)).items.map(item=>item.image.id)).toEqual([second.versionId])
 })
 
 it('persists exact R2 bytes, relationships and a permission-gated Reader publication without inference',async()=>{

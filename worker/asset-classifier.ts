@@ -4,7 +4,7 @@ import { understanding, classificationRequest, type Understanding } from './asse
 import { AssetStore } from './asset-store'
 import { analysisMediaPermits, type AnalysisMediaPermit } from './asset-sources'
 import { catalogDigest, CatalogConflict } from './catalog-store'
-import { reserveInference } from './inference-budget'
+import { reserveInference,finishInference } from './inference-budget'
 import { boundedText } from './meta'
 import type { Bindings } from './index'
 
@@ -112,7 +112,7 @@ export async function runClassification(input: unknown, env: Bindings, ip: strin
     WHERE ?=1 AND (asset_analysis_jobs.state='failed' OR asset_analysis_jobs.state='processing' AND asset_analysis_jobs.lease_until<?) RETURNING claim_token`)
     .bind(cacheKey,row.id,fingerprint,'muse-spark-1.3',ANALYSIS_SPEC,r.mode,row.analysis_revision,claim,now+120000,new Date().toISOString(),r.retryFailed?1:0,now).first()
   if (claimed?.claim_token !== claim) throw new AssetAnalysisError('analysis_in_progress_or_retry_requires_consent',409)
-  let inference = noInference(), inferenceStarted = 0
+  let inference = noInference(), inferenceStarted = 0, prepLeaseId:string|undefined, prepOutcome:'completed'|'error'='error'
   const controller = new AbortController(), timer = setTimeout(()=>controller.abort(),15000)
   try {
     let result: Understanding
@@ -127,6 +127,7 @@ export async function runClassification(input: unknown, env: Bindings, ip: strin
       controller.signal.throwIfAborted()
       const budget = await deps.reserve(env,ip,1,undefined,false,null,deps.articlePreparation)
       if (!budget.allowed) throw new AssetAnalysisError('inference_limit_reached',429)
+      if(deps.articlePreparation){if(!budget.reservationId)throw new AssetAnalysisError('preparation_lease_unavailable',503);prepLeaseId=budget.reservationId}
       inference.reservedUnits = 1
       controller.signal.throwIfAborted()
       inference = { ...inference, attempted: true, reservedUnits: 1 }; inferenceStarted = performance.now()
@@ -147,6 +148,7 @@ export async function runClassification(input: unknown, env: Bindings, ip: strin
     ])
     if (saved[0].meta.changes !== 1) throw new AssetAnalysisError('permission_changed',403)
     if (inference.attempted && inference.latencyMs === null) inference.latencyMs = Math.round(performance.now()-inferenceStarted)
+    prepOutcome='completed'
     return { origin: r.mode, cached: false, result, inference }
   } catch (error) {
     const code = controller.signal.aborted ? 'analysis_timeout' : error instanceof AssetAnalysisError ? error.code : 'analysis_failed'
@@ -157,5 +159,8 @@ export async function runClassification(input: unknown, env: Bindings, ip: strin
     const failure = error instanceof AssetAnalysisError ? error : new AssetAnalysisError(code, controller.signal.aborted ? 504 : 502)
     failure.inference = inference
     throw failure
-  } finally { clearTimeout(timer) }
+  } finally {
+    clearTimeout(timer)
+    if(prepLeaseId)await finishInference(env,prepLeaseId,prepOutcome).catch(()=>{})
+  }
 }
