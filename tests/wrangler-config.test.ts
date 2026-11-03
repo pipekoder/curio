@@ -23,6 +23,10 @@ it('pins the article preparation limits',()=>{
   expect(config.vars).toMatchObject({ARTICLE_PREP_MAX_PER_HOUR:'24',ARTICLE_PREP_MAX_PER_DAY:'48',ARTICLE_PREP_WINDOW_LIMIT:'4',ARTICLE_PREP_WINDOW_SECONDS:'16',ARTICLE_PREP_CONCURRENCY:'4'})
 })
 
+it('pins the Demo Testing window, Demo budget caps, and Article Chief timeout',()=>{
+  expect(config.vars).toMatchObject({DEMO_TESTING_MODE:'true',DEMO_TESTING_WINDOW_SECONDS:'900',DEMO_TESTING_WINDOW_UNITS:'12',EDITORIAL_DEMO_BUDGET_ENABLED:'true',EDITORIAL_DEMO_DAILY_UNITS:'160',EDITORIAL_DEMO_LIFETIME_UNITS:'500',ARTICLE_CHIEF_TIMEOUT_MS:'60000'})
+})
+
 it('preserves budgets, models, and bindings',()=>{
   expect(config.vars).toMatchObject({INFERENCE_DAILY_MAX_UNITS:'100',MAGAZINE_MAX_CALLS:'100',META_WONDER_MODEL:'muse-wonder-1.0',META_SPARK_MODEL:'muse-spark-1.3',CATALOG_OPERATOR_ENABLED:'true',CATALOG_PUBLIC_ENABLED:'true'})
   expect(config.d1_databases).toEqual([{binding:'CATALOG_DB',database_name:'curio-catalog',database_id:'b39c4f63-74ee-47f6-bb1d-7388ecc88bc7',migrations_dir:'migrations'}])
