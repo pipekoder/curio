@@ -12,6 +12,7 @@ export class InferenceBudget {
     state.storage.sql.exec('CREATE TABLE IF NOT EXISTS demo_leases (id TEXT PRIMARY KEY, tester TEXT NOT NULL, expires INTEGER NOT NULL)')
     state.storage.sql.exec('CREATE TABLE IF NOT EXISTS article_prep_leases (id TEXT PRIMARY KEY, expires INTEGER NOT NULL)')
     state.storage.sql.exec('CREATE TABLE IF NOT EXISTS reservation_events (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, units INTEGER NOT NULL, outcome TEXT NOT NULL, policy TEXT NOT NULL)')
+    state.storage.sql.exec('CREATE TABLE IF NOT EXISTS demo_reset_events (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, action TEXT NOT NULL, scope TEXT NOT NULL, ip_digest TEXT NOT NULL, tester_digest TEXT)')
   }
   async fetch(request:Request):Promise<Response>{
     const url=new URL(request.url),now=Date.now(),minute=60000,hour=3600000,day=86400000
@@ -42,6 +43,20 @@ export class InferenceBudget {
       return Response.json({mode:parsed.data.demo?'demo':'standard',lifetime:{total:ceiling,used:lifetimeUsed,remaining:Math.max(0,ceiling-lifetimeUsed),resetAt:null},day:{total:daily,used:dayUsed,remaining:Math.max(0,daily-dayUsed),resetAt:new Date((Math.floor(now/day)+1)*day).toISOString()},hourResetAt:new Date((Math.floor(now/hour)+1)*hour).toISOString(),testerLimits:parsed.data.demo?{hour:rates.testerHourlyUnits,day:rates.testerDailyUnits,maxConcurrent:rates.testerConcurrent}:null,perIp,tester,...(testing?{demoTestingWindow:{seconds:testing.windowSeconds,limit:testing.windowUnits,used:windowUsed,remaining:Math.max(0,testing.windowUnits-windowUsed),resetAt:new Date(windowReset).toISOString(),canReserveFourUnits:!blocker,blockingLimitType:blocker}}:{}),effectiveRates:rates,recentDenials,recent:recent.map(row=>({...row,at:new Date(row.at).toISOString()}))})
     }
     if(request.method!=='POST')return new Response(null,{status:405})
+    if(url.pathname==='/reset-demo'){
+      const parsed=z.strictObject({ip:z.string().regex(/^[a-f0-9]{64}$/),demoTester:z.string().regex(/^[a-f0-9]{64}$/).optional(),windowSeconds:z.number().int().min(300).max(3600),articlePreparation:z.boolean()}).safeParse(await request.json())
+      if(!parsed.success)return Response.json({error:'Invalid reset scope.'},{status:400})
+      const {ip,demoTester,windowSeconds,articlePreparation}=parsed.data
+      const keys=[`hour:${ip}:${Math.floor(now/hour)}`,`cooldown:${ip}`]
+      if(demoTester)keys.push(`tester-hour:${demoTester}:${Math.floor(now/hour)}`,`demo-testing:${demoTester}:${windowSeconds}:${Math.floor(now/(windowSeconds*1000))}`)
+      if(articlePreparation)keys.push(`article-prep-hour:${ip}:${Math.floor(now/hour)}`,`article-prep-cooldown:${ip}`)
+      const scope=demoTester?(articlePreparation?'operator_ip,tester,article_preparation':'operator_ip,tester'):(articlePreparation?'operator_ip,article_preparation':'operator_ip')
+      this.state.storage.transactionSync(()=>{
+        for(const key of keys)this.state.storage.sql.exec('DELETE FROM counters WHERE key = ?',key)
+        this.state.storage.sql.exec('INSERT INTO demo_reset_events(at,action,scope,ip_digest,tester_digest) VALUES(?,?,?,?,?)',now,'reset_demo_usage',scope,ip,demoTester??null)
+      })
+      return Response.json({resetApplied:true,operatorIpReset:true,testerWindowReset:Boolean(demoTester),articlePreparationReset:articlePreparation})
+    }
     if(url.pathname==='/finish'){
       const finished=z.strictObject({id:z.string().uuid(),outcome:z.enum(['completed','fallback','error'])}).safeParse(await request.json())
       if(!finished.success)return Response.json({error:'Invalid completion'},{status:400})

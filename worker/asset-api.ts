@@ -14,7 +14,7 @@ import { AssetAnalysisError, mediaReadiness, runClassification } from './asset-c
 import { versionId } from './asset-contracts'
 import type { Bindings } from './index'
 import {loadEditorialSources,parsePilotVersions} from './editorial-sources'
-import {inferenceBudgetStatus} from './inference-budget'
+import {inferenceBudgetStatus,resetDemoUsage} from './inference-budget'
 import {resolveEditorialInput,PromptIntentError} from '../shared/editorial-intent'
 import {editorialArticlePool,reportArticlePoolFailure} from './editorial-article-pool'
 import {ARTICLE_MIN_ELIGIBLE_IMAGES} from '../shared/editorial-articles'
@@ -35,6 +35,10 @@ assetApi.onError((error,c) => {
 })
 assetApi.get('/stages', async c => c.json(await new AssetStore(c.env.CATALOG_DB!).stages()))
 assetApi.get('/budget/status',async c=>c.json(await inferenceBudgetStatus(c.env,c.req.raw)))
+assetApi.post('/budget/reset-demo',async c=>{
+  if(c.env.DEMO_TESTING_MODE!=='true')return c.json({error:'Demo Testing Mode is inactive.'},403)
+  try{return c.json(await resetDemoUsage(c.env,c.req.raw))}catch{return c.json({error:'Demo usage reset unavailable.'},503)}
+})
 assetApi.get('/articles/readiness',async c=>{
   const prompt=c.req.query('prompt')??''
   let preferences
