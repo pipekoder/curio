@@ -33,7 +33,7 @@ export const retrievalRequest = z.strictObject({
   editorialTerms:z.array(z.string().regex(/^[a-z]{4,24}$/)).max(12).default([]),
   brandDiversity: z.boolean().default(true), serendipity: z.number().min(0).max(0.25).default(0), seed: z.string().max(40).default('curio'),
   publishedOnly:z.boolean().default(false),
-  scope: z.enum(['reader','review']).default('reader'), includeMock: z.boolean().default(false), limit: z.number().int().min(1).max(96).default(20),
+  scope: z.enum(['reader','review']).default('reader'), includeMock: z.boolean().default(false), includeUnscored: z.boolean().default(false), limit: z.number().int().min(1).max(96).default(20),
   categoryFilter: z.enum(categories).optional(), aestheticFilter: z.enum(lifestyles).optional(),
 }).refine(v => Math.abs(Object.values(v.allocations).reduce((a,b) => a+b,0)-100) < 0.001, 'Allocations must total 100.')
 export type RetrievalRequest = z.infer<typeof retrievalRequest>

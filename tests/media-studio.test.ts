@@ -14,6 +14,8 @@ import {loadEditorialSources} from '../worker/editorial-sources'
 import {catalogItem} from '../shared/catalog'
 import {editorialPlan} from '../shared/editorial'
 import {editorialSources} from '../shared/editorial-sources'
+import {editorialArticlePool} from '../worker/editorial-article-pool'
+import {resolveEditorialInput} from '../shared/editorial-intent'
 
 vi.setConfig({testTimeout:20000,hookTimeout:20000})
 let mf:Miniflare,db:D1Database,bucket:R2Bucket,store:MediaStore
@@ -25,6 +27,30 @@ beforeEach(async()=>{
  store=new MediaStore(db,bucket,origin)
 })
 afterEach(async()=>mf?.dispose())
+
+it('includes authorized, metadata-ready R2 images before analysis and reuses exact-version observations afterward',async()=>{
+ const first=await store.upload(new File([readFileSync('public/editorial/discover/02_ceramic_vase.png')],'first-room.png',{type:'image/png'}))
+ const second=await store.upload(new File([readFileSync('public/editorial/discover/01_boucle_lounge_chair.png')],'second-room.png',{type:'image/png'}))
+ await store.import({sourceText:'Owner-provided fictional studies',brands:[{name:'Northline Studio',story:'Fictional owner-created room studies.'}],products:[{brand:'Northline Studio',name:'Room Study',description:'An owner-created composition of seating and everyday objects.',category:'home',materials:[],imageFilenames:['first-room.png','second-room.png'],lifestyleTags:['Scandinavian']}],campaigns:[]})
+ // A published, metadata-complete image with no ranking hints still enters
+ // bounded preparation; missing visual analysis must not hide it upstream.
+ await db.prepare("UPDATE publisher_metadata SET hints_json='{}' WHERE version_id=?").bind(second.versionId).run()
+ const env={CATALOG_DB:db,MEDIA_BUCKET:bucket,CATALOG_PUBLIC_ENABLED:'true'} as never
+ const p=resolveEditorialInput({prompt:'Explore Scandinavian rooms and seating',consent:true})
+ const before=await editorialArticlePool(env,p)
+ expect(before.eligibleCount).toBe(0)
+ expect(before.preparation?.pendingVersionIds).toEqual(expect.arrayContaining([first.versionId,second.versionId]))
+ await expect(runClassification({versionId:second.versionId,mode:'meta',retryFailed:false,consent:true},{CATALOG_DB:db,MEDIA_BUCKET:bucket,EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',META_SPARK_MODEL:'muse-spark-1.3',META_API_KEY:'test-key'} as never,'192.0.2.8',{articlePreparation:true,reserve:vi.fn().mockResolvedValue({allowed:false,retryAfter:60})})).rejects.toMatchObject({code:'inference_limit_reached'})
+ expect((await db.prepare('SELECT cache_key FROM asset_analysis_jobs WHERE version_id=?').bind(second.versionId).all()).results).toHaveLength(0)
+ const classified=await runClassification({versionId:first.versionId,mode:'meta',retryFailed:false,consent:true},{CATALOG_DB:db,MEDIA_BUCKET:bucket,ASSET_AI_ENABLED:'true',META_SPARK_MODEL:'muse-spark-1.3',META_API_KEY:'test-key'} as never,'192.0.2.8',{reserve:vi.fn().mockResolvedValue({allowed:true,retryAfter:0}),classify:vi.fn(async()=>({...mockUnderstanding(first.versionId),imageSha256:first.sha256,observations:{subjects:['seating' as const],materialAppearance:[],environments:['interior-like' as const],relationships:[]}}))})
+ expect(classified.origin).toBe('meta')
+ const after=await editorialArticlePool(env,p)
+ expect(after.eligibleCount).toBe(1)
+ expect(after.items[0].image.id).toBe(first.versionId)
+ expect(after.preparation?.pendingVersionIds).toContain(second.versionId)
+ await store.remove(first.versionId)
+ expect((await editorialArticlePool(env,p)).items).toHaveLength(0)
+})
 
 it('persists exact R2 bytes, relationships and a permission-gated Reader publication without inference',async()=>{
  const bytes=readFileSync('public/editorial/discover/02_ceramic_vase.png'),file=new File([bytes],'northline-fold-chair.png',{type:'image/png'}),batchId=await store.createBatch('owner mockup batch')

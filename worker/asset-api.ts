@@ -15,6 +15,8 @@ import { versionId } from './asset-contracts'
 import type { Bindings } from './index'
 import {loadEditorialSources,parsePilotVersions} from './editorial-sources'
 import {inferenceBudgetStatus} from './inference-budget'
+import {resolveEditorialInput,PromptIntentError} from '../shared/editorial-intent'
+import {editorialArticlePool} from './editorial-article-pool'
 
 // Mounted only behind the existing catalog operator authentication middleware.
 export const assetApi = new Hono<{ Bindings: Bindings }>()
@@ -32,6 +34,18 @@ assetApi.onError((error,c) => {
 })
 assetApi.get('/stages', async c => c.json(await new AssetStore(c.env.CATALOG_DB!).stages()))
 assetApi.get('/budget/status',async c=>c.json(await inferenceBudgetStatus(c.env)))
+assetApi.get('/articles/readiness',async c=>{
+  const prompt=c.req.query('prompt')??''
+  let preferences
+  try{preferences=resolveEditorialInput({prompt,consent:false})}catch(error){if(error instanceof z.ZodError||error instanceof PromptIntentError)return c.json({error:'Invalid editorial prompt.'},400);throw error}
+  const pool=await editorialArticlePool(c.env,preferences)
+  return c.json({version:'curio-article-readiness-v1',eligibleImages:pool.eligibleCount,requiredImages:15,
+    activeMediaAssets:pool.preparation?.activeMediaCount??0,publishedInPromptWindow:pool.preparation?.publishedInPromptWindow??0,
+    ready:pool.eligibleCount>=15,rankedImages:pool.preparation?.rankedCount??0,evaluatedImages:pool.preparation?.evaluatedCount??0,
+    pendingAnalysis:pool.preparation?.pendingVersionIds.length??0,processingAnalysis:pool.preparation?.processing??0,
+    failedAnalysis:pool.preparation?.failed??0,exclusions:pool.preparation?.exclusions??{},
+    preparationEnabled:c.env.EDITORIAL_ARTICLE_PREPARATION_ENABLED==='true'})
+})
 assetApi.get('/pilot/readiness',async c=>{
   const ids=parsePilotVersions(c.env.EDITORIAL_PILOT_VERSION_IDS)
   if(!ids)return c.json({configured:false,ready:false,reason:'exactly_six_version_ids_required',assets:[]})

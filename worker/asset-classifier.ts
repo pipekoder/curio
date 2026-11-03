@@ -92,14 +92,14 @@ export async function classifyWithMeta(id: string, sha: string, data: string, ke
     return schema.parse(JSON.parse(choices[0].message.content))
   } catch { throw new AssetAnalysisError('invalid_model_output',502) }
 }
-type Dependencies = { permits: typeof analysisMediaPermits; media: typeof readAnalysisImage; classify: typeof classifyWithMeta; reserve: typeof reserveInference }
+type Dependencies = { permits: typeof analysisMediaPermits; media: typeof readAnalysisImage; classify: typeof classifyWithMeta; reserve: typeof reserveInference; articlePreparation:boolean }
 export async function runClassification(input: unknown, env: Bindings, ip: string, overrides: Partial<Dependencies> = {}) {
-  const r = classificationRequest.parse(input), store = new AssetStore(env.CATALOG_DB!), deps: Dependencies = { permits: analysisMediaPermits, media: readAnalysisImage, classify: classifyWithMeta, reserve: reserveInference, ...overrides }
+  const r = classificationRequest.parse(input), store = new AssetStore(env.CATALOG_DB!), deps: Dependencies = { permits: analysisMediaPermits, media: readAnalysisImage, classify: classifyWithMeta, reserve: reserveInference, articlePreparation:false, ...overrides }
   const row = await store.version(r.versionId)
   if (!row || row.archived_at || row.latest_version !== row.id) throw new CatalogConflict('Unknown, archived or stale image version.')
   const r2Permit = env.MEDIA_BUCKET ? await (await import('./media-ai-adapter')).resolveR2MediaPermit(env.CATALOG_DB!,row.id) : null
   if (r.mode === 'meta') {
-    if (env.ASSET_AI_ENABLED !== 'true' || env.META_SPARK_MODEL !== 'muse-spark-1.3' || !env.META_API_KEY) throw new AssetAnalysisError('asset_ai_disabled_or_unconfigured',503)
+    if ((env.ASSET_AI_ENABLED !== 'true' && !(deps.articlePreparation && env.EDITORIAL_ARTICLE_PREPARATION_ENABLED === 'true')) || env.META_SPARK_MODEL !== 'muse-spark-1.3' || !env.META_API_KEY) throw new AssetAnalysisError('asset_ai_disabled_or_unconfigured',503)
     if (!r2Permit && !mediaReadiness(row,deps.permits).ready) throw new AssetAnalysisError('analysis_not_authorized',403)
   }
   const fingerprint = r.mode === 'meta' ? row.sha256 : null
@@ -125,13 +125,14 @@ export async function runClassification(input: unknown, env: Bindings, ip: strin
       const currentR2 = env.MEDIA_BUCKET && current ? await (await import('./media-ai-adapter')).resolveR2MediaPermit(env.CATALOG_DB!,current.id) : null
       if (!current || !(currentR2 || mediaReadiness(current,deps.permits).ready) || current.analysis_revision !== row.analysis_revision) throw new AssetAnalysisError('permission_changed',403)
       controller.signal.throwIfAborted()
-      const budget = await deps.reserve(env,ip,1)
+      const budget = await deps.reserve(env,ip,1,undefined,false,null,deps.articlePreparation)
       if (!budget.allowed) throw new AssetAnalysisError('inference_limit_reached',429)
       inference.reservedUnits = 1
       controller.signal.throwIfAborted()
       inference = { ...inference, attempted: true, reservedUnits: 1 }; inferenceStarted = performance.now()
       result = understanding.parse(await deps.classify(row.id,row.sha256!,data,env.META_API_KEY!,controller.signal, value => { inference = { ...inference, ...value } }))
       if (result.versionId !== row.id || result.imageSha256 !== row.sha256) throw new AssetAnalysisError('invalid_asset_binding',502)
+      if (deps.articlePreparation && !result.observations) throw new AssetAnalysisError('missing_article_observations',502)
     }
     controller.signal.throwIfAborted()
     const id = `vision-${cacheKey}`, stamp = new Date().toISOString()
@@ -149,7 +150,9 @@ export async function runClassification(input: unknown, env: Bindings, ip: strin
     return { origin: r.mode, cached: false, result, inference }
   } catch (error) {
     const code = controller.signal.aborted ? 'analysis_timeout' : error instanceof AssetAnalysisError ? error.code : 'analysis_failed'
-    await store.db.prepare(`UPDATE asset_analysis_jobs SET state='failed',error_code=?,updated_at=? WHERE cache_key=? AND claim_token=? AND state='processing'`).bind(code,new Date().toISOString(),cacheKey,claim).run()
+    if(deps.articlePreparation&&code==='inference_limit_reached'&&!inference.attempted)
+      await store.db.prepare(`DELETE FROM asset_analysis_jobs WHERE cache_key=? AND claim_token=? AND state='processing'`).bind(cacheKey,claim).run()
+    else await store.db.prepare(`UPDATE asset_analysis_jobs SET state='failed',error_code=?,updated_at=? WHERE cache_key=? AND claim_token=? AND state='processing'`).bind(code,new Date().toISOString(),cacheKey,claim).run()
     if (inference.attempted && inference.latencyMs === null) inference.latencyMs = Math.round(performance.now()-inferenceStarted)
     const failure = error instanceof AssetAnalysisError ? error : new AssetAnalysisError(code, controller.signal.aborted ? 504 : 502)
     failure.inference = inference
