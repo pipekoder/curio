@@ -335,7 +335,7 @@ test('hybrid mode propagates, shows while generating, and confirms on the chip',
   await expect(page.getByTestId('spatial-edition-chip')).toContainText('AI-curated edition · Meta AI · Hybrid')
 })
 
-test('article opt-in stages five docks and renders deck plus brand captions',async({page})=>{
+test('article opt-in stages three docks and renders deck plus brand captions',async({page})=>{
   let body:unknown=null
   await page.route('**/api/editorial',route=>{
     body=route.request().postDataJSON()
@@ -347,7 +347,7 @@ test('article opt-in stages five docks and renders deck plus brand captions',asy
   await page.getByLabel('Allow AI curation').check()
   await page.getByLabel(/Article edition/).check()
   await submitPrompt(page)
-  await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of 5',{timeout:15000})
+  await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of 3',{timeout:15000})
   expect((body as Record<string,unknown>).editionFormat).toBe('curio-editorial-articles-v1')
   await expect(page.getByTestId('spatial-edition-chip')).toContainText('AI-curated edition · Meta AI · Article edition')
   await expect(page.locator('#spatial-rail')).toContainText('A short introduction to demo article 1.')
@@ -369,7 +369,7 @@ test('insufficient article content discloses state and retries the standard edit
   await page.route('**/api/editorial',route=>{
     const payload=route.request().postDataJSON() as Record<string,unknown>
     bodies.push(payload)
-    if(payload.editionFormat)return route.fulfill({status:409,json:{status:'insufficient_content',eligibleImages:9,requiredImages:15,fallbackReason:'insufficient_content'}})
+    if(payload.editionFormat)return route.fulfill({status:409,json:{status:'insufficient_content',eligibleImages:5,requiredImages:6,fallbackReason:'insufficient_content'}})
     return route.fulfill({status:200,json:{plan:metaPlan,items:groundedItems,source:'meta',retrieval:'d1',cached:false}})
   })
   await page.setViewportSize({width:1440,height:900})
@@ -379,7 +379,7 @@ test('insufficient article content discloses state and retries the standard edit
   await submitPrompt(page)
   const alert=page.getByRole('alert')
   await expect(alert).toContainText('Not enough approved imagery')
-  await expect(alert).toContainText('9 of 15')
+  await expect(alert).toContainText('5 of 6')
   await expect(page.getByTestId('spatial-edition-chip')).toHaveCount(0)
   await page.getByRole('button',{name:'Continue with the standard edition'}).click()
   await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of 2',{timeout:15000})

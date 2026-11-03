@@ -3,6 +3,7 @@ import type {ArticlePool} from './editorial-article-pool'
 import type {EditorialPreferences} from '../shared/editorial'
 import {ARTICLE_EVIDENCE_VERSION,ARTICLE_INTERPRETATION_VERSION,articleEvidencePack,type ArticleInterpretation} from '../shared/article-evidence'
 import {catalogDigest} from './catalog-store'
+import {ARTICLE_MAX_EDITION_IMAGES} from '../shared/editorial-articles'
 
 const topics=[['craft',/\b(craft|maker|handmade|making)\b/i],['ritual',/\b(ritual|everyday|daily|routine)\b/i],['culture',/\b(cultur|heritage|histor|tradition)\b/i],['movement',/\b(travel|journey|movement|walking)\b/i],['material',/\b(material|textile|fabric|surface)\b/i],['space',/\b(space|room|interior|architecture)\b/i],['light',/\b(light|shadow|illumination)\b/i],['design',/\b(design|object|furniture|fashion)\b/i]] as const
 const topicFor=(prompt:string)=>topics.find(([,test])=>test.test(prompt))?.[0]??'design'
@@ -15,7 +16,7 @@ export async function articleEvidenceForPrompt(env:Bindings,p:EditorialPreferenc
   // A bounded topic represents the reusable interpretation intent. Different
   // prompts in the same topic reuse evidence; other topics coexist by ID.
   const topic=topicFor(p.interests),intentDigest=await catalogDigest(topic)
-  const candidates=pool.items.slice(0,24)
+  const candidates=pool.items.slice(0,ARTICLE_MAX_EDITION_IMAGES)
   const drafts:ArticleInterpretation[]=[]
   for(const item of candidates){
     const context=pool.visualContexts.find(row=>row.assetId===item.image.id)
@@ -44,8 +45,9 @@ export async function articleEvidenceForPrompt(env:Bindings,p:EditorialPreferenc
         .bind(...batch.flatMap(row=>[row.id,row.assetVersionId,row.imageSha256,row.intentDigest,row.sourceDigest,row.observationDigest,row.profileVersion,row.topic,row.focusQuestion,JSON.stringify(row.sourceIds),Date.now()])).run()
     }
   }
-  // Re-query persisted rows and accept only exact current evidence digests.
-  const saved=(await env.CATALOG_DB.prepare(`SELECT id,asset_version,image_sha256,intent_digest,source_digest,observation_digest,profile_version,topic,focus_question,source_ids_json FROM article_interpretations WHERE id IN(SELECT value FROM json_each(?))`).bind(JSON.stringify(ids)).all<Record<string,unknown>>()).results
+  // Existing immutable rows already came from this request's exact digest
+  // query. A second read is needed only when this request inserted rows.
+  const saved=missing.length?(await env.CATALOG_DB.prepare(`SELECT id,asset_version,image_sha256,intent_digest,source_digest,observation_digest,profile_version,topic,focus_question,source_ids_json FROM article_interpretations WHERE id IN(SELECT value FROM json_each(?))`).bind(JSON.stringify(ids)).all<Record<string,unknown>>()).results:rows
   const byId=new Map(saved.map(row=>[String(row.id),row]))
   const interpretations=drafts.flatMap(draft=>{
     const row=byId.get(draft.id)
