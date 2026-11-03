@@ -1,4 +1,4 @@
-import {useCallback,useEffect,useRef,useState} from 'react'
+import {lazy,Suspense,useCallback,useEffect,useRef,useState} from 'react'
 import {budgetExplanation} from '../../shared/budget-diagnostic'
 import * as THREE from 'three'
 import {SpatialFallback} from './fallback'
@@ -12,7 +12,8 @@ import {editionStatusCopy,fetchEdition,type HonestState,type StagedPlan} from '.
 import {fetchCapabilities,type EditorialCapabilities,type EditorialMode,type GenerationMetadata} from './editorial-mode'
 import {INTEREST_SEEDS,SEED_DISPLAY,drawSurprise,pickSuggestions,type InterestSeed} from './prompt-library'
 import ArticleCard from './ArticleCard'
-import {stageArticleEdition,stageEdition,type StagedExhibit} from './staging'
+import type {ProgressSnapshot} from './editorial-progress'
+import type {StagedExhibit} from './staging'
 import {AssemblyDirector} from './assembly'
 import {AssemblyField} from './AssemblyField'
 import {exhibitLayout,lateralBias,splinePosition,type Waypoint} from './camera-math'
@@ -22,6 +23,11 @@ import {SPATIAL_SESSION_KEY,clearSpatialSession} from './clear'
 import type {NodeSource} from './nodes'
 import DiscoverDecor from './DiscoverDecor'
 import './spatial.css'
+
+// Generation-only UI stays out of the initial spatial chunk: the progress
+// monitor, its tracker, and exhibit staging all load with the existing
+// dynamic import inside submit(), alongside './articles'.
+const EditorialProgress=lazy(()=>import('./EditorialProgress'))
 
 type DebugSnapshot={distance:number;cameraZ:number;cameraY:number;current:number;exhibits:number;nodes:number;source:NodeSource|'pending';assembly:string;mode:string;orbit:{yaw:number;pitch:number;radius:number};selected:number;staged:string[];nodeIds:string[];honest:HonestState|null}
 type Transit={t0:number;dur:number;fromPos:THREE.Vector3;fromLook:THREE.Vector3;toPos:THREE.Vector3;toLook:THREE.Vector3;onFrame?:(k:number)=>void;onDone:()=>void}
@@ -56,6 +62,7 @@ export default function SpatialApp(){
   const [entered,setEntered]=useState(false)
   const [exhibits,setExhibits]=useState<StagedExhibit[]>([])
   const [editionLabel,setEditionLabel]=useState<HonestState|null>(null)
+  const [progress,setProgress]=useState<ProgressSnapshot|null>(null)
   const [fallbackReason,setFallbackReason]=useState<string|null>(null)
   const [budgetMessage,setBudgetMessage]=useState<string|null>(null)
   // Explicit per-visit AI consent, default off, never persisted: a reload or
@@ -475,11 +482,16 @@ export default function SpatialApp(){
     let staged:StagedExhibit[],skipped:number
     if(wantArticles||wantStory){
       const {articleStatusCopy,fetchArticleEdition}=await import('./articles')
+      const {createArticleTracker}=await import('./editorial-progress')
+      const {stageArticleEdition}=await import('./staging')
       if(submitId!==submitIdRef.current)return
-      const result=await fetchArticleEdition(trimmed,consent,fetch,{onResponse:()=>directorRef.current.onResponse(),signal:controller.signal,editorialMode:capabilities?selectedMode:undefined,articleCount:wantCount})
+      const tracker=createArticleTracker()
+      setProgress(tracker.snapshot())
+      const result=await fetchArticleEdition(trimmed,consent,fetch,{onResponse:()=>directorRef.current.onResponse(),onPoll:poll=>setProgress(tracker.poll(poll)),signal:controller.signal,editorialMode:capabilities?selectedMode:undefined,articleCount:wantCount})
       if(submitId!==submitIdRef.current)return
       if(!result.edition){
         tearDownAssembly()
+        setProgress(tracker.finish({ok:false,evidence:result.evidence,revised:false,failureStage:result.validationStage??null,fallbackReason:result.fallbackReason??result.status,frozen:result.timedOut||result.status==='request_failed'}))
         const copy=articleStatusCopy(result)
         setArticleError(copy)
         setStatus(copy.title)
@@ -488,6 +500,7 @@ export default function SpatialApp(){
       const articleStaged=stageArticleEdition(result.edition,wantCount)
       if(articleStaged.exhibits.length<wantCount){
         tearDownAssembly()
+        setProgress(tracker.finish({ok:true,staged:false,evidence:result.evidence,revised:result.generation?.revisionModel!=null}))
         const incomplete=wantCount===1
           ?{title:'The AI story arrived incomplete.',detail:'The story could not be verified against the catalog. The standard edition below remains available.'}
           :{title:'The article edition arrived incomplete.',detail:'Fewer than three articles could be verified against the catalog. The standard edition below remains available.'}
@@ -497,11 +510,17 @@ export default function SpatialApp(){
       }
       honest=result.honest;reason=result.fallbackReason;timedOut=result.timedOut;generation=result.generation
       staged=articleStaged.exhibits;skipped=articleStaged.skipped
+      setProgress(tracker.finish({ok:true,staged:true,evidence:result.evidence,revised:result.generation?.revisionModel!=null}))
     }else{
       // The mode propagates only to a contract backend: the current strict
       // prompt shape would 400 an extra field, so omission means Lite there.
+      const {createStandardTracker}=await import('./editorial-progress')
+      const {stageEdition}=await import('./staging')
+      const standardTracker=createStandardTracker()
+      setProgress(standardTracker.snapshot())
       const {edition,honest:baseHonest,fallbackReason:baseReason,budget:baseBudget,timedOut:baseTimedOut,modeError:refused,generation:baseGeneration}=await fetchEdition(trimmed,consent,fetch,{onResponse:()=>directorRef.current.onResponse(),signal:controller.signal,editorialMode:capabilities?selectedMode:undefined})
       if(submitId!==submitIdRef.current)return
+      setProgress(standardTracker.finish(edition&&edition.source==='meta'?'meta':'deterministic'))
       if(refused||!edition){
         tearDownAssembly()
         setModeError('hybrid_unavailable')
@@ -581,6 +600,7 @@ export default function SpatialApp(){
     setBudgetMessage(null)
     setModeError(null)
     setArticleError(null)
+    setProgress(null)
     setGenerationMode(null)
     planRef.current=null
     setShowDock(true)
@@ -839,11 +859,11 @@ export default function SpatialApp(){
     </header>
     {editionLabel&&<p className="spatial-chip" role="note" data-testid="spatial-edition-chip">{HONEST_COPY[editionLabel]}{fallbackReason&&REASON_COPY[fallbackReason]?` (${REASON_COPY[fallbackReason]})`:''}{(editionLabel==='meta'||editionLabel==='meta-cached')&&generationMode==='hybrid'?' · Hybrid':''}{(editionLabel==='meta'||editionLabel==='meta-cached')&&exhibits.some(exhibit=>exhibit.article)?' · Article edition':''}</p>}
     {budgetMessage&&<p className="spatial-status" role="status">{budgetMessage}</p>}
-    {composing&&<div role="status" className="spatial-generating">
+    {(composing||articleError)&&<div role="status" className="spatial-generating">
       <p className="spatial-eyebrow">02 · Generating</p>
       <p className="spatial-generating-title">Composing your exhibition…</p>
-      <p className="spatial-fine">{elapsed>0?`${elapsed}s elapsed`:'Starting…'} · {editorialMode==='hybrid'?'Hybrid · Wonder + Spark':'Lite · Spark'}</p>
-      <span className="spatial-generating-pulse" aria-hidden="true"/>
+      {composing&&<p className="spatial-fine">{elapsed>0?`${elapsed}s elapsed`:'Starting…'} · {editorialMode==='hybrid'?'Hybrid · Wonder + Spark':'Lite · Spark'}</p>}
+      {progress&&<Suspense fallback={null}><EditorialProgress progress={progress}/></Suspense>}
     </div>}
     {!composing&&status&&<p role="status" className={`spatial-chip${editionLabel?' is-sub':''}`}>{status}</p>}
     {showDock&&<section className={`spatial-dock${entered?' is-docked':''}${composing?' is-composing':''}`} aria-labelledby="spatial-prompt-heading">

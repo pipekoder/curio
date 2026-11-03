@@ -1,6 +1,6 @@
 import {describe,expect,it,vi} from 'vitest'
 import {ARTICLE_CONTRACT_VERSION,ARTICLE_SINGLE_CONTRACT_VERSION} from '../shared/editorial-articles'
-import {articleStatusCopy,fetchArticleEdition} from '../src/spatial/articles'
+import {articleStatusCopy,fetchArticleEdition,type ArticlePoll} from '../src/spatial/articles'
 import {stageArticleEdition} from '../src/spatial/staging'
 import {articleEditionFixture,articleResponseFixture} from './article-fixtures'
 
@@ -138,6 +138,21 @@ describe('spatial article edition fetch', () => {
     const result = await fetchArticleEdition('quiet rooms', true, err(409, {status: 'insufficient_content', fallbackReason: 'insufficient_content', eligibleImages: 2, requiredImages: 3}) as unknown as typeof fetch, {articleCount: 1})
     expect(result.status).toBe('insufficient_content')
     expect(articleStatusCopy(result).detail).toContain('2 of 3 required images')
+  })
+  it('reports each preparation poll to the progress callback', async () => {
+    const seen: ArticlePoll[] = []
+    const responses = [
+      new Response(JSON.stringify({status: 'preparing', fallbackReason: 'analysis_pending', eligibleImages: 2, requiredImages: 6, preparation: {outcome: 'processing', remainingCandidates: 4, processing: 1, retryAfterMs: 0}}), {status: 202}),
+      new Response(JSON.stringify({status: 'preparing', fallbackReason: 'analysis_pending', eligibleImages: 6, requiredImages: 6, preparation: {outcome: 'reviewing', remainingCandidates: 0, processing: 0, retryAfterMs: 0}, generationStage: 'chief_editor'}), {status: 202}),
+      new Response(JSON.stringify(articleResponseFixture()), {status: 200}),
+    ]
+    const fetcher = vi.fn(async () => responses.shift()!)
+    const result = await fetchArticleEdition('quiet rooms', true, fetcher as unknown as typeof fetch, {onPoll: poll => seen.push(poll)})
+    expect(result.edition?.articleEdition.articles).toHaveLength(3)
+    expect(seen).toEqual([
+      {outcome: 'processing', eligibleImages: 2, requiredImages: 6, remainingCandidates: 4, processing: 1, generationStage: null},
+      {outcome: 'reviewing', eligibleImages: 6, requiredImages: 6, remainingCandidates: 0, processing: 0, generationStage: 'chief_editor'},
+    ])
   })
   it('stages a single dock for the one-story edition', () => {
     const {articleEdition, items} = articleEditionFixture()
