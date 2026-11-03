@@ -12,7 +12,9 @@ import {resolveArticlePreparationPolicy} from './article-preparation-policy'
 import {publicBudgetDenial} from '../shared/budget-diagnostic'
 
 const JOB_VERSION='curio-article-job-demo-v2'
-const LEASE_MS=120_000
+// Exceeds the bounded 150-second editorial workflow plus catalog and D1 work.
+// A generating lease is never reclaimed for inference after expiry.
+const LEASE_MS=200_000
 const JOB_TTL_MS=7*86_400_000
 
 type JobRow={id:string;ip_digest:string;input_digest:string;state:'preparing'|'generating'|'completed'|'failed';lease_token:string|null;lease_until:number|null;result_json:string|null;evidence_digest:string|null}
@@ -123,8 +125,9 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
     if(pool.eligibleCount>=minEligible){
       // The conditional D1 update is atomic across Worker isolates. Existing
       // jobs remain readable when the two-generation ceiling is reached.
-      const generationClaim=await db.prepare(`UPDATE article_edition_jobs SET state='generating',updated_at=? WHERE id=? AND lease_token=? AND (SELECT COUNT(*) FROM article_edition_jobs WHERE updated_at>? AND state='generating' AND lease_until>?)<2 RETURNING id`)
-        .bind(Date.now(),identity.id,token,Date.now()-LEASE_MS,Date.now()).first()
+      const generationNow=Date.now()
+      const generationClaim=await db.prepare(`UPDATE article_edition_jobs SET state='generating',lease_until=?,updated_at=? WHERE id=? AND lease_token=? AND (SELECT COUNT(*) FROM article_edition_jobs WHERE updated_at>? AND state='generating' AND lease_until>?)<2 RETURNING id`)
+        .bind(generationNow+LEASE_MS,generationNow,identity.id,token,generationNow-LEASE_MS,generationNow).first()
       if(!generationClaim)return pendingResponse(base,minEligible,progress,'waiting_for_capacity',15_000)
       const result=await articleEditorialResponse(request,env,p,mode,pool,articleCount)
       const payload=await result.clone().json() as {source?:string;articleEdition?:unknown;generation?:unknown}

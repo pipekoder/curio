@@ -3,7 +3,12 @@ import {budgetExplanation,publicBudgetDiagnostic,type PublicBudgetDiagnostic} fr
 import {ARTICLE_CONTRACT_VERSION,ARTICLE_MIN_ELIGIBLE_IMAGES,ARTICLE_SINGLE_CONTRACT_VERSION,ARTICLE_SINGLE_MIN_ELIGIBLE_IMAGES,editorialArticleEdition,editorialSingleArticleEdition,type ArticleEditionBody} from '../../shared/editorial-articles'
 import {catalogItem,type CatalogItem} from '../../shared/catalog'
 import {parseGenerationMetadata,type EditorialMode,type GenerationMetadata} from './editorial-mode'
-import {EDITORIAL_TIMEOUT_MS,type HonestState} from './edition'
+import type {HonestState} from './edition'
+
+// Article Edition may make Chief, Reviewer, Revision and Confirmation calls
+// under one D1 generation lease. Its request bound is distinct from the
+// shorter standard Editorial API bound.
+const ARTICLE_REQUEST_TIMEOUT_MS=180_000
 
 // Opt-in client for docs/full-catalog-articles.md: POSTs the existing prompt
 // shape plus editionFormat and stages only a fully validated article
@@ -69,7 +74,7 @@ export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImp
   })
   try{
    for(let attempt=0;attempt<20;attempt++){
-    const requestBound=AbortSignal.timeout(EDITORIAL_TIMEOUT_MS)
+    const requestBound=AbortSignal.timeout(ARTICLE_REQUEST_TIMEOUT_MS)
     const signal=AbortSignal.any([bound,requestBound,...(events.signal?[events.signal]:[])])
     const response=await fetchImpl('/api/editorial',{
       method:'POST',headers:{'Content-Type':'application/json'},
