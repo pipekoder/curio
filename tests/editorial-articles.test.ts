@@ -22,13 +22,13 @@ const data=Array.from({length:24},(_,i)=>{
   const assetId=version(i+1),brandName=i%2?'Second Studio':'First Studio'
   return {item:{id:`catalog-${i}`,image:{id:assetId},category:'home',lifestyleTags:['Scandinavian']} as CatalogItem,
     context:{assetId,versionId:assetId,imageSha256:'a'.repeat(64),source:'meta_image_observation',model:'muse-spark-1.3',observations:{subjects:['seating'],materialAppearance:[],environments:[],relationships:[]},uncertainty:'appearance_not_verified_fact'} as VisualContext,
-    sources:[{id:`${assetId}:brand_name`,assetId,kind:'brand_name',label:'Brand name',value:brandName,authority:'owner_supplied_mockup',source:'content_studio'},{id:`${assetId}:product_description`,assetId,kind:'product_description',label:'Product description',value:'An owner described seating study.',authority:'owner_supplied_mockup',source:'content_studio'}] as EditorialSource[]}
+    sources:[{id:`${assetId}:brand_name`,assetId,kind:'brand_name',label:'Brand name',value:brandName,authority:'owner_supplied_mockup',source:'content_studio'},{id:`${assetId}:product_name`,assetId,kind:'product_name',label:'Product name',value:'Seating Study',authority:'owner_supplied_mockup',source:'content_studio'},{id:`${assetId}:product_description`,assetId,kind:'product_description',label:'Product description',value:'An owner described seating study.',authority:'owner_supplied_mockup',source:'content_studio'}] as EditorialSource[]}
 })
 const items=data.map(row=>row.item),contexts=data.map(row=>row.context),sources=data.flatMap(row=>row.sources)
 function edition(size=3,per=3):EditorialArticleEdition{
   return {version:ARTICLE_CONTRACT_VERSION,title:'The Practice of Attention',deck:'How distinct rooms invite different ways of living.',articles:Array.from({length:size},(_,i)=>{
     const selected=data.slice(i*per,(i+1)*per)
-    return {id:`article-${selected[0].item.image.id}`,heroAssetId:selected[0].item.image.id,headline:`A Room for ${i+1}`,deck:'A distinct editorial angle.',narrative:'These owner described objects invite a different way to read the room.',images:selected.map(row=>({catalogId:row.item.id,assetId:row.item.image.id,brandName:row.sources[0].value,brandSourceId:row.sources[0].id,productSourceIds:[row.sources[1].id]})),sourceIds:selected.flatMap(row=>row.sources.map(source=>source.id))}
+    return {id:`article-${selected[0].item.image.id}`,heroAssetId:selected[0].item.image.id,headline:`A Room for ${i+1}`,deck:'A distinct editorial angle.',narrative:'These owner described objects invite a different way to read the room.',images:selected.map(row=>({catalogId:row.item.id,assetId:row.item.image.id,brandName:row.sources[0].value,brandSourceId:row.sources[0].id,productSourceIds:[row.sources[2].id]})),sourceIds:selected.flatMap(row=>row.sources.map(source=>source.id))}
   })}
 }
 const preferences={interests:'Explore seating and everyday interiors',allocations:{home:100,fashion:0,travel:0},aesthetics:['Scandinavian'],mode:'Focused',consent:true}
@@ -45,18 +45,21 @@ afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();vi.mocked(editorialArt
 
 it('validates exactly three articles with two or three unique exact-version images',()=>{
  const three=edition();expect(validateArticleEdition(three,items,sources,contexts,3)).toEqual(three)
- const two=structuredClone(three);two.articles.forEach(article=>{article.images.pop();article.sourceIds.splice(-2)})
+ const two=structuredClone(three);two.articles.forEach(article=>{article.images.pop();article.sourceIds.splice(-3)})
  expect(validateArticleEdition(two,items,sources,contexts,3).articles.every(article=>article.images.length===2)).toBe(true)
- const tooMany=structuredClone(three);tooMany.articles[0].images.push({catalogId:items[9].id,assetId:items[9].image.id,brandName:sources[18].value,brandSourceId:sources[18].id,productSourceIds:[sources[19].id]})
+ const tooMany=structuredClone(three);tooMany.articles[0].images.push({catalogId:items[9].id,assetId:items[9].image.id,brandName:sources[27].value,brandSourceId:sources[27].id,productSourceIds:[sources[29].id]})
  expect(()=>validateArticleEdition(tooMany,items,sources,contexts,3)).toThrow()
  expect(()=>validateArticleEdition({...three,articles:three.articles.slice(0,2)},items,sources,contexts,2)).toThrow()
  expect(new Set(three.articles[0].images.map(image=>image.brandName)).size).toBe(2)
 })
-it('rejects wrong catalog joins, unsupported brand attribution, missing product evidence and reused images',()=>{
- for(const mutate of [(e:EditorialArticleEdition)=>{e.articles[0].images[0].catalogId='wrong'},(e:EditorialArticleEdition)=>{e.articles[0].images[0].brandName='Invented'},(e:EditorialArticleEdition)=>{e.articles[0].images[0].productSourceIds=[]},(e:EditorialArticleEdition)=>{e.articles[1].images[1]=e.articles[0].images[1]}]){
-  const candidate=structuredClone(edition());mutate(candidate);expect(()=>validateArticleEdition(candidate,items,sources,contexts,8)).toThrow()
+it('rejects wrong catalog joins, unsupported brand attribution and reused images while allowing optional product citations',()=>{
+ for(const mutate of [(e:EditorialArticleEdition)=>{e.articles[0].images[0].catalogId='wrong'},(e:EditorialArticleEdition)=>{e.articles[0].images[0].brandName='Invented'},(e:EditorialArticleEdition)=>{e.articles[1].images[1]=e.articles[0].images[1]}]){
+  const candidate=structuredClone(edition());mutate(candidate);expect(()=>validateArticleEdition(candidate,items,sources,contexts,3)).toThrow()
  }
- expect(()=>validateArticleEdition(edition(),items,sources,contexts.filter(context=>context.assetId!==items[0].image.id),8)).toThrow()
+ const withoutProductCitations=edition();withoutProductCitations.articles[0].images[0].productSourceIds=[]
+ withoutProductCitations.articles[0].sourceIds=withoutProductCitations.articles[0].sourceIds.filter(id=>id!==data[0].sources[2].id)
+ expect(validateArticleEdition(withoutProductCitations,items,sources,contexts,3).articles[0].images[0].productSourceIds).toEqual([])
+ expect(()=>validateArticleEdition(edition(),items,sources,contexts.filter(context=>context.assetId!==items[0].image.id),3)).toThrow()
 })
 it('keeps the public contract on pool failure while logging stage and correlation id',async()=>{
   const logged:unknown[][]=[]
@@ -232,7 +235,7 @@ function preparationDb(){
  })})}
  return {sqlite,db}
 }
-const prepared=(length:number,pendingVersionIds:string[])=>({items:items.slice(0,length),visualContexts:contexts.slice(0,length),sources:sources.slice(0,length*2),eligibleCount:length,
+const prepared=(length:number,pendingVersionIds:string[])=>({items:items.slice(0,length),visualContexts:contexts.slice(0,length),sources:sources.slice(0,length*3),eligibleCount:length,
  preparation:{pendingVersionIds,processing:0,failed:0,rankedCount:20,evaluatedCount:20,exclusions:{relevance_or_window:0,publication:0,permissions:0,metadata:0,sources:0,image_integrity:0,observations:pendingVersionIds.length,analysis_processing:0,analysis_failed:0,invalid_observations:0,duplicate_image:0}}})
 it('analyzes two authorized versions concurrently, then activates the reviewed edition at six',async()=>{
  const {sqlite,db}=preparationDb()
@@ -400,7 +403,7 @@ it('stores distinct source-linked perspectives for different curiosity prompts a
   expect(a.interpretations[0].id).not.toBe(b.interpretations[0].id)
   expect(again).toEqual(a)
   expect((sqlite.prepare('SELECT COUNT(*) AS n FROM article_interpretations').get() as {n:number}).n).toBe(18)
-  expect(a.interpretations[0]).toMatchObject({origin:'deterministic',status:'editorial_perspective',assetVersionId:items[0].image.id,sourceIds:[sources[0].id,sources[1].id]})
+  expect(a.interpretations[0]).toMatchObject({origin:'deterministic',status:'editorial_perspective',assetVersionId:items[0].image.id,sourceIds:[sources[0].id,sources[1].id,sources[2].id]})
  }finally{sqlite.close()}
 })
 it('stages a full 9-draft prompt within the D1 bound-variable limit',async()=>{
