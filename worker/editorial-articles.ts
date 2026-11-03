@@ -115,8 +115,21 @@ const revisionInstruction=`You are Curio's Revision Editor. Address only the ind
 function stableStructure(edition:ArticleEditionBody){return JSON.stringify(edition.articles.map(article=>({id:article.id,heroAssetId:article.heroAssetId,images:article.images,sourceIds:article.sourceIds,culturalClaimIds:article.culturalClaims?.map(claim=>claim.sourceId)})))}
 function reviewReferences(edition:ArticleEditionBody,sources:readonly EditorialSource[]){return new Set(['plan.title','plan.deck',...edition.articles.map(article=>`feature:${article.heroAssetId}`),...sources.map(source=>source.id)])}
 function validateReview(value:z.infer<typeof editorialReviewOutput>,edition:ArticleEditionBody,sources:readonly EditorialSource[]){
-  const refs=reviewReferences(edition,sources),ids=edition.articles.map(article=>article.heroAssetId),feedback=value.featureFeedback.map(row=>row.assetId)
-  if(feedback.length!==ids.length||new Set(feedback).size!==ids.length||feedback.some(id=>!ids.includes(id))||Object.values(value.dimensions).some(row=>row.evidenceRefs.some(ref=>!refs.has(ref)))||value.featureFeedback.some(row=>row.issues.some(issue=>issue.evidenceRefs.some(ref=>!refs.has(ref)))))throw Error('Invalid review references')
+  const refs=[...reviewReferences(edition,sources)]
+  const match=(id:string,choices:readonly string[])=>{
+    const found=choices.filter(choice=>choice.toLowerCase()===id.trim().toLowerCase())
+    return found.length===1?found[0]:null
+  }
+  const evidence=(ids:string[])=>ids.flatMap(id=>{const found=match(id,refs);return found?[found]:[]})
+  for(const row of Object.values(value.dimensions))row.evidenceRefs=evidence(row.evidenceRefs)
+  for(const row of value.featureFeedback){
+    const found=edition.articles.filter(article=>[article.heroAssetId,article.id,`feature:${article.heroAssetId}`].some(id=>id.toLowerCase()===row.assetId.trim().toLowerCase()))
+    if(found.length!==1)throw Error('Invalid review feedback identity')
+    row.assetId=found[0].heroAssetId
+    for(const issue of row.issues)issue.evidenceRefs=evidence(issue.evidenceRefs)
+  }
+  const ids=edition.articles.map(article=>article.heroAssetId),feedback=value.featureFeedback.map(row=>row.assetId)
+  if(feedback.length!==ids.length||new Set(feedback).size!==ids.length||feedback.some(id=>!ids.includes(id)))throw Error('Invalid review feedback identity')
   return scoreEditorialReview(value)
 }
 
