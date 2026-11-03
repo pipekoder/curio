@@ -9,7 +9,7 @@ import type {EditorialSource} from '../shared/editorial-sources'
 import type {VisualContext} from '../shared/visual-observations'
 import {ARTICLE_CONTRACT_VERSION,ARTICLE_SINGLE_CONTRACT_VERSION,type EditorialArticleEdition} from '../shared/editorial-articles'
 import {editorialDimensions,EDITORIAL_STANDARD_VERSION} from '../shared/editorial-standard'
-import {articleEditorialResponse,validateArticleEdition} from '../worker/editorial-articles'
+import {articleEditorialResponse,mergeRevisionProse,validateArticleEdition} from '../worker/editorial-articles'
 import {hydrateChiefDraft} from '../worker/chief-draft'
 import {editorialApi} from '../worker/editorial'
 import {editorialArticlePool,ArticlePoolError,reportArticlePoolFailure} from '../worker/editorial-article-pool'
@@ -43,7 +43,8 @@ const mockPool=(length=24)=>vi.mocked(editorialArticlePool).mockResolvedValue({i
 function review(value:EditorialArticleEdition,score=5,high=false){return {rubricVersion:EDITORIAL_STANDARD_VERSION,dimensions:Object.fromEntries(editorialDimensions.map(key=>[key,{score,reason:'Independent assessment against supplied evidence.',evidenceRefs:[`feature:${value.articles[0].heroAssetId}`]}])),magazineFeedback:'The edition is assessed.',featureFeedback:value.articles.map((article,i)=>({assetId:article.heroAssetId,strengths:[],issues:high&&i===0?[{severity:'high',code:'fact_integrity',evidenceRefs:[article.images[0].brandSourceId],instruction:'Remove the unsupported claim.'}]:[]})),revisionInstructions:high?['Remove the unsupported claim.']:[]}}
 const refOf=(assetId:string)=>'ABCDEFGHI'[items.findIndex(item=>item.image.id===assetId)]!
 function toDraft(edition:EditorialArticleEdition){return {title:edition.title,deck:edition.deck,articles:edition.articles.map(article=>({headline:article.headline,deck:article.deck,narrative:article.narrative,culturalClaims:[] as {ref:string;narrativeText:string}[],images:article.images.map(image=>({ref:refOf(image.assetId),products:image.productSourceIds.map(id=>id.split(':').pop()!)}))}))}}
-function provider(firstScore=5,finalScore=5,high=false){let calls=0;return vi.fn(async(_url:string,init:RequestInit)=>{const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content);calls++;const value=calls===1?toDraft(edition(input.articleCount,input.catalog.length>=9?3:2)):calls===2?review(input.edition,firstScore,high):calls===3?input.edition:review(input.edition,finalScore);return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})})}
+function toRevisionDraft(edition:EditorialArticleEdition){return {title:edition.title,deck:edition.deck,articles:edition.articles.map(article=>({id:article.id,headline:article.headline,deck:article.deck,narrative:article.narrative}))}}
+function provider(firstScore=5,finalScore=5,high=false){let calls=0;return vi.fn(async(_url:string,init:RequestInit)=>{const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content);calls++;const value=calls===1?toDraft(edition(input.articleCount,input.catalog.length>=9?3:2)):calls===2?review(input.edition,firstScore,high):calls===3?toRevisionDraft(input.edition):review(input.edition,finalScore);return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})})}
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();vi.mocked(editorialArticlePool).mockReset();vi.mocked(runClassification).mockReset()})
 
 it('runs one V3 Chief plan, skips unrequested research, and retains the reviewed Single Story contract',async()=>{
@@ -407,6 +408,57 @@ it('requires final independent confirmation after revision and falls back if tha
  const result=await (await post({}, {interests:'A separate confirmation-failure investigation of living spaces'})).json() as Record<string,unknown>
  expect(result).toMatchObject({source:'deterministic',status:'fallback',fallbackReason:'editorial_rejected',inference:{reservedUnits:4,attempted:true}})
  expect(send).toHaveBeenCalledTimes(4)
+})
+it('merges revision prose onto validated identities without changing references',()=>{
+ const ed=edition(3,2)
+ const before=JSON.stringify(ed.articles.map(article=>({id:article.id,hero:article.heroAssetId,images:article.images,sourceIds:article.sourceIds})))
+ const draft=toRevisionDraft(ed)
+ draft.title='Revised Edition Title';draft.deck='A revised edition deck.'
+ draft.articles[0].headline='A Revised Headline';draft.articles[0].narrative='A revised narrative addressing the review.'
+ const next=mergeRevisionProse(ed,draft)
+ expect(next.title).toBe('Revised Edition Title')
+ expect(next.articles[0].headline).toBe('A Revised Headline')
+ expect(JSON.stringify(next.articles.map(article=>({id:article.id,hero:article.heroAssetId,images:article.images,sourceIds:article.sourceIds})))).toBe(before)
+ validateArticleEdition(next,items,sources,contexts,3)
+})
+it('rejects revision drafts with unknown, missing or duplicated article IDs',()=>{
+ const ed=edition(3,2)
+ const unknown=toRevisionDraft(ed);unknown.articles[0].id=`article-${version(99)}`
+ expect(()=>mergeRevisionProse(ed,unknown)).toThrow('structural_validation')
+ const missing=toRevisionDraft(ed);missing.articles.pop()
+ expect(()=>mergeRevisionProse(ed,missing)).toThrow('structural_validation')
+ const duplicated=toRevisionDraft(ed);duplicated.articles[2].id=duplicated.articles[0].id
+ expect(()=>mergeRevisionProse(ed,duplicated)).toThrow('structural_validation')
+})
+it('fails closed when revised prose drops a cultural-claim passage',()=>{
+ const ed=edition(3,2)
+ const assetId=ed.articles[0].images[0].assetId,claimId=`${assetId}:cultural_claim_1`
+ const claimed=[...sources,{id:claimId,assetId,kind:'cultural_claim',label:'Cultural claim',value:'A shared harvest ritual.',authority:'owner_supplied_mockup',source:'content_studio'} as EditorialSource]
+ ed.articles[0].culturalClaims=[{sourceId:claimId,narrativeText:'a shared harvest ritual'}]
+ ed.articles[0].narrative+=' It recalls a shared harvest ritual.'
+ ed.articles[0].sourceIds.push(claimId)
+ validateArticleEdition(ed,items,claimed,contexts,3)
+ const draft=toRevisionDraft(ed)
+ draft.articles[0].narrative='Revised prose without the quoted passage.'
+ expect(()=>validateArticleEdition(mergeRevisionProse(ed,draft),items,claimed,contexts,3)).toThrow('cultural_claim')
+})
+it('rejects an edition whose reviewer-flagged image problem prose cannot fix',async()=>{
+ mockPool(6)
+ const grounding=(ed:EditorialArticleEdition)=>({...review(ed,3),featureFeedback:review(ed,3).featureFeedback.map((row,i)=>i?row:{...row,issues:[{severity:'high',code:'visual_grounding',evidenceRefs:[`feature:${ed.articles[0].heroAssetId}`],instruction:'The credited image cannot support this claim.'}]})})
+ let calls=0
+ const send=vi.fn(async(_url:string,init:RequestInit)=>{
+  const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content);calls++
+  const revised=()=>{const draft=toRevisionDraft(input.edition);return {...draft,articles:draft.articles.map(article=>({...article,narrative:`${article.narrative} Revised for the review.`}))}}
+  const value=calls===1?toDraft(edition(input.articleCount,2)):calls===2?grounding(input.edition):calls===3?revised():grounding(input.edition)
+  return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
+ })
+ vi.stubGlobal('fetch',send)
+ const body=await (await post({},{interests:'An unfixable image-grounding study'})).json() as Record<string,unknown>
+ expect(body).toMatchObject({source:'deterministic',status:'fallback',fallbackReason:'editorial_rejected'})
+ expect(send).toHaveBeenCalledTimes(4)
+ const revisionCall=JSON.parse(String(send.mock.calls[2][1].body))
+ expect(revisionCall.response_format.json_schema.name).toBe('curio_articles_v1_revision')
+ expect(revisionCall.messages[0].content).toContain('prose draft')
 })
 it('rejects missing consent or AI flags before paid calls',async()=>{
  mockPool();const send=provider();vi.stubGlobal('fetch',send)

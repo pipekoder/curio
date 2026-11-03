@@ -44,3 +44,14 @@ export const editorialSingleArticleEdition=z.strictObject({
 })
 export type SingleArticleEdition=z.infer<typeof editorialSingleArticleEdition>
 export type ArticleEditionBody={version:string;title:string;deck:string;articles:EditorialArticle[]}
+// Prose-only revision drafts. The Revision Editor returns text keyed by
+// exact article ID; every machine identity stays server-side and is merged
+// onto the already-validated edition, so ID transcription slips become
+// unrepresentable. Constraints derive from the canonical edition shapes.
+const {id:revisionArticleId,headline:revisionHeadline,deck:revisionArticleDeck,narrative:revisionNarrative}=editorialArticle.shape
+const revisionDraftArticle=z.strictObject({id:revisionArticleId,headline:revisionHeadline,deck:revisionArticleDeck,narrative:revisionNarrative})
+const {title:revisionEditionTitle,deck:revisionEditionDeck}=editorialArticleEdition.shape
+export const editorialRevisionDraft=z.strictObject({title:revisionEditionTitle,deck:revisionEditionDeck,articles:z.array(revisionDraftArticle).length(ARTICLE_COUNT)})
+export const editorialSingleRevisionDraft=z.strictObject({title:revisionEditionTitle,deck:revisionEditionDeck,articles:z.array(revisionDraftArticle).length(ARTICLE_SINGLE_COUNT)})
+export const revisionDraftSchema=(count:1|3)=>count===1?editorialSingleRevisionDraft:editorialRevisionDraft
+export type RevisionDraft=z.infer<typeof editorialRevisionDraft>
