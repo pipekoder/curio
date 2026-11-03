@@ -46,6 +46,7 @@ import type { Bindings } from "./index";
 import {chiefModel, editorialModeSchema, generationMetadata, hybridAvailable, hybridConfigured, EDITORIAL_MODEL_ROUTING_VERSION, type EditorialMode} from './editorial-model-routing';
 import {articleEditorialResponse} from './editorial-articles';
 import {ARTICLE_CONTRACT_VERSION} from '../shared/editorial-articles';
+import {articleJobResponse} from './article-orchestrator';
 // Index is never public. Only already approved compiled catalog records can be
 // hydrated from D1 hits; no returned URL, name, hint, job or source row is exposed.
 export async function editorialPool(
@@ -154,7 +155,7 @@ editorialApi.post("/", async (c) => {
   )
     return c.json({ error: "Origin or content type not allowed." }, 403);
   if(editorialMode==='hybrid'&&!hybridConfigured(env))return c.json({error:'Hybrid editorial mode is currently unavailable.',code:'hybrid_unavailable'},503);
-  if(articleFormat)return articleEditorialResponse(c.req.raw,env,p,editorialMode);
+  if(articleFormat)return env.EDITORIAL_ARTICLE_PREPARATION_ENABLED==='true'?articleJobResponse(c.req.raw,env,p,editorialMode):articleEditorialResponse(c.req.raw,env,p,editorialMode);
   const pilot=parsePilotVersions(env.EDITORIAL_PILOT_VERSION_IDS)
   const dynamicCatalog=env.EDITORIAL_PUBLIC_AI_ENABLED==='true'&&env.EDITORIAL_DYNAMIC_CATALOG_ENABLED==='true'
   const selectedPilot=dynamicCatalog?null:pilot
