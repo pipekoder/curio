@@ -12,7 +12,7 @@ import {ANALYSIS_SPEC} from '../worker/asset-classifier'
 const sha1='a'.repeat(64),sha2='b'.repeat(64)
 const v1=`version-${sha1}`,v2=`version-${sha2}`
 
-function catalogJson(n:number,version:string,asset:string){
+function catalogJson(n:number,version:string){
   return JSON.stringify({
     id:`pool-demo-0${n}`,category:'home',name:`Pool demo piece ${n}`,description:`Owner-supplied pool demo piece ${n}.`,
     lifestyleTags:['Scandinavian'],sourceType:'editorial_support',advertiser:null,
@@ -49,7 +49,7 @@ function seed(){
     sqlite.prepare(`INSERT INTO content_catalog_links(content_version,asset_version) VALUES(?,?)`).run(`cv-${n}`,version)
     sqlite.prepare(`INSERT INTO content_reviews(version_id,purpose,status,evidence,reviewer,reviewed_at) VALUES(?,'display','approved','docs/evidence/content','op','2026-01-01')`).run(`cv-${n}`)
     sqlite.prepare(`INSERT INTO content_reviews(version_id,purpose,status,evidence,reviewer,reviewed_at) VALUES(?,'ai_analysis','approved','docs/evidence/content','op','2026-01-01')`).run(`cv-${n}`)
-    sqlite.prepare(`INSERT INTO catalog_publications(version_id,catalog_json,reviewer,reviewed_at) VALUES(?,?,?,?)`).run(version,catalogJson(n,version,asset),'op','2026-01-01')
+    sqlite.prepare(`INSERT INTO catalog_publications(version_id,catalog_json,reviewer,reviewed_at) VALUES(?,?,?,?)`).run(version,catalogJson(n,version),'op','2026-01-01')
   }
   asset(1,v1,'asset-pool-1',sha1)
   asset(2,v2,'asset-pool-2',sha2)
