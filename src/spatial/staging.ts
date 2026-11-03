@@ -1,6 +1,6 @@
 import {demoMediaFor} from '../editorial-demo-media'
 import type {EditorialEdition} from '../../shared/editorial'
-import type {EditorialArticleEdition} from '../../shared/editorial-articles'
+import type {ArticleEditionBody} from '../../shared/editorial-articles'
 import type {CatalogItem} from '../../shared/catalog'
 
 export type StagedHotspot={id:string;label:string;x:number;y:number;productName:string;brandName:string;priceUsd:number;assumptions:readonly string[]}
@@ -56,7 +56,7 @@ export function stageEdition(edition:EditorialEdition,max=6):{exhibits:StagedExh
 // IDs with approved artwork; brand captions come from the article record,
 // while URLs, alt text and attribution come only from joined items. An
 // article with any unresolvable image is skipped whole, never patched.
-export function stageArticleEdition(edition:{articleEdition:EditorialArticleEdition;items:CatalogItem[]},max=3):{exhibits:StagedExhibit[];skipped:number}{
+export function stageArticleEdition(edition:{articleEdition:ArticleEditionBody;items:CatalogItem[]},max=3):{exhibits:StagedExhibit[];skipped:number}{
   const exhibits:StagedExhibit[]=[]
   let skipped=0
   for(const [index,article] of edition.articleEdition.articles.entries()){
