@@ -155,6 +155,26 @@ it('exposes only bounded aggregate status behind existing operator authenticatio
   }finally{db.close()}
 })
 
+it('status treats expired cooldown and preparation windows as reset without clearing lifetime usage',async()=>{
+  vi.useFakeTimers();vi.setSystemTime(new Date('2026-11-01T08:00:00Z'))
+  const {db,value}=budget()
+  try{
+    const now=Date.now(),address=ip(1)
+    const insert=db.prepare('INSERT INTO counters(key,count,expires) VALUES(?,?,?)')
+    insert.run('lifetime',7,0)
+    insert.run(`day:${Math.floor(now/86400000)}`,5,(Math.floor(now/86400000)+1)*86400000)
+    insert.run(`cooldown:${address}`,1,now+60000)
+    insert.run(`article-prep-cooldown:${address}`,2,now+16000)
+    const input={ceiling:100,daily:100,demo:false,ip:address,articlePreparationPolicy:{maxPerHour:16,maxPerDay:24,windowLimit:2,windowSeconds:16,concurrency:2}}
+    const status=async()=>await (await value.fetch(new Request('https://budget/status',{method:'POST',body:JSON.stringify(input)}))).json() as {lifetime:{used:number;remaining:number};day:{used:number};perIp:{cooldown:{used:number;remaining:number;resetAt:string|null};articlePreparation:{window:{used:number;remaining:number;resetAt:string|null}}}}
+    expect(await status()).toMatchObject({lifetime:{used:7,remaining:93},day:{used:5},perIp:{cooldown:{used:1,remaining:0},articlePreparation:{window:{used:2,remaining:0}}}})
+    vi.advanceTimersByTime(16000)
+    expect(await status()).toMatchObject({lifetime:{used:7,remaining:93},day:{used:5},perIp:{cooldown:{used:1},articlePreparation:{window:{used:0,remaining:2,resetAt:null}}}})
+    vi.advanceTimersByTime(44000)
+    expect(await status()).toMatchObject({lifetime:{used:7,remaining:93},day:{used:5},perIp:{cooldown:{used:0,remaining:1,resetAt:null},articlePreparation:{window:{used:0,remaining:2}}}})
+  }finally{db.close()}
+})
+
 it('returns exact safe diagnostics for lifetime, day, hourly and cooldown denials',async()=>{
   vi.useFakeTimers();vi.setSystemTime(new Date('2026-11-01T08:00:00Z'))
   const cases=[
