@@ -13,6 +13,7 @@ import {loadEditorialSources} from './editorial-sources'
 import {resolveR2MediaPermit} from './media-ai-adapter'
 import {loadApprovedCulturalEvidence,culturalSourcesForEditorial} from './cultural-evidence-store'
 import {ANALYSIS_SPEC} from './asset-classifier'
+import {ARTICLE_MAX_EDITION_IMAGES} from '../shared/editorial-articles'
 
 type Exclusion='relevance_or_window'|'publication'|'permissions'|'metadata'|'sources'|'image_integrity'|'observations'|'analysis_processing'|'analysis_failed'|'invalid_observations'|'duplicate_image'
 export type ArticlePool={items:CatalogItem[];sources:EditorialSource[];visualContexts:VisualContext[];eligibleCount:number;
@@ -44,7 +45,7 @@ export function reportArticlePoolFailure(requestId:string,error:unknown,event='a
 // Review scope preserves relevance ranking while retaining not-yet-analyzed
 // assets for preflight. Publication, rights and R2 identity are rechecked
 // before a version can be scheduled or sent to the Chief Editor.
-export async function editorialArticlePool(env:Bindings,p:EditorialPreferences):Promise<ArticlePool>{
+export async function editorialArticlePool(env:Bindings,p:EditorialPreferences,options:{diagnostics?:boolean}={}):Promise<ArticlePool>{
   const exclusions=emptyExclusions()
   const unavailable={items:[],sources:[],visualContexts:[],eligibleCount:0,preparation:{pendingVersionIds:[],processing:0,failed:0,exclusions,rankedCount:0,evaluatedCount:0,activeMediaCount:0,publishedInPromptWindow:0}}
   const db=env.CATALOG_DB,bucket=env.MEDIA_BUCKET
@@ -56,8 +57,10 @@ export async function editorialArticlePool(env:Bindings,p:EditorialPreferences):
     brandDiversity:true,serendipity:p.mode==='Surprise Me'?0.15:0,
     seed,scope:'review',includeUnscored:true,publishedOnly:false,limit:96,
   }))
-  const activeCount=(await stage('retrieve',async()=>(await db.prepare('SELECT COUNT(*) AS n FROM media_objects WHERE active=1 AND deleted_at IS NULL').first<{n:number}>())?.n??0))
-  exclusions.relevance_or_window=Math.max(0,activeCount-ranked.items.length)
+  // The global inventory count is useful to the operator readiness view, but
+  // adds a full media read to every visitor generation and preparation poll.
+  const activeCount=options.diagnostics?(await stage('retrieve',async()=>(await db.prepare('SELECT COUNT(*) AS n FROM media_objects WHERE active=1 AND deleted_at IS NULL').first<{n:number}>())?.n??0)):undefined
+  if(activeCount!==undefined)exclusions.relevance_or_window=Math.max(0,activeCount-ranked.items.length)
   const ids=ranked.items.map(row=>String(row.version_id))
   const published=(await stage('publications',()=>new CatalogPublications(db).list('',96,ids))).items
   const byVersion=new Map(published.map(item=>[item.image.id,item]))
@@ -66,7 +69,7 @@ export async function editorialArticlePool(env:Bindings,p:EditorialPreferences):
   const seenSha=new Set<string>()
   let evaluatedCount=0,r2Checks=0
   for(const row of ranked.items){
-    if(verified.length>=24||r2Checks>=32)break
+    if(verified.length>=ARTICLE_MAX_EDITION_IMAGES||r2Checks>=32)break
     evaluatedCount++
     const item=byVersion.get(String(row.version_id))
     if(!item){exclusions.publication++;continue}

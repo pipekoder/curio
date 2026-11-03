@@ -1,7 +1,7 @@
 import type {CatalogItem} from '../shared/catalog'
 import {ARTICLE_CONTRACT_VERSION, type EditorialArticleEdition} from '../shared/editorial-articles'
 
-// Contract-compliant mock article edition: 5 articles x 3 images, mixed
+// Contract-compliant mock article edition: 3 articles x 3 images, mixed
 // brands within each article, exact catalogId/assetId joins. Real article
 // generation stays disabled; these fixtures drive frontend tests only.
 const hex = (seed: number) => `version-${seed.toString(16).padStart(64, '0')}`
@@ -44,8 +44,8 @@ export function articleItemFixture(index: number): CatalogItem {
 }
 
 export function articleEditionFixture(): {articleEdition: EditorialArticleEdition; items: CatalogItem[]} {
-  const items = Array.from({length: 15}, (_, index) => articleItemFixture(index))
-  const articles = Array.from({length: 5}, (_, article) => {
+  const items = Array.from({length: 9}, (_, index) => articleItemFixture(index))
+  const articles = Array.from({length: 3}, (_, article) => {
     const group = [0, 1, 2].map(slot => items[article * 3 + slot])
     const hero = group[0]
     return {
@@ -65,7 +65,7 @@ export function articleEditionFixture(): {articleEdition: EditorialArticleEditio
     }
   })
   return {
-    articleEdition: {version: ARTICLE_CONTRACT_VERSION, title: 'Fixture article edition', deck: 'Five fixture articles.', articles},
+    articleEdition: {version: ARTICLE_CONTRACT_VERSION, title: 'Fixture article edition', deck: 'Three fixture articles.', articles},
     items,
   }
 }
