@@ -36,7 +36,7 @@ const GEN_DONE:Record<string,string>={
   chief_editor:'Chief Editor finished the draft.',
   reviewer:'Independent Reviewer finished the assessment.',
   revision:'Revision complete.',
-  confirmation:'Final editorial review passed.',
+  confirmation:'Final editorial review complete.',
 }
 
 export type ArticleFinish={ok:boolean;staged?:boolean;evidence?:{interpretations:number}|null;revised:boolean;failureStage?:string|null;fallbackReason?:string|null;frozen?:boolean}

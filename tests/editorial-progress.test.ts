@@ -99,7 +99,7 @@ it('reveals revision and confirmation from the completion metadata',()=>{
   expect(statusOf(snap,'revision')).toBe('COMPLETE')
   expect(statusOf(snap,'confirm')).toBe('COMPLETE')
   expect(snap).toMatchObject({done:8,total:8})
-  expect(snap.events.map(event=>event.text)).toContain('Final editorial review passed.')
+  expect(snap.events.map(event=>event.text)).toContain('Final editorial review complete.')
 })
 
 it('maps insufficient content to the analysis row',()=>{
