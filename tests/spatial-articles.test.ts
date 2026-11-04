@@ -53,7 +53,7 @@ describe('spatial article edition fetch', () => {
     ]
     const fetcher=vi.fn(async()=>responses.shift()!)
     const onResponse=vi.fn()
-    const result=await fetchArticleEdition('quiet rooms',true,fetcher as unknown as typeof fetch,{onResponse})
+    const result=await fetchArticleEdition('quiet rooms',true,fetcher as unknown as typeof fetch,{onResponse,pollGapMs:5})
     expect(fetcher).toHaveBeenCalledTimes(3)
     expect(onResponse).toHaveBeenCalledOnce()
     expect(result.edition?.articleEdition.articles).toHaveLength(3)
@@ -191,7 +191,7 @@ describe('spatial article edition fetch', () => {
       new Response(JSON.stringify(articleResponseFixture()), {status: 200}),
     ]
     const fetcher = vi.fn(async () => responses.shift()!)
-    const result = await fetchArticleEdition('quiet rooms', true, fetcher as unknown as typeof fetch, {onPoll: poll => seen.push(poll)})
+    const result = await fetchArticleEdition('quiet rooms', true, fetcher as unknown as typeof fetch, {onPoll: poll => seen.push(poll), pollGapMs: 5})
     expect(result.edition?.articleEdition.articles).toHaveLength(3)
     expect(seen).toEqual([
       {outcome: 'processing', eligibleImages: 2, requiredImages: 6, remainingCandidates: 4, processing: 1, generationStage: null, modelCalls: null, notices: null},
@@ -206,7 +206,7 @@ describe('spatial article edition fetch', () => {
       new Response(JSON.stringify(articleResponseFixture()),{status:200}),
     ]
     const fetcher=vi.fn(async (_url:unknown,init:{body:string})=>{bodies.push(init.body);return responses.shift()!})
-    const result=await fetchArticleEdition('quiet rooms',true,fetcher as unknown as typeof fetch,{explorationId:id})
+    const result=await fetchArticleEdition('quiet rooms',true,fetcher as unknown as typeof fetch,{explorationId:id,pollGapMs:5})
     expect(result.edition?.articleEdition.articles).toHaveLength(3)
     expect(bodies).toHaveLength(2)
     for(const body of bodies)expect(JSON.parse(body)).toMatchObject({prompt:'quiet rooms',consent:true,explorationId:id})
@@ -269,7 +269,9 @@ describe('spatial article edition fetch', () => {
     expect(result.edition).toBeNull()
     expect(result.status).toBe('request_failed')
     expect(result.timedOut).toBe(false)
-    expect(fetcher).toHaveBeenCalledTimes(20)
+    // Transport-error spirals relaunch at once and still terminate at the
+    // derived launch bound: floor(60000/5000)+2, far short of the 60s bound.
+    expect(fetcher).toHaveBeenCalledTimes(14)
   })
   it('omits explorationId for legacy callers that provide none', async () => {
     let body=''
@@ -288,7 +290,7 @@ describe('spatial article edition fetch', () => {
       new Response(JSON.stringify(articleResponseFixture({modelCalls: calls.map(call => ({...call, endedAt: 1760000020000, status: 'completed'}))})), {status: 200}),
     ]
     const fetcher = vi.fn(async () => responses.shift()!)
-    const result = await fetchArticleEdition('quiet rooms', true, fetcher as unknown as typeof fetch, {onPoll: poll => seen.push(poll)})
+    const result = await fetchArticleEdition('quiet rooms', true, fetcher as unknown as typeof fetch, {onPoll: poll => seen.push(poll), pollGapMs: 5})
     expect(seen).toHaveLength(1)
     expect(seen[0].modelCalls).toHaveLength(2)
     expect(seen[0].modelCalls![0]).toMatchObject({model: 'muse-spark-1.3', stage: 'chief_editor', status: 'completed'})
@@ -312,5 +314,102 @@ describe('spatial article edition fetch', () => {
     expect(exhibits).toHaveLength(1)
     expect(exhibits[0].article!.storyImages).toHaveLength(3)
     expect(exhibits[0].image).toBe(exhibits[0].article!.storyImages[0].image)
+  })
+  it('keeps polling a slow multi-stage job past the old 64-poll allowance', async () => {
+    // A healthy 3-story workflow can run for minutes: 100 fast 202s with a
+    // growing invocation log, then the completed edition. The driver must
+    // not stop at a fixed poll count while the job is still active.
+    let n=0
+    const fetcher=vi.fn(async ()=>{
+      if(++n<=100){
+        const stage=n<=40?'chief_editor':n<=70?'reviewer':'confirmation'
+        const done=n>40
+        return new Response(JSON.stringify({status:'preparing',fallbackReason:'analysis_pending',eligibleImages:6,requiredImages:6,generationStage:stage,
+          modelCalls:[{id:'call-1',model:'muse-spark-1.3',stage:'chief_editor',attempt:1,startedAt:1760000000000,endedAt:done?1760000010000:null,status:done?'completed':'calling'}],
+          preparation:{outcome:'reviewing',remainingCandidates:0,processing:0,retryAfterMs:0}}),{status:202})
+      }
+      return new Response(JSON.stringify(articleResponseFixture()),{status:200})
+    })
+    const polls:ArticlePoll[]=[]
+    const result=await fetchArticleEdition('quiet rooms',true,fetcher as unknown as typeof fetch,{pollGapMs:5,timeoutMs:120000,onPoll:poll=>polls.push(poll)})
+    expect(result.edition?.articleEdition.articles).toHaveLength(3)
+    expect(result.status).toBeNull()
+    expect(fetcher).toHaveBeenCalledTimes(101)
+    expect(polls.length).toBeGreaterThan(64)
+    expect(polls[0].generationStage).toBe('chief_editor')
+    expect(polls[polls.length-1].generationStage).toBe('confirmation')
+    expect(polls[0].modelCalls![0].status).toBe('calling')
+    expect(polls[polls.length-1].modelCalls![0].status).toBe('completed')
+  })
+  it('paces settled polls across the full overall window instead of burning the launch budget', async () => {
+    // No owner in flight (all fast 202s, e.g. after a reload while the
+    // previous lease is still valid): launches must pace one per gap for
+    // the whole window, terminating at the overall bound — not seconds in.
+    const fetcher=vi.fn(async()=>new Response(JSON.stringify({status:'preparing',fallbackReason:'analysis_pending',eligibleImages:6,requiredImages:6,generationStage:'chief_editor',preparation:{outcome:'reviewing',remainingCandidates:0,processing:0,retryAfterMs:0}}),{status:202}))
+    const started=Date.now()
+    const result=await fetchArticleEdition('quiet rooms',true,fetcher as unknown as typeof fetch,{pollGapMs:50,timeoutMs:1000})
+    const elapsed=Date.now()-started
+    expect(result.timedOut).toBe(true)
+    expect(elapsed).toBeGreaterThan(500)
+    expect(fetcher.mock.calls.length).toBeLessThanOrEqual(Math.floor(1000/50)+2)
+  })
+  it('continues polling through a resumable owner failure instead of stopping the generation', async () => {
+    // The lease owner's request can fail recoverably (provider timeout)
+    // after checkpoints were saved. The backend marks the failure
+    // resumable; the driver must keep polling so a later request resumes
+    // the same job instead of reporting Generation stopped.
+    const calls=[{id:'call-1',model:'muse-spark-1.3',stage:'chief_editor',attempt:1,startedAt:1760000000000,endedAt:1760000010000,status:'completed'}]
+    const responses=[
+      new Response(JSON.stringify({format:ARTICLE_CONTRACT_VERSION,source:'deterministic',retrieval:'d1',cached:false,articleEdition:null,status:'fallback',fallbackReason:'provider_or_validation',modelCalls:calls,resume:{recoverable:true,failedStage:'reviewer',attemptsUsed:1,chargedUnits:4}}),{status:503}),
+      new Response(JSON.stringify({status:'preparing',fallbackReason:'analysis_pending',eligibleImages:6,requiredImages:6,generationStage:'reviewer',modelCalls:calls,preparation:{outcome:'reviewing',remainingCandidates:0,processing:0,retryAfterMs:0}}),{status:202}),
+      new Response(JSON.stringify(articleResponseFixture()),{status:200}),
+    ]
+    const fetcher=vi.fn(async()=>responses.shift()!)
+    const polls:ArticlePoll[]=[]
+    const result=await fetchArticleEdition('quiet rooms',true,fetcher as unknown as typeof fetch,{pollGapMs:5,onPoll:poll=>polls.push(poll)})
+    expect(result.edition?.articleEdition.articles).toHaveLength(3)
+    expect(result.status).toBeNull()
+    expect(fetcher).toHaveBeenCalledTimes(3)
+    // The failed attempt's carried calls still reach the live log.
+    expect(polls[0].modelCalls).toHaveLength(1)
+    expect(polls[0].modelCalls![0]).toMatchObject({status:'completed'})
+  })
+  it('treats a lapsed-lease 503 as transitional while the job still generates', async () => {
+    // generation_interrupted means the lease lapsed, not that the job
+    // reached a verdict: the previous owner may still complete it, or a
+    // later poll resumes it. Keep polling for the real outcome.
+    const responses=[
+      new Response(JSON.stringify({format:ARTICLE_CONTRACT_VERSION,source:'deterministic',retrieval:'d1',cached:false,articleEdition:null,status:'fallback',fallbackReason:'generation_interrupted'}),{status:503}),
+      new Response(JSON.stringify(articleResponseFixture()),{status:200}),
+    ]
+    const fetcher=vi.fn(async()=>responses.shift()!)
+    const result=await fetchArticleEdition('quiet rooms',true,fetcher as unknown as typeof fetch,{pollGapMs:5})
+    expect(result.edition?.articleEdition.articles).toHaveLength(3)
+    expect(result.status).toBeNull()
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+  it('tolerates a few unparseable edge responses but fails fast on a sustained outage', async () => {
+    // Edge 502/524 pages carry no job verdict: isolated blips must not
+    // stop a live generation, while a sustained outage still fails fast
+    // instead of polling to the overall bound.
+    let n=0
+    const flaky=vi.fn(async()=>++n<=2?new Response('<html>edge error</html>',{status:502}):new Response(JSON.stringify(articleResponseFixture()),{status:200}))
+    const recovered=await fetchArticleEdition('quiet rooms',true,flaky as unknown as typeof fetch,{pollGapMs:5})
+    expect(recovered.edition?.articleEdition.articles).toHaveLength(3)
+    expect(flaky).toHaveBeenCalledTimes(3)
+    const outage=vi.fn(async()=>new Response('<html>edge error</html>',{status:502}))
+    const result=await fetchArticleEdition('quiet rooms',true,outage as unknown as typeof fetch,{pollGapMs:5})
+    expect(result.edition).toBeNull()
+    expect(result.status).toBe('request_failed')
+    expect(result.timedOut).toBe(false)
+    expect(outage).toHaveBeenCalledTimes(3)
+  })
+  it('still reports a budget denial terminally instead of polling through it', async () => {
+    // A resumable-for-later budget denial is not active generation: the
+    // real reason must reach the UI at once, not after the overall bound.
+    const denied=await fetchArticleEdition('quiet rooms',true,err(503,{format:ARTICLE_CONTRACT_VERSION,source:'deterministic',retrieval:'d1',cached:false,articleEdition:null,status:'fallback',fallbackReason:'budget',budget:{limitType:'per_ip_hourly',limit:200,used:200,remaining:0,requestedUnits:4,measure:'units',retryAfterSeconds:60},resume:{recoverable:true,failedStage:null,attemptsUsed:1,chargedUnits:4}}) as unknown as typeof fetch,{pollGapMs:5})
+    expect(denied.edition).toBeNull()
+    expect(denied.status).toBe('fallback')
+    expect(denied.fallbackReason).toBe('budget')
   })
 })

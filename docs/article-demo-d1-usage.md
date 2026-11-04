@@ -86,3 +86,21 @@ resumed job re-serves its recorded entries as history with original IDs and
 timestamps. No migration, endpoint or streaming work is involved: the
 polling loop, the job row's `result_json`, and the existing 202 shape carry
 the whole flow.
+
+The launch bound is derived from the overall timeout
+(`floor(overallMs/pollGapMs)+2`), so paced polling always covers the whole
+window and a fixed count can never stop the UI while the job is still
+active; the overall timeout stays the wall-clock terminator. When every
+request has settled, a 202 or a transitional failure paces the next launch
+a full gap out, while request-level failures relaunch at once so a dead
+owner resumes fast and a dead network fails fast. A 3-story failure the
+backend marks `resume.recoverable` (provider timeouts, 429/5xx, lost
+leases, expired workflow budgets) and the lapsed-lease `503
+generation_interrupted` are transitional: the driver keeps polling and a
+later request resumes the same job from checkpoints, surfacing the carried
+invocation log meanwhile. Budget denials, deterministic validation
+failures and the exhausted 30-attempt cap stay terminal with their real
+reasons. Every 202 carries the static labels `status: preparing` and
+`fallbackReason: analysis_pending` even while generating; the live phase
+is `preparation.outcome` (`reviewing` once the owner generates) together
+with `generationStage` and `modelCalls`.
