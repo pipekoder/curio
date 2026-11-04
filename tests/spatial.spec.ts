@@ -495,26 +495,37 @@ test('article budget denial names the actual limit and retry time',async({page})
 
 test('insufficient article content discloses state and retries the standard edition',async({page})=>{
   const bodies:unknown[]=[]
+  // This test is about an article→standard retry; keep unrelated discovery
+  // capabilities off the preview server's unavailable API proxy.
+  await page.route('**/api/editorial/capabilities',route=>route.fulfill({status:200,json:{version:'curio-editorial-model-routing-v1',defaultMode:'lite',liteAvailable:true,hybridAvailable:false,modes:[]}}))
   await page.route('**/api/editorial',route=>{
     const payload=route.request().postDataJSON() as Record<string,unknown>
     bodies.push(payload)
     if(payload.editionFormat)return route.fulfill({status:409,json:{status:'insufficient_content',eligibleImages:5,requiredImages:6,fallbackReason:'insufficient_content'}})
     return route.fulfill({status:200,json:{plan:metaPlan,items:groundedItems,source:'meta',retrieval:'d1',cached:false}})
   })
-  await page.setViewportSize({width:1440,height:900})
-  await page.goto('/spatial')
-  await expect(page.locator('.spatial-canvas')).toBeVisible()
-  await page.getByLabel(/Article edition/).check()
-  await submitPrompt(page)
-  const alert=page.getByRole('alert')
-  await expect(alert).toContainText('Not enough approved imagery')
-  await expect(alert).toContainText('5 of 6')
-  await expect(page.getByTestId('spatial-edition-chip')).toHaveCount(0)
-  await page.getByRole('button',{name:'Continue with the standard edition'}).click()
-  await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of 2',{timeout:15000})
-  await expect(page.getByTestId('spatial-edition-chip')).not.toContainText('Article edition')
-  expect(bodies).toHaveLength(2)
-  expect((bodies[1] as Record<string,unknown>).editionFormat).toBeUndefined()
+  await test.step('open spatial and choose article format',async()=>{
+    await page.setViewportSize({width:1440,height:900})
+    await page.goto('/spatial')
+    await expect(page.locator('.spatial-canvas')).toBeVisible({timeout:8000})
+    await page.getByLabel(/Article edition/).check({timeout:8000})
+  })
+  await test.step('article response reports insufficient imagery',async()=>{
+    await submitPrompt(page)
+    const alert=page.getByRole('alert')
+    await expect(alert).toContainText('Not enough approved imagery',{timeout:8000})
+    await expect(alert).toContainText('5 of 6',{timeout:8000})
+    await expect(page.getByTestId('spatial-edition-chip')).toHaveCount(0)
+    expect(bodies).toHaveLength(1)
+    expect((bodies[0] as Record<string,unknown>).editionFormat).toBe('curio-editorial-articles-v1')
+  })
+  await test.step('explicit retry requests and stages the standard edition',async()=>{
+    await page.getByRole('button',{name:'Continue with the standard edition'}).click({timeout:8000})
+    await expect.poll(()=>bodies.length,{timeout:8000}).toBe(2)
+    expect((bodies[1] as Record<string,unknown>).editionFormat).toBeUndefined()
+    await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of 2',{timeout:8000})
+    await expect(page.getByTestId('spatial-edition-chip')).not.toContainText('Article edition')
+  })
 })
 
 test('a refused hybrid stages nothing and retries explicitly in lite',async({page})=>{
