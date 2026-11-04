@@ -21,6 +21,7 @@
 .spatial-dock .spatial-eyebrow::before,.spatial-dock .spatial-eyebrow::after{content:'';height:1px;width:min(110px,16%);background:linear-gradient(90deg,transparent,#cfa64f)}
 .spatial-dock .spatial-eyebrow::after{background:linear-gradient(90deg,#cfa64f,transparent)}
 .spatial-dock h1{margin:0 0 24px;font:400 clamp(24px,5.2vw,46px)/1.1 Georgia,serif;font-size:clamp(24px,6.2cqw,46px);letter-spacing:-.015em;white-space:nowrap}
+@container (max-width:480px){.spatial-dock h1{white-space:normal}}
 .spatial-dock textarea{width:100%;box-sizing:border-box;min-height:76px;resize:vertical;border:1px solid #c6ceda;border-radius:16px;background:#f7fafdcc;padding:12px 14px;font:16px/1.5 Georgia,serif;color:#101219;box-shadow:inset 0 1px 0 #ffffff,inset 0 -1px 1px #dfe8f2}
 .spatial-dock button[type=submit]{margin-top:16px;min-height:48px;padding:14px 34px;border:1px solid #101219;border-radius:9999px;background:linear-gradient(180deg,#2b3242 0%,#101219 62%);color:#fff;font:inherit;font-size:13px;letter-spacing:.18em;text-transform:uppercase;cursor:pointer;box-shadow:inset 0 1px 0 #ffffff2e,0 10px 24px #10121930}
 .spatial-dock button[type=submit]:disabled{opacity:.45;cursor:not-allowed}
@@ -68,13 +69,15 @@
 .spatial-sources-item q{display:block;margin:6px 0;font:italic 400 14px/1.6 Georgia,serif;color:#101219}
 .spatial-sources a{color:#385fa8}
 .rail-story button{display:block;width:100%;margin-top:8px}
-/* Inspiration row: one seed plus two circular glass icon buttons. */
-.spatial-suggestions-label{margin:14px 0 6px!important;font-size:12px!important;letter-spacing:.04em}
+/* Inspiration row: label plus one seed and one circular glass icon button. */
+.spatial-suggestions-label{margin:0!important;font-size:12px!important;letter-spacing:.04em;flex:none}
 .spatial-seed-row{display:flex;align-items:center;gap:10px}
+.spatial-inspiration-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:14px 0 0}
+.spatial-inspiration-row .spatial-seed-row{flex:1;min-width:0}
 .spatial-seed{flex:1;min-width:0;min-height:40px;padding:9px 16px;border:1px solid #d8dee8;border-radius:9999px;background:linear-gradient(180deg,#fffffff2,#f2f6fce6);color:#3c4350;cursor:pointer;font:inherit;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:inset 0 1px 0 #ffffff}
 .spatial-circle{flex:none;min-width:40px;min-height:40px;width:40px;height:40px;padding:0;border:1px solid #d8dee8;border-radius:50%;background:linear-gradient(180deg,#fffffff2,#edf2f9e6);color:#3c4350;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 #ffffff}
 /* Compact mode switch: one glass pill with an adjacent description. */
-.spatial-mode-row{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;margin-top:14px}
+.spatial-mode-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:14px}
 .spatial-mode-row .spatial-fine{margin:0;max-width:250px;text-align:left}
 .spatial-mode-compact{display:inline-flex;gap:0;border:1px solid #c6ceda;border-radius:9999px;background:#eef2f8cc;margin:0;padding:4px;box-shadow:inset 0 1px 2px #d7e0ec}
 .spatial-mode-option{position:relative;display:block;margin:0;cursor:pointer}

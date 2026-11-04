@@ -10,7 +10,7 @@ import {loadCatalogNodes,revalidateVersions} from './nodes'
 import type {CatalogNode} from './contracts'
 import {editionStatusCopy,fetchEdition,type HonestState,type StagedPlan} from './edition'
 import {fetchCapabilities,type EditorialCapabilities,type EditorialMode,type GenerationMetadata} from './editorial-mode'
-import {INTEREST_SEEDS,SEED_DISPLAY,drawSurprise,pickSuggestions,type InterestSeed} from './prompt-library'
+import {INTEREST_SEEDS,SEED_DISPLAY,pickSuggestions,type InterestSeed} from './prompt-library'
 import type {ProgressSnapshot} from './editorial-progress'
 import type {StagedExhibit} from './staging'
 import {AssemblyDirector} from './assembly'
@@ -82,7 +82,6 @@ export default function SpatialApp(){
   const [articleError,setArticleError]=useState<{title:string;detail:string}|null>(null)
   const [generationMode,setGenerationMode]=useState<EditorialMode|null>(null)
   const [suggestion,setSuggestion]=useState<InterestSeed>(()=>pickSuggestions()[0])
-  const surpriseCursor=useRef(Math.floor(Math.random()*INTEREST_SEEDS.length))
   const modeErrorRef=useRef<HTMLDivElement>(null)
   const [showDock,setShowDock]=useState(true)
   const [current,setCurrent]=useState(-1)
@@ -882,28 +881,24 @@ export default function SpatialApp(){
     {!composing&&status&&<p role="status" className={`spatial-chip${editionLabel?' is-sub':''}`}>{status}</p>}
     {showDock&&<section className={`spatial-dock${entered?' is-docked':''}${composing?' is-composing':''}`} aria-labelledby="spatial-prompt-heading">
       <p className="spatial-eyebrow">01 · Discover</p>
-      <h1 id="spatial-prompt-heading" tabIndex={-1}>What are you curious about?</h1>
+      <h1 id="spatial-prompt-heading" tabIndex={-1}>Read. Discover. Shop. Beyond ads.</h1>
+      <p className="spatial-fine">Follow your curiosity through stories, brands and discoveries that speak to your interests.</p>
       <form onSubmit={submit}>
         <label className="spatial-sr" htmlFor="spatial-prompt">Your curiosity</label>
         <textarea id="spatial-prompt" rows={2} maxLength={1000} value={prompt}
           placeholder="I'm curious about a quiet room, a bold garment, an unfamiliar coast…"
           onChange={event=>setPrompt(event.target.value)}/>
-        <p className="spatial-suggestions-label">Need a little inspiration?</p>
-        <div className="spatial-seed-row">
-          <button type="button" className="spatial-seed" onClick={()=>{setPrompt(suggestion.sentence);document.getElementById('spatial-prompt')?.focus()}}>{SEED_DISPLAY(suggestion)}</button>
-          <button type="button" className="spatial-circle" aria-label="Refresh suggestion" title="Refresh suggestion" onClick={()=>setSuggestion(previous=>pickSuggestions(INTEREST_SEEDS,[previous],1)[0])}>
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 3v5h-5"/></svg>
-          </button>
-          <button type="button" className="spatial-circle" aria-label="Surprise me" title="Show me something unexpected" onClick={()=>{
-            const drawn=drawSurprise(INTEREST_SEEDS,[suggestion],surpriseCursor.current)
-            surpriseCursor.current=drawn.cursor
-            setPrompt(drawn.seed.sentence)
-            document.getElementById('spatial-prompt')?.focus()
-          }}>
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 4l1.7 4.8L18.5 10.5l-4.8 1.7L12 17l-1.7-4.8L5.5 10.5l4.8-1.7z"/><path d="M18.5 15.5l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/></svg>
-          </button>
+        <div className="spatial-inspiration-row">
+          <p className="spatial-suggestions-label">Need a little inspiration?</p>
+          <div className="spatial-seed-row">
+            <button type="button" className="spatial-seed" onClick={()=>{setPrompt(suggestion.sentence);document.getElementById('spatial-prompt')?.focus()}}>{SEED_DISPLAY(suggestion)}</button>
+            <button type="button" className="spatial-circle" aria-label="Refresh suggestion" title="Refresh suggestion" onClick={()=>setSuggestion(previous=>pickSuggestions(INTEREST_SEEDS,[previous],1)[0])}>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 3v5h-5"/></svg>
+            </button>
+          </div>
         </div>
         <div className="spatial-mode-row">
+          <p className="spatial-fine">{editorialMode==='hybrid'?'Deeper editorial exploration.':'Faster delivery.'}{!capabilities?.hybridAvailable?' Hybrid is currently unavailable.':''}</p>
           <fieldset className="spatial-mode spatial-mode-compact">
             <legend className="spatial-sr">Editorial mode</legend>
             <label className="spatial-mode-option">
@@ -915,7 +910,6 @@ export default function SpatialApp(){
               <span className="spatial-mode-card">Hybrid · Wonder + Spark</span>
             </label>
           </fieldset>
-          <p className="spatial-fine">{editorialMode==='hybrid'?'Deeper editorial exploration. May take longer.':'Faster editorial discovery.'}{!capabilities?.hybridAvailable?' Hybrid is currently unavailable.':''}</p>
         </div>
         <label className="spatial-consent">
           <input type="checkbox" checked={consent} disabled={composing} onChange={event=>setConsent(event.target.checked)}/>
