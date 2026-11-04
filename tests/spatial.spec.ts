@@ -416,6 +416,19 @@ test('generating panel fits narrow viewports without horizontal overflow',async(
   await expect(page.getByTestId('spatial-edition-chip')).toBeVisible({timeout:15000})
 })
 
+test('failed generation chunk load shows a reload error instead of stranding the panel',async({page})=>{
+  await page.route('**/assets/articles-*.js',route=>route.abort())
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await expect(page.locator('.spatial-canvas')).toBeVisible()
+  await submitPrompt(page)
+  await expect(page.getByText('Could not start generation.')).toBeVisible({timeout:10000})
+  await expect(page.getByText('Reload the page and try again.')).toBeVisible()
+  const submit=page.locator('button[type=submit]')
+  await expect(submit).toBeEnabled()
+  await expect(submit).toContainText('Begin exploration →')
+})
+
 test('article opt-in stages three docks and renders deck plus brand captions',async({page})=>{
   let body:unknown=null
   await page.route('**/api/editorial',route=>{

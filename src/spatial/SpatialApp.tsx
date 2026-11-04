@@ -471,7 +471,6 @@ export default function SpatialApp(){
     const wantArticles=formatOverride?formatOverride==='articles':articleFormat
     const wantStory=!wantArticles&&(formatOverride?formatOverride==='story':consent&&!articleFormat)
     const wantCount:1|3=wantArticles?3:1
-    await import('./ArticleCard')
     const tearDownAssembly=()=>{
       setComposing(false)
       window.clearInterval(tickerRef.current)
@@ -480,6 +479,14 @@ export default function SpatialApp(){
       const assembly=assemblyRef.current
       if(assembly&&field){assembly.dispose(field.scene);assemblyRef.current=null}
     }
+    // Chunk loads can fail on stale sessions after a deployment: fail loudly
+    // with recovery guidance instead of stranding the Generating panel.
+    const failStart=()=>{
+      tearDownAssembly()
+      setArticleError({title:'Could not start generation.',detail:'Some components failed to load, usually after an update. Reload the page and try again.'})
+      setStatus('Could not start generation.')
+    }
+    try{await import('./ArticleCard')}catch{failStart();return}
     // Either format settles through the same promenade staging. Article
     // editions carry no EditorialPlan, so Sources stays hidden for them.
     let fullPlan:StagedPlan|null=null
@@ -488,9 +495,13 @@ export default function SpatialApp(){
     let counts:{requested:number;published:number}|null=null
     let staged:StagedExhibit[],skipped:number
     if(wantArticles||wantStory){
-      const {articleStatusCopy,fetchArticleEdition,hasStageableArticles}=await import('./articles')
-      const {createArticleTracker}=await import('./editorial-progress')
-      const {stageArticleEdition}=await import('./staging')
+      let modules:{articles:typeof import('./articles');tracker:typeof import('./editorial-progress');staging:typeof import('./staging')}
+      try{
+        modules={articles:await import('./articles'),tracker:await import('./editorial-progress'),staging:await import('./staging')}
+      }catch{failStart();return}
+      const {articleStatusCopy,fetchArticleEdition,hasStageableArticles}=modules.articles
+      const {createArticleTracker}=modules.tracker
+      const {stageArticleEdition}=modules.staging
       if(submitId!==submitIdRef.current)return
       const tracker=createArticleTracker()
       setProgress(tracker.snapshot())
@@ -523,8 +534,12 @@ export default function SpatialApp(){
     }else{
       // The mode propagates only to a contract backend: the current strict
       // prompt shape would 400 an extra field, so omission means Lite there.
-      const {createStandardTracker}=await import('./editorial-progress')
-      const {stageEdition}=await import('./staging')
+      let standardModules:{tracker:typeof import('./editorial-progress');staging:typeof import('./staging')}
+      try{
+        standardModules={tracker:await import('./editorial-progress'),staging:await import('./staging')}
+      }catch{failStart();return}
+      const {createStandardTracker}=standardModules.tracker
+      const {stageEdition}=standardModules.staging
       const standardTracker=createStandardTracker()
       setProgress(standardTracker.snapshot())
       const {edition,honest:baseHonest,fallbackReason:baseReason,budget:baseBudget,timedOut:baseTimedOut,modeError:refused,generation:baseGeneration}=await fetchEdition(trimmed,consent,fetch,{onResponse:()=>directorRef.current.onResponse(),signal:controller.signal,editorialMode:capabilities?selectedMode:undefined})
