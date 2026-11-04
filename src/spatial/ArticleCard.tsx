@@ -13,10 +13,10 @@ const ResearchSources=lazy(()=>import('./ResearchSources'))
 // from the stable article ID; feature exhibits keep the existing layout
 // untouched. Artwork that fails to load is dropped, never broken-image
 // icons: revoked or missing media fails closed per the article contract.
-export default function ArticleCard({exhibit,plan,index,total,expanded,onToggle,scrollTop,spotlightId,onConsumeSpotlight,template}:{
+export default function ArticleCard({exhibit,plan,index,total,expanded,onToggle,scrollTop,spotlightId,onConsumeSpotlight,template,editorialTier}:{
   exhibit:StagedExhibit;plan:StagedPlan|null;index:number;total:number;
   expanded:boolean;onToggle:()=>void;scrollTop:{current:number};
-  spotlightId:string|null;onConsumeSpotlight:()=>void;template?:BookTemplate
+  spotlightId:string|null;onConsumeSpotlight:()=>void;template?:BookTemplate;editorialTier?:{label:string;description:string}|null
 }){
   const headingRef=useRef<HTMLHeadingElement>(null)
   const scroller=useRef<HTMLElement|null>(null)
@@ -59,7 +59,7 @@ export default function ArticleCard({exhibit,plan,index,total,expanded,onToggle,
   const paragraphs=exhibit.narrative.split(/\n\n+/).map(paragraph=>paragraph.trim()).filter(Boolean)
   const toggleLabel=expanded?'Collapse story':'Expand story'
   const head=<div className="article-head">
-    <p className="spatial-eyebrow">Story · Exhibit {index+1} of {total}</p>
+    <p className="spatial-eyebrow">Story · Exhibit {index+1} of {total}{article&&editorialTier?` · ${editorialTier.label}`:''}</p>
     <button type="button" id={expanded?undefined:'article-expand-toggle'} className="article-toggle"
       aria-label={toggleLabel} aria-expanded={expanded} title={toggleLabel} onClick={onToggle}>
       {expanded
@@ -121,6 +121,7 @@ export default function ArticleCard({exhibit,plan,index,total,expanded,onToggle,
       <div className="eb-headblock">
         <h2 ref={headingRef} tabIndex={expanded?-1:undefined} className="eb-headline">{exhibit.title}</h2>
         <p className="article-deck eb-deck">{article.deck}</p>
+        {editorialTier?<p className="spatial-fine eb-tier">{editorialTier.description}</p>:null}
       </div>
       <div className="eb-herofigure">
         <ObjectDiscovery key={exhibit.assetId} assetId={exhibit.assetId} image={exhibit.image} alt={`Artwork for ${exhibit.title}`}

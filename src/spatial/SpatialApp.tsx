@@ -47,7 +47,7 @@ const REASON_COPY:Record<string,string>={
   disabled:'AI disabled',consent_missing:'AI consent off',
   pilot_allowlist:'pilot unavailable',pilot_not_ready:'pilot unavailable',pilot_authorization:'pilot unavailable',
   configuration:'AI unavailable',analysis_permissions:'AI unavailable',budget:'AI budget reached',
-  invalid_output:'AI output rejected',editorial_rejected:'AI output rejected',
+  invalid_output:'AI output rejected',editorial_rejected:'AI output rejected',editorial_blocked:'AI output blocked',
 }
 type FlyTo=(toPos:[number,number,number],toLook:[number,number,number],dur:number,onDone:()=>void,onFrame?:(k:number)=>void)=>void
 
@@ -63,6 +63,7 @@ export default function SpatialApp(){
   const [entered,setEntered]=useState(false)
   const [exhibits,setExhibits]=useState<StagedExhibit[]>([])
   const [editionLabel,setEditionLabel]=useState<HonestState|null>(null)
+  const [editionTier,setEditionTier]=useState<{label:string;description:string}|null>(null)
   const [progress,setProgress]=useState<ProgressSnapshot|null>(null)
   const [fallbackReason,setFallbackReason]=useState<string|null>(null)
   const [budgetMessage,setBudgetMessage]=useState<string|null>(null)
@@ -103,7 +104,7 @@ export default function SpatialApp(){
   const fieldRef=useRef<SilverField|null>(null)
   const directorRef=useRef(new AssemblyDirector())
   const assemblyRef=useRef<AssemblyField|null>(null)
-  const stagedRef=useRef<{exhibits:StagedExhibit[];label:HonestState;skipped:number;reason?:string;timedOut:boolean;fullPlan:StagedPlan|null;generation:GenerationMetadata|null}|null>(null)
+  const stagedRef=useRef<{exhibits:StagedExhibit[];label:HonestState;skipped:number;reason?:string;timedOut:boolean;fullPlan:StagedPlan|null;generation:GenerationMetadata|null;editorialTier:{label:string;description:string}|null}|null>(null)
   // True cancellation for the edition request: a new submit or Clear aborts
   // the in-flight fetch instead of leaving it to run out the 90s bound. The
   // submit-ID guard still ignores any response that slips through the race.
@@ -290,6 +291,7 @@ export default function SpatialApp(){
                 setGenerationMode(staged.generation?.editorialMode??null)
                 setExhibits(staged.exhibits)
                 setEditionLabel(staged.label)
+                setEditionTier(staged.editorialTier)
                 setFallbackReason(staged.reason??null)
                 setStatus(editionStatusCopy(staged.timedOut,staged.skipped,staged.exhibits.some(exhibit=>exhibit.article)?'article':'feature'))
                 setShowDock(false)
@@ -481,6 +483,7 @@ export default function SpatialApp(){
     // editions carry no EditorialPlan, so Sources stays hidden for them.
     let fullPlan:StagedPlan|null=null
     let honest:HonestState,reason:string|undefined,timedOut:boolean,generation:GenerationMetadata|null
+    let tier:{label:string;description:string}|null=null
     let staged:StagedExhibit[],skipped:number
     if(wantArticles||wantStory){
       const {articleStatusCopy,fetchArticleEdition}=await import('./articles')
@@ -511,6 +514,7 @@ export default function SpatialApp(){
         return
       }
       honest=result.honest;reason=result.fallbackReason;timedOut=result.timedOut;generation=result.generation
+      tier=result.edition.editorialTier??null
       staged=articleStaged.exhibits;skipped=articleStaged.skipped
       setProgress(tracker.finish({ok:true,staged:true,evidence:result.evidence,revised:result.generation?.revisionModel!=null}))
     }else{
@@ -549,6 +553,7 @@ export default function SpatialApp(){
       setGenerationMode(generation?.editorialMode??null)
       setExhibits(staged)
       setEditionLabel(honest)
+      setEditionTier(tier)
       setFallbackReason(reason??null)
       setShowDock(false)
       setComposing(false)
@@ -560,7 +565,7 @@ export default function SpatialApp(){
       }))
       return
     }
-    stagedRef.current={exhibits:staged,label:honest,skipped,reason,timedOut,fullPlan,generation}
+    stagedRef.current={exhibits:staged,label:honest,skipped,reason,timedOut,fullPlan,generation,editorialTier:tier}
     directorRef.current.onSettled()
   }
 
@@ -596,6 +601,7 @@ export default function SpatialApp(){
     setElapsed(0)
     setExhibits([])
     setEditionLabel(null)
+    setEditionTier(null)
     setFallbackReason(null)
     setExpanded(false)
     setSpotlight(null)
@@ -655,7 +661,7 @@ export default function SpatialApp(){
     const removed=before.length-kept.length
     setExhibits(kept)
     setSpotlight(current=>current&&kept.some(exhibit=>exhibit.assetId===current.assetId)?current:null)
-    if(!kept.length){setShowDock(true);setEditionLabel(null);setFallbackReason(null)}
+    if(!kept.length){setShowDock(true);setEditionLabel(null);setEditionTier(null);setFallbackReason(null)}
     setStatus(reason==='unverified'
       ?'The exhibition could not be verified; unverified exhibits were removed.'
       :`${removed} exhibit${removed===1?'':'s'} ${removed===1?'was':'were'} removed: the catalog no longer lists ${removed===1?'it':'them'}.`)
@@ -934,11 +940,11 @@ export default function SpatialApp(){
     </section>}
     {active&&mode==='promenade'&&<section id="spatial-rail" tabIndex={-1} className="spatial-rail" aria-label={`Contents of ${active.title}`}>
       <Suspense fallback={null}><ArticleCard key={active.assetId} exhibit={active} plan={planRef.current} index={current} total={exhibits.length}
-        expanded={false} onToggle={expandStory} scrollTop={articleScroll}
+        expanded={false} onToggle={expandStory} scrollTop={articleScroll} editorialTier={editionTier}
         spotlightId={spotlight?.assetId===active.assetId?spotlight.hotspotId:null} onConsumeSpotlight={consumeSpotlight}/></Suspense>
     </section>}
     {expanded&&active&&mode==='promenade'&&<Suspense fallback={null}><ArticleCard key={`expanded-${active.assetId}`} exhibit={active} plan={planRef.current} index={current} total={exhibits.length}
-      expanded onToggle={collapseStory} scrollTop={articleScroll} spotlightId={null} onConsumeSpotlight={consumeSpotlight}/></Suspense>}
+      expanded onToggle={collapseStory} scrollTop={articleScroll} spotlightId={null} onConsumeSpotlight={consumeSpotlight} editorialTier={editionTier}/></Suspense>}
     {mode==='network'&&<nav id="spatial-journey" tabIndex={-1} className="spatial-journey-bar" aria-label="Journey network">
       <button type="button" onClick={backToPromenade}>← Promenade</button>
       <button type="button" onClick={surprise}>Surprise me</button>
