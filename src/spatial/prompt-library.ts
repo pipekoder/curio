@@ -2,56 +2,64 @@
 // pairs. Display text preserves the specified wording exactly; each seed
 // maps to a hand-written natural sentence for the prompt field. Selection is
 // client-only logic over this eligible content — never an AI call.
+//
+// Hackathon Demo curation vocabulary: every subject names a region
+// (Swedish, Scandinavian, Nordic, Japanese, Asian) and a category
+// (interior, home, ceramic, clothing, travel), optionally with a material
+// (ceramic, wood, concrete, linen, glass, stone, metal) or a style
+// (minimal, quiet, natural, contemporary, handcrafted, timeless). The pill
+// shows "subject · direction"; clicking it fills the prompt field with the
+// sentence. The refresh button draws one new seed outside the current pick;
+// typed input stays unrestricted. tests/spatial-prompt-library.test.ts pins
+// the exact list and the vocabulary rule.
 export type InterestSeed={subject:string;direction:string;sentence:string}
 
 const seed=(subject:string,direction:string,sentence:string):InterestSeed=>({subject,direction,sentence})
 
 export const INTEREST_SEEDS:readonly InterestSeed[]=[
-  // Interior (4)
-  seed('Scandinavian furniture','craftsmanship and everyday living',
-    "I'm curious about Scandinavian furniture, especially its craftsmanship and connection to everyday living."),
-  seed('Warm minimalism','natural materials and atmosphere',
-    "I'm curious about warm minimalism, especially its natural materials and atmosphere."),
-  seed('Vintage interiors','objects with history and character',
-    "I'm curious about vintage interiors, especially objects with history and character."),
-  seed('Contemporary living spaces','architecture and cultural influence',
-    "I'm curious about contemporary living spaces, especially their architecture and cultural influence."),
-  // Art (4)
-  seed('Contemporary sculpture','form, texture and emotion',
-    "I'm curious about contemporary sculpture, especially its form, texture and emotion."),
-  seed('Abstract art','color and visual expression',
-    "I'm curious about abstract art, especially its color and visual expression."),
-  seed('Photography','places, memory and perspective',
-    "I'm curious about photography, especially places, memory and perspective."),
-  seed('Art and everyday objects','unexpected creative connections',
-    "I'm curious about art and everyday objects, especially their unexpected creative connections."),
-  // Fashion (4)
-  seed('Contemporary fashion','personal identity and expression',
-    "I'm curious about contemporary fashion, especially personal identity and expression."),
-  seed('Timeless wardrobe pieces','silhouettes and craftsmanship',
-    "I'm curious about timeless wardrobe pieces, especially their silhouettes and craftsmanship."),
-  seed('Jewelry and adornment','symbolism and cultural traditions',
-    "I'm curious about jewelry and adornment, especially their symbolism and cultural traditions."),
-  seed('Textiles and fabrics','techniques and creative heritage',
-    "I'm curious about textiles and fabrics, especially their techniques and creative heritage."),
-  // Lifestyle (4)
-  seed('Slow living','everyday rituals and meaningful objects',
-    "I'm curious about slow living, especially everyday rituals and meaningful objects."),
-  seed('Food and table culture','design and shared experiences',
-    "I'm curious about food and table culture, especially design and shared experiences."),
-  seed('Nature-inspired living','materials and sensory experiences',
-    "I'm curious about nature-inspired living, especially materials and sensory experiences."),
-  seed('Contemporary wellbeing','spaces, habits and lifestyles',
-    "I'm curious about contemporary wellbeing, especially spaces, habits and lifestyles."),
-  // Travel (4)
-  seed('Japanese cities','architecture and everyday culture',
-    "I'm curious about Japanese cities, especially their architecture and everyday culture."),
-  seed('Mediterranean destinations','craftsmanship and local traditions',
-    "I'm curious about Mediterranean destinations, especially their craftsmanship and local traditions."),
-  seed('Scandinavian landscapes','design, nature and ways of living',
-    "I'm curious about Scandinavian landscapes, especially their design, nature and ways of living."),
-  seed('Hidden urban places','independent culture and creative communities',
-    "I'm curious about hidden urban places, especially their independent culture and creative communities."),
+  // Nordic and Scandinavian interiors and homes (8)
+  seed('Quiet Nordic interiors','wood, light and calm spaces',
+    "I'm curious about quiet Nordic interiors, especially their wood, light and calm spaces."),
+  seed('Swedish homes','shaped by wood and light',
+    "I'm curious about Swedish homes, especially those shaped by wood and light."),
+  seed('Nordic concrete interiors','natural materials and texture',
+    "I'm curious about Nordic concrete interiors, especially their natural materials and texture."),
+  seed('Nordic stone interiors','quiet monumental calm',
+    "I'm curious about Nordic stone interiors, especially their quiet monumental calm."),
+  seed('Handcrafted Scandinavian interiors','natural materials and craft',
+    "I'm curious about handcrafted Scandinavian interiors, especially their natural materials and craft."),
+  seed('Nordic homes in glass and light','craft and transparency',
+    "I'm curious about Nordic homes in glass and light, especially their craft and transparency."),
+  seed('Timeless Nordic homes','metal, wood and honest craft',
+    "I'm curious about timeless Nordic homes, especially their metal, wood and honest craft."),
+  seed('Swedish country homes','wood, stone and craft',
+    "I'm curious about Swedish country homes, especially their wood, stone and craft."),
+  // Japanese and Asian interiors and homes (6)
+  seed('Minimal Japanese homes','stone, wood and shadow',
+    "I'm curious about minimal Japanese homes, especially their stone, wood and shadow."),
+  seed('Japanese wood interiors','handcrafted warmth',
+    "I'm curious about Japanese wood interiors, especially their handcrafted warmth."),
+  seed('Natural Japanese interiors','light and emptiness',
+    "I'm curious about natural Japanese interiors, especially their light and emptiness."),
+  seed('Japanese concrete homes','architecture and stillness',
+    "I'm curious about Japanese concrete homes, especially their architecture and stillness."),
+  seed('Asian ceramic homes','vessels and quiet rituals',
+    "I'm curious about Asian ceramic homes, especially their vessels and quiet rituals."),
+  seed('Scandinavian home rituals','morning light and linen',
+    "I'm curious about Scandinavian home rituals, especially their morning light and linen."),
+  // Ceramic, clothing and travel (6)
+  seed('Japanese ceramic rituals','tea bowls and morning routines',
+    "I'm curious about Japanese ceramic rituals, especially their tea bowls and morning routines."),
+  seed('Scandinavian clothing','everyday life and honest fabrics',
+    "I'm curious about Scandinavian clothing, especially its everyday life and honest fabrics."),
+  seed('Japanese travel','design and architecture',
+    "I'm curious about Japanese travel, especially its design and architecture."),
+  seed('Scandinavian linen clothing','timeless everyday wear',
+    "I'm curious about Scandinavian linen clothing, especially its timeless everyday wear."),
+  seed('Contemporary Nordic travel','cabins and coastlines',
+    "I'm curious about contemporary Nordic travel, especially its cabins and coastlines."),
+  seed('Timeless Swedish clothing','linen layers and quiet tailoring',
+    "I'm curious about timeless Swedish clothing, especially its linen layers and quiet tailoring."),
 ]
 
 export const SEED_DISPLAY=(seed:InterestSeed):string=>`${seed.subject} · ${seed.direction}`

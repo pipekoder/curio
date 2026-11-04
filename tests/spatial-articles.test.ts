@@ -193,6 +193,25 @@ describe('spatial article edition fetch', () => {
       {outcome: 'reviewing', eligibleImages: 6, requiredImages: 6, remainingCandidates: 0, processing: 0, generationStage: 'chief_editor', modelCalls: null},
     ])
   })
+  it('sends the same explorationId on the initial request and every poll', async () => {
+    const id='123e4567-e89b-42d3-a456-426614174000'
+    const bodies:string[]=[]
+    const responses=[
+      new Response(JSON.stringify({status:'preparing',fallbackReason:'analysis_pending',eligibleImages:2,requiredImages:6,preparation:{outcome:'processing',remainingCandidates:4,processing:1,retryAfterMs:0}}),{status:202}),
+      new Response(JSON.stringify(articleResponseFixture()),{status:200}),
+    ]
+    const fetcher=vi.fn(async (_url:unknown,init:{body:string})=>{bodies.push(init.body);return responses.shift()!})
+    const result=await fetchArticleEdition('quiet rooms',true,fetcher as unknown as typeof fetch,{explorationId:id})
+    expect(result.edition?.articleEdition.articles).toHaveLength(3)
+    expect(bodies).toHaveLength(2)
+    for(const body of bodies)expect(JSON.parse(body)).toMatchObject({prompt:'quiet rooms',consent:true,explorationId:id})
+  })
+  it('omits explorationId for legacy callers that provide none', async () => {
+    let body=''
+    const fetcher=vi.fn(async (_url:unknown,init:{body:string})=>{body=init.body;return new Response(JSON.stringify(articleResponseFixture()),{status:200})})
+    await fetchArticleEdition('quiet rooms',true,fetcher as unknown as typeof fetch)
+    expect(JSON.parse(body)).not.toHaveProperty('explorationId')
+  })
   it('passes backend-observed model invocations from polls to the progress callback', async () => {
     const seen: ArticlePoll[] = []
     const calls = [

@@ -1,4 +1,5 @@
-import {useEffect,useId,useRef,useState} from 'react'
+import {useEffect,useId,useLayoutEffect,useRef,useState,type CSSProperties} from 'react'
+import {createPortal} from 'react-dom'
 import type {StagedHotspot} from './staging'
 import {fetchObjectRegions,mergeHotspots,type ObjectRegion} from './object-regions'
 
@@ -6,6 +7,10 @@ import {fetchObjectRegions,mergeHotspots,type ObjectRegion} from './object-regio
 // approved SAM regions merged with exact authored points, and one compact
 // anchored popover. Selection never refetches and never infers; anything
 // unreviewed, revoked or failed simply leaves no marker behind.
+// The popover renders in a body portal with viewport-fixed positioning so
+// ancestor overflow never clips it: it sits beside its hotspot, flips
+// left/right when space runs out, and clamps fully inside the viewport.
+// Narrow screens get a bottom sheet through the stylesheet instead.
 export default function ObjectDiscovery({assetId,image,alt,authored,caption,initialSelectedId=null,onConsumeSpotlight,className,loading,width,height}:{
   assetId:string;image:string;alt:string;authored:readonly StagedHotspot[];caption?:{brand:string;fine:string};
   initialSelectedId?:string|null;onConsumeSpotlight?:()=>void;className?:string;loading?:'lazy'|'eager';width?:number;height?:number
@@ -15,7 +20,9 @@ export default function ObjectDiscovery({assetId,image,alt,authored,caption,init
   const [failed,setFailed]=useState(false)
   const popoverId=useId()
   const closeRef=useRef<HTMLButtonElement>(null)
+  const popRef=useRef<HTMLDivElement>(null)
   const markers=useRef(new Map<string,HTMLButtonElement>())
+  const [frame,setFrame]=useState<{left:number;top:number}|null>(null)
   useEffect(()=>{
     let alive=true
     void fetchObjectRegions(assetId).then(data=>{if(alive)setRegions(data?.regions??[])})
@@ -24,6 +31,28 @@ export default function ObjectDiscovery({assetId,image,alt,authored,caption,init
   useEffect(()=>{
     if(initialSelectedId){setSelected(initialSelectedId);onConsumeSpotlight?.()}
   },[initialSelectedId,onConsumeSpotlight])
+  // Viewport placement runs before paint so the card never flashes at a
+  // stale spot, then tracks resizes and scrolls while it stays open.
+  useLayoutEffect(()=>{
+    if(!selected)return
+    const place=()=>{
+      const marker=markers.current.get(selected)
+      const pop=popRef.current
+      const vw=window.innerWidth,vh=window.innerHeight,margin=12,gap=14
+      const w=Math.min(Math.max(pop?.offsetWidth||300,200),320,Math.max(vw-margin*2,200))
+      const h=Math.max(pop?.offsetHeight||240,120)
+      const r=marker?.getBoundingClientRect()
+      const cx=r?r.left+r.width/2:vw/2,cy=r?r.top+r.height/2:vh/2,hw=r?r.width/2:0
+      const right=cx+hw+gap
+      const left=Math.min(Math.max(margin,right+w<=vw-margin?right:cx-hw-gap-w),Math.max(margin,vw-margin-w))
+      const top=Math.min(Math.max(margin,cy-h/2),Math.max(margin,vh-margin-h))
+      setFrame({left:Math.round(left),top:Math.round(top)})
+    }
+    place()
+    window.addEventListener('resize',place)
+    window.addEventListener('scroll',place,true)
+    return ()=>{window.removeEventListener('resize',place);window.removeEventListener('scroll',place,true)}
+  },[selected])
   useEffect(()=>{
     if(!selected)return
     closeRef.current?.focus()
@@ -57,11 +86,10 @@ export default function ObjectDiscovery({assetId,image,alt,authored,caption,init
         aria-label={`Inspect ${point?.label??region?.label??'object'}`} aria-expanded={pressed} aria-controls={pressed?popoverId:undefined}
         onClick={()=>setSelected(pressed?null:candidate.id)}/>
     })}
-    {mark&&detail&&<>
+    {mark&&detail&&createPortal(<>
       <div className="object-catcher" aria-hidden="true" onClick={()=>setSelected(null)}/>
-      <div id={popoverId} role="dialog" aria-label={sam?.label??authoredDetail!.productName} className="object-popover"
-        style={{...(mark.x>0.62?{right:`calc(${(1-mark.x)*100}% + 14px)`}:{left:`calc(${mark.x*100}% + 14px)`}),
-          ...(mark.y>0.5?{bottom:`calc(${(1-mark.y)*100}% - 10px)`}:{top:`calc(${mark.y*100}% - 10px)`})}}>
+      <div id={popoverId} ref={popRef} role="dialog" aria-label={sam?.label??authoredDetail!.productName} className="object-popover is-floating"
+        style={{'--pop-left':`${frame?.left??12}px`,'--pop-top':`${frame?.top??12}px`} as CSSProperties}>
         <button ref={closeRef} type="button" className="object-popover-close" aria-label="Close object details"
           onClick={()=>{setSelected(null);markers.current.get(mark.id)?.focus()}}>×</button>
         <p className="spatial-eyebrow">Object</p>
@@ -80,7 +108,7 @@ export default function ObjectDiscovery({assetId,image,alt,authored,caption,init
             <ul>{authoredDetail!.assumptions.map(a=><li key={a}>{a}</li>)}</ul>
             <p className="spatial-fine">Manually authored hotspot · no SAM inference. Material and specifications unverified.</p></>}
       </div>
-    </>}
+    </>,document.body)}
     </div>
     {caption&&<><figcaption className="article-brand">{caption.brand}</figcaption>
       <figcaption className="spatial-fine">{caption.fine}</figcaption></>}

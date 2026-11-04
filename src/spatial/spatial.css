@@ -164,6 +164,8 @@
 .object-popover ul{margin:8px 0;padding-left:18px;font-size:12.5px;line-height:1.6;color:#3c4350}
 .object-popover .spatial-eyebrow{margin:0 0 6px}
 .object-popover .object-popover-close{position:absolute;top:8px;right:8px;width:32px;height:32px;min-height:32px;padding:0;margin:0;border:1px solid #c6ceda;border-radius:50%;background:#fff;color:#101219;font-size:18px;line-height:1;cursor:pointer}
+.object-popover.is-floating{position:fixed;left:var(--pop-left,12px);top:var(--pop-top,12px);max-width:min(320px,calc(100vw - 24px));max-height:min(70vh,480px)}
+@media(max-width:640px){.object-popover.is-floating{left:12px;right:12px;top:auto;width:auto;max-width:none;bottom:12px;bottom:calc(12px + env(safe-area-inset-bottom));max-height:min(60vh,420px)}}
 /* Article card: one reading surface shared by the rail card and the overlay. */
 .article-head{display:flex;align-items:flex-start;gap:12px}
 .article-head .spatial-eyebrow{flex:1;margin:0 0 10px}

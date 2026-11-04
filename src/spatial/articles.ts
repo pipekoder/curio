@@ -86,7 +86,7 @@ export function articleStatusCopy(fetch:ArticleFetch):{title:string;detail:strin
   }
 }
 
-export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImpl:typeof fetch=fetch,events:{onResponse?:()=>void;onPoll?:(poll:ArticlePoll)=>void;signal?:AbortSignal;timeoutMs?:number;editorialMode?:EditorialMode;articleCount?:1|3}={}):Promise<ArticleFetch>{
+export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImpl:typeof fetch=fetch,events:{onResponse?:()=>void;onPoll?:(poll:ArticlePoll)=>void;signal?:AbortSignal;timeoutMs?:number;editorialMode?:EditorialMode;articleCount?:1|3;explorationId?:string}={}):Promise<ArticleFetch>{
   const articleCount=events.articleCount??3
   const editionFormat=articleCount===1?ARTICLE_SINGLE_CONTRACT_VERSION:ARTICLE_CONTRACT_VERSION
   const bound=AbortSignal.timeout(events.timeoutMs??300000)
@@ -99,7 +99,9 @@ export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImp
     const signal=AbortSignal.any([bound,requestBound,...(events.signal?[events.signal]:[])])
     const response=await fetchImpl('/api/editorial',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({prompt,consent,editionFormat,...(events.editorialMode?{editorialMode:events.editorialMode}:{})}),
+      // The same explorationId rides every poll attempt so all of them
+      // resolve to one D1 job; a fresh ID starts a fresh job instead.
+      body:JSON.stringify({prompt,consent,editionFormat,...(events.editorialMode?{editorialMode:events.editorialMode}:{}),...(events.explorationId?{explorationId:events.explorationId}:{})}),
       signal,
     })
     if(response.status===202){
