@@ -105,7 +105,8 @@ it('validates exactly three articles with two or three unique exact-version imag
  expect(validateArticleEdition(two,items,sources,contexts,3).articles.every(article=>article.images.length===2)).toBe(true)
  const tooMany=structuredClone(three);tooMany.articles[0].images.push({catalogId:items[9].id,assetId:items[9].image.id,brandName:sources[27].value,brandSourceId:sources[27].id,productSourceIds:[sources[29].id]})
  expect(()=>validateArticleEdition(tooMany,items,sources,contexts,3)).toThrow()
- expect(()=>validateArticleEdition({...three,articles:three.articles.slice(0,2)},items,sources,contexts,2)).toThrow()
+ expect(validateArticleEdition({...three,articles:three.articles.slice(0,2)},items,sources,contexts,2).articles).toHaveLength(2)
+ expect(()=>validateArticleEdition({...three,articles:three.articles.slice(0,2)},items,sources,contexts,3)).toThrow()
  expect(new Set(three.articles[0].images.map(image=>image.brandName)).size).toBe(2)
 })
 it('rejects wrong catalog joins, unsupported brand attribution and reused images while allowing optional product citations',()=>{
@@ -446,7 +447,7 @@ it('fails closed when revised prose drops a cultural-claim passage',()=>{
  draft.articles[0].narrative='Revised prose without the quoted passage.'
  expect(()=>validateArticleEdition(mergeRevisionProse(ed,draft),items,claimed,contexts,3)).toThrow('cultural_claim')
 })
-it('rejects an edition whose reviewer-flagged image problem prose cannot fix',async()=>{
+it('publishes the valid articles when one reviewer-flagged image problem prose cannot fix',async()=>{
  mockPool(6)
  const grounding=(ed:EditorialArticleEdition)=>({...review(ed,3),featureFeedback:review(ed,3).featureFeedback.map((row,i)=>i?row:{...row,issues:[{severity:'high',code:'visual_grounding',evidenceRefs:[`feature:${ed.articles[0].heroAssetId}`],instruction:'The credited image cannot support this claim.'}]})})
  let calls=0
@@ -457,8 +458,10 @@ it('rejects an edition whose reviewer-flagged image problem prose cannot fix',as
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
  })
  vi.stubGlobal('fetch',send)
- const body=await (await post({},{interests:'An unfixable image-grounding study'})).json() as Record<string,unknown>
- expect(body).toMatchObject({source:'deterministic',status:'fallback',fallbackReason:'editorial_blocked',validationDiagnostic:{stage:'confirmation',code:'editorial_blocked'}})
+ const body=await (await post({},{interests:'An unfixable image-grounding study'})).json() as {source:string;articleEdition:{articles:{heroAssetId:string}[]};requestedCount:number;publishedCount:number;partial:boolean}
+ expect(body.source).toBe('meta')
+ expect([body.requestedCount,body.publishedCount,body.partial]).toEqual([3,2,true])
+ expect(body.articleEdition.articles).toHaveLength(2)
  expect(send).toHaveBeenCalledTimes(4)
  const revisionCall=JSON.parse(String(send.mock.calls[2][1].body))
  expect(revisionCall.response_format.json_schema.name).toBe('curio_articles_v1_revision')
@@ -748,6 +751,8 @@ it('validates a single story with the same structural safeguards',()=>{
   const one={...edition(1,3),version:ARTICLE_SINGLE_CONTRACT_VERSION}
   expect(validateArticleEdition(one,items,sources,contexts,1).articles).toHaveLength(1)
   expect(()=>validateArticleEdition(one,items,sources,contexts,3)).toThrow()
+  expect(validateArticleEdition({...edition(3,3),articles:edition(3,3).articles.slice(0,2)},items,sources,contexts,2).articles).toHaveLength(2)
+  expect(()=>validateArticleEdition({...edition(3,3),articles:edition(3,3).articles.slice(0,2)},items,sources,contexts,3)).toThrow()
   expect(()=>validateArticleEdition(edition(3,3),items,sources,contexts,1)).toThrow()
   const duplicate=structuredClone(one);duplicate.articles[0].images[1]=duplicate.articles[0].images[0]
   expect(()=>validateArticleEdition(duplicate,items,sources,contexts,1)).toThrow()
@@ -897,7 +902,7 @@ it('publishes boundary confirmation scores with the correct tier',async()=>{
 it('blocks confirmation hard integrity failures without publishing',async()=>{
   mockPool()
   for(const code of ['fact_integrity','visual_grounding','brand_integrity','safety']){
-    const send=stagedProvider(ed=>review(ed,5),ed=>scoredReview(ed,uniform(5),[{severity:'high',code}]))
+    const send=stagedProvider(ed=>review(ed,5),ed=>multiReview(ed,uniform(5),{0:[{severity:'high',code}],1:[{severity:'high',code}],2:[{severity:'high',code}]}))
     vi.stubGlobal('fetch',send)
     const response=await post({},{interests:`A hard-block study of ${code} in sitting rooms`})
     const body=await response.json() as Record<string,unknown>
@@ -955,12 +960,116 @@ it('persists the public tier on completed jobs while withholding internal scores
     vi.stubGlobal('fetch',provider())
     const config={EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db}
     const first=await (await post(config,{interests:'A tier-persistence study of garden rooms'})).json() as Record<string,unknown>
-    expect(first).toMatchObject({source:'meta',editorialTier:{label:"Editor's Pick"}})
+    expect(first).toMatchObject({source:'meta',editorialTier:{label:"Editor's Pick"},requestedCount:3,publishedCount:3,partial:false})
     expect(first).not.toHaveProperty('assessment')
     const row=sqlite.prepare('SELECT result_json FROM article_edition_jobs').get() as {result_json:string}
     expect(JSON.parse(row.result_json).assessment).toMatchObject({finalScore:100,tier:'editors_pick'})
     const second=await (await post(config,{interests:'A tier-persistence study of garden rooms'})).json() as Record<string,unknown>
-    expect(second).toMatchObject({source:'meta',cached:true,editorialTier:{label:"Editor's Pick"}})
+    expect(second).toMatchObject({source:'meta',cached:true,editorialTier:{label:"Editor's Pick"},requestedCount:3,publishedCount:3,partial:false})
     expect(second).not.toHaveProperty('assessment')
   }finally{sqlite.close()}
+})
+// PR3: partial 3-Story publication. Independently valid articles publish with
+// requested/published counts; only zero survivors fail explicitly.
+function customProvider(chief:(input:{articleCount:number;catalog:unknown[]})=>unknown,first:(ed:EditorialArticleEdition)=>unknown,confirm:(ed:EditorialArticleEdition)=>unknown){
+  let calls=0
+  return vi.fn(async(_url:string,init:RequestInit)=>{
+    const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content);calls++
+    const value=calls===1?chief(input):calls===2?first(input.edition):calls===3?toRevisionDraft(input.edition):confirm(input.edition)
+    return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
+  })
+}
+function multiReview(value:EditorialArticleEdition,dims:Record<string,number>,byArticle:Record<number,{severity:'low'|'medium'|'high';code:string}[]>){
+  return {rubricVersion:EDITORIAL_STANDARD_VERSION,
+    dimensions:Object.fromEntries(Object.entries(dims).map(([key,score])=>[key,{score,reason:'Independent assessment against supplied evidence.',evidenceRefs:[`feature:${value.articles[0].heroAssetId}`]}])),
+    magazineFeedback:'The edition is assessed.',
+    featureFeedback:value.articles.map((article,i)=>({assetId:article.heroAssetId,strengths:[],issues:(byArticle[i]??[]).map(issue=>({...issue,evidenceRefs:[article.images[0].brandSourceId],instruction:'Address the flagged concern.'}))})),
+    revisionInstructions:['Address the flagged concern.']}
+}
+const claimSource=(assetId:string,id:string)=>({id,assetId,kind:'cultural_claim',label:'Cultural claim',value:'A shared harvest ritual.',authority:'operator_reviewed_cultural',source:'cultural_evidence_pack'} as EditorialSource)
+it('publishes two of three articles when one chief article is invalid',async()=>{
+  const assetId=data[6].item.image.id,claimId=`${assetId}:cultural_claim_1`
+  vi.mocked(editorialArticlePool).mockResolvedValue({items,visualContexts:contexts,sources:[...sources,claimSource(assetId,claimId)],eligibleCount:24})
+  const send=customProvider(input=>{const draft=toDraft(edition(input.articleCount,3));draft.articles[2].culturalClaims=[{ref:'S1',narrativeText:'An unquoted ceremonial passage.'}];return draft},ed=>review(ed,5),ed=>review(ed,5))
+  vi.stubGlobal('fetch',send)
+  const body=await (await post({},{interests:'A partial chief-validation study of potting sheds'})).json() as {source:string;articleEdition:{articles:{heroAssetId:string}[]};requestedCount:number;publishedCount:number;partial:boolean}
+  expect(body.source).toBe('meta')
+  expect(body.requestedCount).toBe(3)
+  expect(body.publishedCount).toBe(2)
+  expect(body.partial).toBe(true)
+  expect(body.articleEdition.articles.map(article=>article.heroAssetId)).toEqual([data[0].item.image.id,data[3].item.image.id])
+  expect(send).toHaveBeenCalledTimes(4)
+})
+it('drops one confirmation hard-blocked article and publishes two',async()=>{
+  mockPool()
+  const send=stagedProvider(ed=>review(ed,5),ed=>multiReview(ed,uniform(5),{0:[{severity:'high',code:'fact_integrity'}]}))
+  vi.stubGlobal('fetch',send)
+  const body=await (await post({},{interests:'A partial hard-block study of laundry rooms'})).json() as {source:string;articleEdition:{articles:{heroAssetId:string}[]};requestedCount:number;publishedCount:number;partial:boolean;editorialTier:{label:string}}
+  expect(body.source).toBe('meta')
+  expect([body.requestedCount,body.publishedCount,body.partial]).toEqual([3,2,true])
+  expect(body.articleEdition.articles.map(article=>article.heroAssetId)).toEqual([data[3].item.image.id,data[6].item.image.id])
+  expect(body.editorialTier.label).toBe("Editor's Pick")
+  expect(send).toHaveBeenCalledTimes(4)
+})
+it('publishes one of three when two articles are hard-blocked',async()=>{
+  mockPool()
+  const send=stagedProvider(ed=>review(ed,5),ed=>multiReview(ed,uniform(5),{0:[{severity:'high',code:'brand_integrity'}],1:[{severity:'high',code:'visual_grounding'}]}))
+  vi.stubGlobal('fetch',send)
+  const body=await (await post({},{interests:'A single-survivor study of boot rooms'})).json() as {source:string;articleEdition:{articles:{heroAssetId:string}[]};requestedCount:number;publishedCount:number;partial:boolean}
+  expect(body.source).toBe('meta')
+  expect([body.requestedCount,body.publishedCount,body.partial]).toEqual([3,1,true])
+  expect(body.articleEdition.articles.map(article=>article.heroAssetId)).toEqual([data[6].item.image.id])
+  expect(send).toHaveBeenCalledTimes(4)
+})
+it('drops a revised article that loses its cultural-claim passage',async()=>{
+  const assetId=data[0].item.image.id,claimId=`${assetId}:cultural_claim_1`
+  vi.mocked(editorialArticlePool).mockResolvedValue({items,visualContexts:contexts,sources:[...sources,claimSource(assetId,claimId)],eligibleCount:24})
+  let calls=0
+  const send=vi.fn(async(_url:string,init:RequestInit)=>{
+    const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content);calls++
+    let value:unknown
+    if(calls===1){const draft=toDraft(edition(input.articleCount,3));draft.articles[0].narrative+=' It recalls a shared harvest ritual.';draft.articles[0].culturalClaims=[{ref:'S1',narrativeText:'a shared harvest ritual'}];value=draft}
+    else if(calls===2)value=review(input.edition,5)
+    else if(calls===3){const draft=toRevisionDraft(input.edition);draft.articles[0].narrative='Revised prose without the quoted passage.';value=draft}
+    else value=review(input.edition,5)
+    return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
+  })
+  vi.stubGlobal('fetch',send)
+  const body=await (await post({},{interests:'A revision-drop study of linen cupboards'})).json() as {source:string;articleEdition:{articles:{heroAssetId:string}[]};publishedCount:number;partial:boolean}
+  expect(body.source).toBe('meta')
+  expect([body.publishedCount,body.partial]).toEqual([2,true])
+  expect(body.articleEdition.articles.map(article=>article.heroAssetId)).toEqual([data[3].item.image.id,data[6].item.image.id])
+  expect(send).toHaveBeenCalledTimes(4)
+})
+it('fails closed when chief produces zero valid articles',async()=>{
+  const ids=[data[0].item.image.id,data[3].item.image.id,data[6].item.image.id]
+  vi.mocked(editorialArticlePool).mockResolvedValue({items,visualContexts:contexts,sources:[...sources,...ids.map((assetId,n)=>claimSource(assetId,`${assetId}:cultural_claim_${n+1}`))],eligibleCount:24})
+  const send=customProvider(input=>{const draft=toDraft(edition(input.articleCount,3));draft.articles.forEach((article,i)=>{article.culturalClaims=[{ref:`S${i+1}`,narrativeText:'An unquoted ceremonial passage.'}]});return draft},ed=>review(ed,5),ed=>review(ed,5))
+  vi.stubGlobal('fetch',send)
+  const body=await (await post({},{interests:'A zero-valid study of coal cellars'})).json() as Record<string,unknown>
+  expect(body).toMatchObject({source:'deterministic',fallbackReason:'provider_or_validation',validationDiagnostic:{stage:'chief_editor',code:'cultural_claim'},articleEdition:null})
+  expect(send).toHaveBeenCalledTimes(1)
+})
+it('persists partial editions on completed jobs with counts',async()=>{
+  const {sqlite,db}=preparationDb()
+  try{
+    vi.mocked(editorialArticlePool).mockResolvedValue(prepared(9,[]))
+    vi.stubGlobal('fetch',stagedProvider(ed=>review(ed,5),ed=>multiReview(ed,uniform(5),{1:[{severity:'high',code:'fact_integrity'}]})))
+    const config={EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db}
+    const first=await (await post(config,{interests:'A partial persistence study of garden sheds'})).json() as {source:string;articleEdition:{articles:unknown[]};requestedCount:number;publishedCount:number;partial:boolean;editorialTier:{label:string}}
+    expect(first.source).toBe('meta')
+    expect([first.requestedCount,first.publishedCount,first.partial]).toEqual([3,2,true])
+    expect(first.articleEdition.articles).toHaveLength(2)
+    expect(first.editorialTier.label).toBe("Editor's Pick")
+    const row=sqlite.prepare('SELECT result_json FROM article_edition_jobs').get() as {result_json:string}
+    expect(JSON.parse(row.result_json).articleEdition.articles).toHaveLength(2)
+    const second=await (await post(config,{interests:'A partial persistence study of garden sheds'})).json() as {source:string;cached:boolean;articleEdition:{articles:unknown[]};requestedCount:number;publishedCount:number;partial:boolean}
+    expect([second.source,second.cached,second.requestedCount,second.publishedCount,second.partial]).toEqual(['meta',true,3,2,true])
+    expect(second.articleEdition.articles).toHaveLength(2)
+  }finally{sqlite.close()}
+})
+it('schedules hotspots only for published articles',async()=>{
+  const {collectHotspotTargets}=await import('../worker/sam-hotspots')
+  const full=edition(3,3)
+  expect(collectHotspotTargets({version:full.version,title:full.title,deck:full.deck,articles:full.articles.slice(1)})).toEqual([data[3],data[4],data[5],data[6],data[7],data[8]].map(row=>row.item.image.id))
 })

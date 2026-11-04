@@ -1,6 +1,6 @@
 import {describe,expect,it,vi} from 'vitest'
 import {ARTICLE_CONTRACT_VERSION,ARTICLE_SINGLE_CONTRACT_VERSION} from '../shared/editorial-articles'
-import {articleStatusCopy,fetchArticleEdition,type ArticlePoll} from '../src/spatial/articles'
+import {articleStatusCopy,fetchArticleEdition,hasStageableArticles,type ArticlePoll} from '../src/spatial/articles'
 import {stageArticleEdition} from '../src/spatial/staging'
 import {articleEditionFixture,articleResponseFixture} from './article-fixtures'
 
@@ -92,6 +92,27 @@ describe('spatial article edition fetch', () => {
     expect(staged.exhibits[0].article?.researchReferences).toHaveLength(1)
     expect(staged.exhibits[0].article?.aiDisclosure).toBe('AI disclosure')
     expect(staged.exhibits[1].article?.researchReferences).toEqual([])
+  })
+  it('parses a partial edition with requested and published counts', async () => {
+    const {articleEdition} = articleEditionFixture()
+    const partial = {...articleEdition, articles: articleEdition.articles.slice(0, 2)}
+    const {edition, status} = await call(ok(articleResponseFixture({articleEdition: partial, requestedCount: 3, publishedCount: 2, partial: true})))
+    expect(status).toBeNull()
+    expect(edition!.articleEdition.articles).toHaveLength(2)
+    expect(edition!.requestedCount).toBe(3)
+    expect(edition!.publishedCount).toBe(2)
+    expect(edition!.partial).toBe(true)
+  })
+  it('stages a partial edition article by article', () => {
+    const {articleEdition, items} = articleEditionFixture()
+    const {exhibits, skipped} = stageArticleEdition({articleEdition: {...articleEdition, articles: articleEdition.articles.slice(0, 2)}, items})
+    expect(skipped).toBe(0)
+    expect(exhibits).toHaveLength(2)
+  })
+  it('treats only zero stageable articles as incomplete', () => {
+    expect(hasStageableArticles(0)).toBe(false)
+    expect(hasStageableArticles(1)).toBe(true)
+    expect(hasStageableArticles(3)).toBe(true)
   })
   it('skips articles with unresolvable images instead of patching them', async () => {
     const {articleEdition, items} = articleEditionFixture()

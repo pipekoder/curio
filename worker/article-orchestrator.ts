@@ -109,7 +109,7 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
     // the public tier label. Rows written before tiers omit the label.
     const tier=editorialTierLabel.safeParse(saved.editorialTier)
     return Response.json({format,source:'meta',retrieval:'d1',cached:true,articleEdition:edition,items:pool.items,generation:approved.revisedIds.length?{...(saved.generation as Record<string,unknown>),revisionModel:'muse-spark-1.3',confirmationModel:'muse-spark-1.3'}:saved.generation,
-      ...(saved.evidence!==undefined?{evidence:saved.evidence}:{}),...(tier.success?{editorialTier:tier.data}:{}),...(saved.aiDisclosure?{researchReferences:research,aiDisclosure:saved.aiDisclosure}:{}),inference:{attempted:false,reservedUnits:0,latencyMs:null,usage:null}})
+      ...(saved.evidence!==undefined?{evidence:saved.evidence}:{}),...(tier.success?{editorialTier:tier.data}:{}),requestedCount:articleCount,publishedCount:edition.articles.length,partial:edition.articles.length<articleCount,...(saved.aiDisclosure?{researchReferences:research,aiDisclosure:saved.aiDisclosure}:{}),inference:{attempted:false,reservedUnits:0,latencyMs:null,usage:null}})
   }catch{/* A changed version, source or grant invalidates the saved result. */}
   if(job.state==='completed'){
     const changed={...base,status:'unavailable',fallbackReason:'evidence_changed'}
