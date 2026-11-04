@@ -651,6 +651,11 @@ export default function SpatialApp(){
   }
 
   const finishClear=()=>{
+    // Jump to the top instantly before exiting: a smooth scroll from the
+    // bottom would emit scroll events while the mode is already promenade
+    // with the page still tall, and the scroll-entry handler would reopen
+    // the network the Clear just left.
+    window.scrollTo(0,0)
     submitIdRef.current++
     explorationIdRef.current=null
     fetchAbortRef.current?.abort()
@@ -683,7 +688,6 @@ export default function SpatialApp(){
     setShowDock(true)
     setAnnounce(removed.length?`Visit cleared. ${removed.length} keys removed.`:'Visit cleared.')
     bridgeRef.current!.emit({type:'clear',removed})
-    window.scrollTo({top:0,behavior:reduced.current?'auto':'smooth'})
   }
 
   const reopen=()=>{

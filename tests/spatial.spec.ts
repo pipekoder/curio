@@ -96,6 +96,10 @@ test('demo header hides journey buttons while the network keeps working',async({
   await expect(header.getByRole('button',{name:'Promenade',exact:true})).toHaveCount(0)
   await openJourneyByScroll(page)
   await expect(header.getByRole('button',{name:'Promenade',exact:true})).toHaveCount(0)
+  // The entry camera flight still runs at the mode flip, and back
+  // navigation is correctly ignored mid-transit: settle first, as every
+  // other journey exit test does.
+  await page.waitForTimeout(1800)
   await page.getByRole('button',{name:'← Promenade'}).click()
   await page.waitForFunction(()=>window.__spatial?.().mode==='promenade',{timeout:10000})
   await submitPrompt(page)
@@ -1079,6 +1083,11 @@ test('clear from the network exhales and wipes the visit',async({page})=>{
   const snapshot=await page.evaluate(()=>window.__spatial?.())
   expect(snapshot?.mode).toBe('promenade')
   await expect(page.getByLabel('Your curiosity')).toBeVisible()
+  // The cleared Discover experience starts a new exploration cleanly.
+  await submitPrompt(page)
+  await expect(page.getByTestId('spatial-edition-chip')).toBeVisible({timeout:15000})
+  expect(await page.evaluate(()=>sessionStorage.getItem('curio.spatial.session.v1'))).not.toBeNull()
+  expect(await page.evaluate(()=>window.__spatial?.().mode)).toBe('promenade')
 })
 
 test('reduced-motion journey uses the toolbar and panel',async({page})=>{
