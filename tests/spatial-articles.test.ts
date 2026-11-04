@@ -152,10 +152,10 @@ describe('spatial article edition fetch', () => {
     expect(result.honest).toBe('meta')
     expect(result.edition?.articleEdition.articles).toHaveLength(1)
   })
-  it('reports the three-image requirement for a single story', async () => {
-    const result = await fetchArticleEdition('quiet rooms', true, err(409, {status: 'insufficient_content', fallbackReason: 'insufficient_content', eligibleImages: 2, requiredImages: 3}) as unknown as typeof fetch, {articleCount: 1})
+  it('reports the two-image requirement for a single story', async () => {
+    const result = await fetchArticleEdition('quiet rooms', true, err(409, {status: 'insufficient_content', fallbackReason: 'insufficient_content', eligibleImages: 1, requiredImages: 2}) as unknown as typeof fetch, {articleCount: 1})
     expect(result.status).toBe('insufficient_content')
-    expect(articleStatusCopy(result).detail).toContain('2 of 3 required images')
+    expect(articleStatusCopy(result).detail).toContain('1 of 2 required images')
   })
   it('reports each preparation poll to the progress callback', async () => {
     const seen: ArticlePoll[] = []
