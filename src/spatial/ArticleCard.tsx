@@ -133,7 +133,8 @@ export default function ArticleCard({exhibit,plan,index,total,expanded,onToggle,
     <div className="eb-flow">{flow}</div>
     {exhibit.thread&&<p className="article-thread eb-thread">{exhibit.thread}</p>}
     {plan?<Suspense fallback={null}><Sources exhibit={exhibit} plan={plan}/></Suspense>:null}
-    {article.researchReferences?.length||article.aiDisclosure?<Suspense fallback={null}><ResearchSources references={article.researchReferences??[]} disclosure={article.aiDisclosure}/></Suspense>:null}
+    {article.researchReferences?.length?<Suspense fallback={null}><ResearchSources references={article.researchReferences??[]}/></Suspense>:null}
+    <p className="spatial-fine">AI-generated editorial content.</p>
   </>
   const bookClass=`editorial-book is-${variant}${expanded?'':' is-compact'}`
   if(expanded)return <div className="spatial-story-backdrop is-expanded" onClick={onToggle}>

@@ -1094,7 +1094,7 @@ it('keeps fabricated historical and brand claims blocked in 3-Story',async()=>{
   expect(body).toMatchObject({source:'deterministic',status:'fallback',fallbackReason:'editorial_blocked',articleEdition:null,validationDiagnostic:{stage:'confirmation',code:'editorial_blocked'}})
   expect(send).toHaveBeenCalledTimes(4)
 })
-it('withholds imaginative calibration from single-story v2 review',async()=>{
+it('sends imaginative calibration to single-story v2 review for single/triple consistency',async()=>{
   mockPool(3)
   const send=provider();vi.stubGlobal('fetch',send)
   const result=await (await post({},{editionFormat:ARTICLE_SINGLE_CONTRACT_VERSION})).json() as Record<string,unknown>
@@ -1102,10 +1102,10 @@ it('withholds imaginative calibration from single-story v2 review',async()=>{
   expect(send).toHaveBeenCalledTimes(4)
   for(const index of [1,3]){
     const instruction=JSON.parse(String(send.mock.calls[index][1].body)).messages[0].content as string
-    expect(instruction).not.toContain('do not penalize a clearly framed imaginative association')
+    expect(instruction).toContain('do not penalize a clearly framed imaginative association')
   }
 })
-it('keeps v3 single calibration byte-identical including research guidance',async()=>{
+it('keeps v3 research guidance appended after Content Studio calibration',async()=>{
   mockPool(3)
   const send=vi.fn(async(_url:string,init:RequestInit)=>{
     const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content)
@@ -1119,8 +1119,40 @@ it('keeps v3 single calibration byte-identical including research guidance',asyn
   expect(send).toHaveBeenCalledTimes(5)
   for(const index of [2,4]){
     const instruction=JSON.parse(String(send.mock.calls[index][1].body)).messages[0].content as string
-    expect(instruction).toContain('do not penalize a clearly framed imaginative association for lacking a historical link. Research citations must refer to the actual supplied passage')
+    expect(instruction).toContain('or misattribute external research. Research citations must refer to the actual supplied passage')
   }
+})
+it('treats Content Studio records as authoritative Demo facts in single-story prompts',async()=>{
+  mockPool(3)
+  const send=provider();vi.stubGlobal('fetch',send)
+  await (await post({},{editionFormat:ARTICLE_SINGLE_CONTRACT_VERSION,interests:'A single studio-authority study of reading chairs'})).json()
+  expect(send).toHaveBeenCalledTimes(4)
+  const chief=JSON.parse(String(send.mock.calls[0][1].body)).messages[0].content as string
+  expect(chief).toContain('are authoritative Demo facts')
+  expect(chief).toContain('never present invented details as Content Studio facts')
+  for(const index of [1,3]){
+    const instruction=JSON.parse(String(send.mock.calls[index][1].body)).messages[0].content as string
+    expect(instruction).toContain('never raise fact_integrity merely because a mockup')
+    expect(instruction).toContain('Still flag narratives that contradict supplied sources')
+  }
+  const revision=JSON.parse(String(send.mock.calls[2][1].body)).messages[0].content as string
+  expect(revision).toContain('are authoritative Demo facts')
+})
+it('treats Content Studio records as authoritative Demo facts in 3-story prompts',async()=>{
+  mockPool()
+  const send=stagedProvider(ed=>review(ed,5),ed=>review(ed,5));vi.stubGlobal('fetch',send)
+  await (await post({},{interests:'A studio-authority study of reading lamps'})).json()
+  expect(send).toHaveBeenCalledTimes(4)
+  const chief=JSON.parse(String(send.mock.calls[0][1].body)).messages[0].content as string
+  expect(chief).toContain('are authoritative Demo facts')
+  expect(chief).toContain('never present invented details as Content Studio facts')
+  for(const index of [1,3]){
+    const instruction=JSON.parse(String(send.mock.calls[index][1].body)).messages[0].content as string
+    expect(instruction).toContain('never raise fact_integrity merely because a mockup')
+    expect(instruction).toContain('Still flag narratives that contradict supplied sources')
+  }
+  const revision=JSON.parse(String(send.mock.calls[2][1].body)).messages[0].content as string
+  expect(revision).toContain('are authoritative Demo facts')
 })
 it('sends unsupported-claim repair guidance to the revision editor',async()=>{
   mockPool()
