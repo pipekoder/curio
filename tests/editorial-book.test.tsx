@@ -121,3 +121,28 @@ it('omits the tier display for editions without a label',()=>{
   expect(root.querySelector('.spatial-eyebrow')?.textContent).toBe('Story · Exhibit 1 of 1')
   expect(root.querySelector('.eb-tier')).toBeNull()
 })
+it('places the AI disclosure once at the very bottom of each article',()=>{
+  for(const expanded of [true,false]){
+    const {container}=render(<ArticleCard {...props({expanded})}/>)
+    const root=container.querySelector('article')!
+    const footers=[...root.querySelectorAll('p')].filter(p=>p.textContent==='AI-generated editorial content.')
+    expect(footers).toHaveLength(1)
+    expect(root.lastElementChild?.textContent).toBe('AI-generated editorial content.')
+  }
+})
+it('keeps AI labels out of the headline, deck, tier and captions',()=>{
+  const tier={label:'Curious Findings',description:'Small discoveries, interesting details and ideas that invite a closer look.'}
+  const {container}=render(<ArticleCard {...props({editorialTier:tier})}/>)
+  const root=container.querySelector('article')!
+  for(const selector of ['h2','.eb-deck','.eb-tier','figure']){
+    for(const el of root.querySelectorAll(selector))expect(el.textContent).not.toContain('AI-generated')
+  }
+})
+it('renders the disclosure after the Sources & References section',async()=>{
+  const article={id:'story-quiet-craft',deck:'A short introduction.',storyImages:images(1),researchReferences:[{id:'version-0:cultural_claim_1',assetId:'asset-0',kind:'cultural_claim',label:'Cultural claim',value:'A shared harvest ritual.',authority:'retrieved_public_source',source:'cultural_research',citations:[{sourceId:'s1',passageId:'p1',url:'https://en.wikipedia.org/wiki/Ritual',publication:'Wikipedia',title:'Ritual'}],retrievedAt:new Date().toISOString()}]}
+  const {container,findByText}=render(<ArticleCard {...props({exhibit:exhibit({article})})}/>)
+  const sources=await findByText('Sources & References')
+  const footer=await findByText('AI-generated editorial content.')
+  expect(sources.compareDocumentPosition(footer)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(container.querySelector('article')!.lastElementChild?.textContent).toBe('AI-generated editorial content.')
+})
