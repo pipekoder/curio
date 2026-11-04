@@ -417,13 +417,34 @@ test('generating panel fits narrow viewports without horizontal overflow',async(
 })
 
 test('failed generation chunk load shows a reload error instead of stranding the panel',async({page})=>{
-  await page.route('**/assets/articles-*.js',route=>route.abort())
+  let intercepted:string|null=null
+  await page.route('**/assets/articles-*.js',route=>{intercepted=route.request().url();return route.abort()})
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await expect(page.locator('.spatial-canvas')).toBeVisible()
+  await page.getByLabel('Allow AI curation').check()
+  await page.getByLabel(/Article edition/).check()
+  await submitPrompt(page)
+  await expect(page.getByText('Could not start generation.')).toBeVisible({timeout:10000})
+  await expect(page.getByText('Reload the page and try again.')).toBeVisible()
+  expect(intercepted).toMatch(/\/assets\/articles-[A-Za-z0-9_-]+\.js$/)
+  await expect(page.locator('.spatial-generating')).not.toContainText('elapsed')
+  const submit=page.locator('button[type=submit]')
+  await expect(submit).toBeEnabled()
+  await expect(submit).toContainText('Begin exploration →')
+})
+
+test('failed standard chunk load shows a reload error instead of stranding the panel',async({page})=>{
+  let intercepted:string|null=null
+  await page.route('**/assets/editorial-progress-*.js',route=>{intercepted=route.request().url();return route.abort()})
   await page.setViewportSize({width:1440,height:900})
   await page.goto('/spatial')
   await expect(page.locator('.spatial-canvas')).toBeVisible()
   await submitPrompt(page)
   await expect(page.getByText('Could not start generation.')).toBeVisible({timeout:10000})
   await expect(page.getByText('Reload the page and try again.')).toBeVisible()
+  expect(intercepted).toMatch(/\/assets\/editorial-progress-[A-Za-z0-9_-]+\.js$/)
+  await expect(page.locator('.spatial-generating')).not.toContainText('elapsed')
   const submit=page.locator('button[type=submit]')
   await expect(submit).toBeEnabled()
   await expect(submit).toContainText('Begin exploration →')
