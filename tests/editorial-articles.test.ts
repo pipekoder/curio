@@ -1229,3 +1229,106 @@ it('publishes a single story despite high-severity safety findings',async()=>{
   expect(body.articleEdition.articles).toHaveLength(1)
   expect(send).toHaveBeenCalledTimes(4)
 })
+// Live Meta AI Logs: one entry per actual backend invocation, with the
+// model really invoked, measured timestamps and a summary derived only
+// from the returned structured value.
+type LoggedCall={id:string;model:string;stage:string;startedAt:number;endedAt:number|null;status:string;summary?:string}
+const liveLogRequest=()=>new Request(origin,{method:'POST',headers:{Origin:origin,'CF-Connecting-IP':'192.0.2.9'}})
+it('records one completed entry per actual invocation on the published edition',async()=>{
+  mockPool()
+  vi.stubGlobal('fetch',provider())
+  const body=await (await articleEditorialResponse(liveLogRequest(),environment(),{...preferences,interests:'A live-log study in quiet interiors'},'lite',undefined,3)).json() as {modelCalls?:LoggedCall[]}
+  expect(body.modelCalls).toHaveLength(4)
+  expect(body.modelCalls!.map(call=>call.stage)).toEqual(['chief_editor','reviewer','revision','confirmation'])
+  expect(new Set(body.modelCalls!.map(call=>call.id)).size).toBe(4)
+  for(const call of body.modelCalls!){
+    expect(call.model).toBe('muse-spark-1.3')
+    expect(call.status).toBe('completed')
+    expect(call.endedAt).toBeGreaterThanOrEqual(call.startedAt)
+    expect(typeof call.summary).toBe('string')
+  }
+  expect(body.modelCalls![0].summary).toMatch(/^Drafted: A Room for 1/)
+  expect(body.modelCalls![1].summary).toBe('Review: 0 findings (0 high).')
+  expect(body.modelCalls![2].summary).toBe('Revised prose for 3 articles.')
+  expect(body.modelCalls![3].summary).toMatch(/^Confirmation: 0 findings \(0 high\)\.$/)
+  const leaked=JSON.stringify(body.modelCalls)
+  expect(leaked).not.toContain('fixture-only')
+  expect(leaked).not.toContain('Explore seating')
+})
+it('reports the actually invoked chief model per mode',async()=>{
+  for(const [mode,chief] of [['lite','muse-spark-1.3'],['hybrid','muse-wonder-1.0']] as const){
+    mockPool()
+    vi.stubGlobal('fetch',provider())
+    const body=await (await articleEditorialResponse(liveLogRequest(),environment(),{...preferences,interests:'A chief-model study in quiet interiors'},mode,undefined,3)).json() as {modelCalls?:LoggedCall[]}
+    expect(body.modelCalls![0]).toMatchObject({stage:'chief_editor',model:chief})
+    expect(body.modelCalls!.slice(1).map(call=>call.model)).toEqual(['muse-spark-1.3','muse-spark-1.3','muse-spark-1.3'])
+  }
+})
+it('derives review summaries from actual findings',async()=>{
+  mockPool()
+  vi.stubGlobal('fetch',provider(5,5,true))
+  const body=await (await articleEditorialResponse(liveLogRequest(),environment(),{...preferences,interests:'A finding-summary study in quiet interiors'},'lite',undefined,3)).json() as {modelCalls?:LoggedCall[]}
+  expect(body.modelCalls![1].summary).toBe('Review: 1 finding (1 high). Remove the unsupported claim.')
+})
+it('carries the accumulated calling entry on every stage report',async()=>{
+  mockPool()
+  vi.stubGlobal('fetch',provider())
+  const seen:{stage:string;calls:LoggedCall[]}[]=[]
+  const response=await articleEditorialResponse(liveLogRequest(),environment(),{...preferences,interests:'A stage-report study in quiet interiors'},'lite',undefined,3,(stage,calls)=>{seen.push({stage,calls:calls??[]})})
+  expect(response.status).toBe(200)
+  expect(seen.map(entry=>entry.stage)).toEqual(['chief_editor','reviewer','revision','confirmation'])
+  expect(seen.map(entry=>entry.calls.length)).toEqual([1,2,3,4])
+  expect(seen[3].calls.map(call=>call.status)).toEqual(['completed','completed','completed','calling'])
+  expect(seen[3].calls[3]).toMatchObject({stage:'confirmation',model:'muse-spark-1.3'})
+})
+it('records the planning invocation for V3 single stories',async()=>{
+  mockPool(3)
+  const calls:string[]=[]
+  const send=vi.fn(async(_url:string,init:RequestInit)=>{
+    const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content)
+    calls.push(body.response_format.json_schema.name)
+    const value=calls.length===1?{topic:'The everyday chair',angle:'How seating shapes daily rituals',argument:'Seating gives ordinary reflection a physical place.',selectedAssetIds:[version(1),version(2)],researchQuestions:[]}
+      :calls.length===2?toDraft(edition(1,2))
+      :calls.length===3?review(input.edition)
+      :calls.length===4?toRevisionDraft(input.edition)
+      :review(input.edition)
+    return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
+  })
+  vi.stubGlobal('fetch',send)
+  const body=await (await articleEditorialResponse(liveLogRequest(),environment({EDITORIAL_WORKFLOW_V3_ENABLED:'true'}),{...preferences,interests:'A planning-log study in quiet interiors'},'lite',undefined,1)).json() as {modelCalls?:LoggedCall[]}
+  expect(body.modelCalls!.map(call=>call.stage)).toEqual(['planning','chief_editor','reviewer','revision','confirmation'])
+  expect(body.modelCalls![0]).toMatchObject({model:'muse-spark-1.3',status:'completed',summary:'Planned: The everyday chair.'})
+})
+it('records a failed entry with the public code when an invocation throws',async()=>{
+  mockPool()
+  let calls=0
+  const send=vi.fn(async(_url:string,init:RequestInit)=>{
+    calls++
+    if(calls===2)throw new Error('transport down')
+    const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content)
+    const value=calls===1?toDraft(edition(input.articleCount,input.catalog.length>=9?3:2)):calls===3?toRevisionDraft(input.edition):review(input.edition)
+    return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
+  })
+  vi.stubGlobal('fetch',send)
+  const body=await (await articleEditorialResponse(liveLogRequest(),environment(),{...preferences,interests:'A transport-failure study in quiet interiors'},'lite',undefined,3)).json() as {fallbackReason?:string;modelCalls?:LoggedCall[]}
+  expect(body).toMatchObject({fallbackReason:'provider_or_validation'})
+  expect(body.modelCalls).toHaveLength(2)
+  expect(body.modelCalls![0]).toMatchObject({stage:'chief_editor',status:'completed'})
+  expect(body.modelCalls![1]).toMatchObject({stage:'reviewer',status:'failed'})
+  expect(body.modelCalls![1].summary).toMatch(/^Failed: [a-z_]+?\.$/)
+  expect(body.modelCalls![1].summary).not.toContain('transport down')
+})
+it('replays stored invocation entries on in-flight polls',async()=>{
+  const {sqlite,db}=preparationDb()
+  try{
+    vi.mocked(editorialArticlePool).mockResolvedValue(prepared(5,[version(6)]))
+    const first=await post({EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db})
+    expect(first.status).toBe(202)
+    const calls=[{id:'call-1',model:'muse-spark-1.3',stage:'chief_editor',startedAt:1760000000000,endedAt:1760000018400,status:'completed',summary:'Drafted: A Room for 1.'}]
+    sqlite.prepare(`UPDATE article_edition_jobs SET state='generating',lease_token='held',lease_until=?,result_json=?`)
+      .run(Date.now()+60000,JSON.stringify({progress:{eligibleImages:5,remainingCandidates:1,processing:0},stage:'reviewer',modelCalls:calls}))
+    const second=await post({EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db})
+    expect(second.status).toBe(202)
+    expect(await second.json()).toMatchObject({preparation:{outcome:'reviewing'},generationStage:'reviewer',modelCalls:calls})
+  }finally{sqlite.close()}
+})

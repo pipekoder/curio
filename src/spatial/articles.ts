@@ -4,6 +4,7 @@ import {ARTICLE_CONTRACT_VERSION,ARTICLE_MIN_ELIGIBLE_IMAGES,ARTICLE_SINGLE_CONT
 import {editorialTierLabel,type EditorialTierLabel} from '../../shared/editorial-tiers'
 import {catalogItem,type CatalogItem} from '../../shared/catalog'
 import {editorialSources,type EditorialSource} from '../../shared/editorial-sources'
+import {modelCallEvents,type ModelCallEvent} from '../../shared/article-model-calls'
 import {parseGenerationMetadata,type EditorialMode,type GenerationMetadata} from './editorial-mode'
 import type {HonestState} from './edition'
 
@@ -32,6 +33,7 @@ export type ArticleFetch={
   status:ArticleStatus|'request_failed'|null;fallbackReason?:string;
   eligibleImages?:number;requiredImages?:number;validationStage?:string;
   timedOut:boolean;generation:GenerationMetadata|null;budget?:PublicBudgetDiagnostic;evidence?:{interpretations:number}|null
+  modelCalls:ModelCallEvent[]|null
 }
 
 const envelope=z.object({
@@ -48,6 +50,7 @@ const envelope=z.object({
   requestedCount:z.number().int().min(1).max(3).optional(),
   publishedCount:z.number().int().min(1).max(3).optional(),
   partial:z.boolean().optional(),
+  modelCalls:modelCallEvents.optional(),
 })
 
 const failure=z.object({
@@ -57,11 +60,12 @@ const failure=z.object({
   eligibleImages:z.number().int().min(0).optional(),
   requiredImages:z.number().int().min(0).optional(),
   generationStage:z.enum(['evidence','planning','research','chief_editor','reviewer','revision','confirmation']).optional(),
+  modelCalls:modelCallEvents.optional(),
   validationDiagnostic:z.object({stage:z.string().max(40),code:z.string().max(40)}).passthrough().optional(),
   preparation:z.object({retryAfterMs:z.number().int().min(0).max(60000),outcome:z.string().max(40).optional(),remainingCandidates:z.number().int().min(0).optional(),processing:z.number().int().min(0).optional()}).passthrough().optional(),
 })
 
-export type ArticlePoll={outcome:string|null;eligibleImages:number|null;requiredImages:number|null;remainingCandidates:number|null;processing:number|null;generationStage:string|null}
+export type ArticlePoll={outcome:string|null;eligibleImages:number|null;requiredImages:number|null;remainingCandidates:number|null;processing:number|null;generationStage:string|null;modelCalls:ModelCallEvent[]|null}
 
 export function articleStatusCopy(fetch:ArticleFetch):{title:string;detail:string}{
   if(fetch.timedOut)return {title:'The article edition was still being reviewed.',detail:'Nothing was staged. The standard edition below remains available.'}
@@ -87,7 +91,7 @@ export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImp
   const editionFormat=articleCount===1?ARTICLE_SINGLE_CONTRACT_VERSION:ARTICLE_CONTRACT_VERSION
   const bound=AbortSignal.timeout(events.timeoutMs??300000)
   const failed=(status:ArticleFetch['status'],extra:Partial<ArticleFetch>&{timedOut?:boolean}={}):ArticleFetch=>({
-    edition:null,honest:'authored-fallback',articleCount,status,timedOut:false,generation:null,...extra,
+    edition:null,honest:'authored-fallback',articleCount,status,timedOut:false,generation:null,modelCalls:null,...extra,
   })
   try{
    for(let attempt=0;attempt<20;attempt++){
@@ -101,7 +105,7 @@ export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImp
     if(response.status===202){
       const parsed=failure.safeParse(await response.json())
       if(!parsed.success||parsed.data.status!=='preparing')return failed('fallback')
-      events.onPoll?.({outcome:parsed.data.preparation?.outcome??null,eligibleImages:parsed.data.eligibleImages??null,requiredImages:parsed.data.requiredImages??null,remainingCandidates:parsed.data.preparation?.remainingCandidates??null,processing:parsed.data.preparation?.processing??null,generationStage:parsed.data.generationStage??null})
+      events.onPoll?.({outcome:parsed.data.preparation?.outcome??null,eligibleImages:parsed.data.eligibleImages??null,requiredImages:parsed.data.requiredImages??null,remainingCandidates:parsed.data.preparation?.remainingCandidates??null,processing:parsed.data.preparation?.processing??null,generationStage:parsed.data.generationStage??null,modelCalls:parsed.data.modelCalls??null})
       const wait=parsed.data.preparation?.retryAfterMs??16000
       if(wait)await new Promise<void>((resolve,reject)=>{
         if(bound.aborted||events.signal?.aborted){reject(new Error('Interrupted'));return}
@@ -117,7 +121,7 @@ export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImp
       // model succeeded. Unparseable errors fail closed the same way.
       try{
         const parsed=failure.parse(await response.json())
-        return failed(parsed.status??'fallback',{fallbackReason:parsed.fallbackReason,budget:parsed.budget,eligibleImages:parsed.eligibleImages,requiredImages:parsed.requiredImages,validationStage:parsed.validationDiagnostic?.stage})
+        return failed(parsed.status??'fallback',{fallbackReason:parsed.fallbackReason,budget:parsed.budget,eligibleImages:parsed.eligibleImages,requiredImages:parsed.requiredImages,validationStage:parsed.validationDiagnostic?.stage,modelCalls:parsed.modelCalls??null})
       }catch{
         return failed('fallback')
       }
@@ -129,7 +133,7 @@ export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImp
     if(data.articleEdition===null||data.items===undefined){
       const parsed=failure.safeParse(raw)
       const detail=parsed.success?parsed.data:{}
-      return failed(detail.status??'fallback',{fallbackReason:detail.fallbackReason,budget:detail.budget,eligibleImages:detail.eligibleImages,requiredImages:detail.requiredImages,validationStage:detail.validationDiagnostic?.stage})
+      return failed(detail.status??'fallback',{fallbackReason:detail.fallbackReason,budget:detail.budget,eligibleImages:detail.eligibleImages,requiredImages:detail.requiredImages,validationStage:detail.validationDiagnostic?.stage,modelCalls:detail.modelCalls??null})
     }
     const articleEdition=(articleCount===1?editorialSingleArticleEdition:editorialPartialArticleEdition).parse(data.articleEdition)
     const honest:HonestState=
@@ -137,7 +141,7 @@ export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImp
       :data.retrieval==='d1'?'deterministic-d1':'deterministic-fictional'
     return {
       edition:{articleEdition,items:data.items,source:data.source,retrieval:data.retrieval,cached:data.cached,researchReferences:data.researchReferences,aiDisclosure:data.aiDisclosure,editorialTier:data.editorialTier,requestedCount:data.requestedCount,publishedCount:data.publishedCount,partial:data.partial},
-      honest,articleCount,status:null,timedOut:false,generation:parseGenerationMetadata(data.generation),evidence:data.evidence,
+      honest,articleCount,status:null,timedOut:false,generation:parseGenerationMetadata(data.generation),evidence:data.evidence,modelCalls:data.modelCalls??null,
     }
    }
    return failed('preparing',{timedOut:true})

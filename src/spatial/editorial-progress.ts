@@ -1,3 +1,4 @@
+import type {ModelCallEvent} from '../../shared/article-model-calls'
 import type {ArticlePoll} from './articles'
 
 // Editorial progress model. Every transition below is driven by an observed
@@ -7,7 +8,7 @@ import type {ArticlePoll} from './articles'
 export type StageStatus='QUEUED'|'RUNNING'|'COMPLETE'|'FAILED'|'SKIPPED'
 export type ProgressStage={id:string;label:string;status:StageStatus;fraction:number|null;meta:string|null}
 export type ProgressEvent={key:string;text:string}
-export type ProgressSnapshot={stages:ProgressStage[];events:ProgressEvent[];done:number;total:number}
+export type ProgressSnapshot={stages:ProgressStage[];events:ProgressEvent[];done:number;total:number;modelCalls:ModelCallEvent[]}
 export type StageTone='waiting'|'running'|'advancing'|'complete'|'failed'
 
 export function stageTone(stage:ProgressStage):StageTone{
@@ -39,7 +40,7 @@ const GEN_DONE:Record<string,string>={
   confirmation:'Final editorial review complete.',
 }
 
-export type ArticleFinish={ok:boolean;staged?:boolean;evidence?:{interpretations:number}|null;revised:boolean;failureStage?:string|null;fallbackReason?:string|null;frozen?:boolean}
+export type ArticleFinish={ok:boolean;staged?:boolean;evidence?:{interpretations:number}|null;revised:boolean;failureStage?:string|null;fallbackReason?:string|null;frozen?:boolean;modelCalls?:ModelCallEvent[]|null}
 
 export function createArticleTracker(){
   const stages:ProgressStage[]=[
@@ -57,19 +58,24 @@ export function createArticleTracker(){
   const hidden=new Set(['planning','research','revision','confirm'])
   const seen=new Set<string>()
   const events:ProgressEvent[]=[]
+  // Backend-observed model invocations. Each poll carries the full array
+  // accumulated so far; the terminal response carries the final one. The
+  // tracker only stores what the backend reported.
+  let modelCalls:ModelCallEvent[]=[]
   let genIndex=-1,finished=false
   const byId=(id:string)=>stages.find(stage=>stage.id===id)!
   const emit=(key:string,text:string)=>{if(seen.has(key))return;seen.add(key);events.push({key,text});while(events.length>9)events.shift()}
   const complete=(id:string,doneKey:string,doneText:string)=>{const row=byId(id);if(row.status==='COMPLETE')return;row.status='COMPLETE';row.fraction=1;emit(doneKey,doneText)}
   const snapshot=():ProgressSnapshot=>{
     const visible=stages.filter(stage=>!hidden.has(stage.id))
-    return {stages:visible.map(stage=>({...stage})),events:events.map(event=>({...event})),done:visible.filter(stage=>stage.status==='COMPLETE').length,total:visible.length}
+    return {stages:visible.map(stage=>({...stage})),events:events.map(event=>({...event})),done:visible.filter(stage=>stage.status==='COMPLETE').length,total:visible.length,modelCalls:modelCalls.map(call=>({...call}))}
   }
   emit('start','Contacting the editorial team…')
   return {
     snapshot,
     poll(input:ArticlePoll):ProgressSnapshot{
       if(finished)return snapshot()
+      if(input.modelCalls)modelCalls=input.modelCalls.map(call=>({...call}))
       complete('verify','verify-done','Approved imagery verified.')
       if(input.eligibleImages!==null&&input.requiredImages!==null&&input.requiredImages>0){
         const analyze=byId('analyze')
@@ -121,6 +127,7 @@ export function createArticleTracker(){
     finish(input:ArticleFinish):ProgressSnapshot{
       if(finished)return snapshot()
       finished=true
+      if(input.modelCalls)modelCalls=input.modelCalls.map(call=>({...call}))
       if(input.frozen){
         emit('frozen','Stopped waiting for the editorial team.')
         return snapshot()
@@ -200,7 +207,7 @@ export function createStandardTracker(){
   ]
   const events:ProgressEvent[]=[{key:'start',text:'Curating your exhibition…'}]
   let finished=false
-  const snapshot=():ProgressSnapshot=>({stages:stages.map(stage=>({...stage})),events:events.map(event=>({...event})),done:stages.filter(stage=>stage.status==='COMPLETE').length,total:stages.length})
+  const snapshot=():ProgressSnapshot=>({stages:stages.map(stage=>({...stage})),events:events.map(event=>({...event})),done:stages.filter(stage=>stage.status==='COMPLETE').length,total:stages.length,modelCalls:[]})
   return {
     snapshot,
     finish(source:'meta'|'deterministic'):ProgressSnapshot{

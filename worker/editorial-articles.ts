@@ -6,6 +6,7 @@ import type {EditorialSource} from '../shared/editorial-sources'
 import type {VisualContext} from '../shared/visual-observations'
 import type {CatalogItem} from '../shared/catalog'
 import type {EditorialPreferences} from '../shared/editorial'
+import type {ModelCallEvent} from '../shared/article-model-calls'
 import type {EditorialMode} from './editorial-model-routing'
 import type {Bindings} from './index'
 import {chiefModel,generationMetadata} from './editorial-model-routing'
@@ -78,6 +79,45 @@ function articleSchemaCode(error:z.ZodError,content:unknown):ArticleFailureCode{
 function workflowFailure(stage:ArticleStage,error:unknown):ArticleWorkflowError{
   if(error instanceof ArticleWorkflowError)return error
   return new ArticleWorkflowError(stage,stage==='reservation'?'budget_unavailable':stage==='reviewer'||stage==='confirmation'?'review_validation':'structural_validation')
+}
+
+const MODEL_CALL_TASK:Record<string,string>={planning:'Planning',chief_editor:'Chief Editor',reviewer:'Reviewer',revision:'Revision',confirmation:'Confirmation'}
+// One short editorial sentence per completed invocation, derived only from
+// the actual returned structured value. Never throws: an unrecognized
+// shape falls back to the stage name.
+function summarizeModelCall(stage:ArticleStage,value:unknown):string{
+  try{
+    const text=(candidate:unknown,limit:number)=>typeof candidate==='string'&&candidate.trim()?candidate.trim().slice(0,limit):null
+    const articles=(candidate:unknown)=>typeof candidate==='object'&&candidate!==null&&Array.isArray((candidate as {articles?:unknown}).articles)?(candidate as {articles:Array<Record<string,unknown>>}).articles:null
+    if(stage==='planning'){
+      const topic=typeof value==='object'&&value!==null?text((value as {topic?:unknown}).topic,110):null
+      return topic?`Planned: ${topic}.`:'Planning completed.'
+    }
+    if(stage==='chief_editor'){
+      const headlines=(articles(value)??[]).map(article=>text(article.headline,60)).filter((headline):headline is string=>headline!==null)
+      return headlines.length?`Drafted: ${headlines.join(' · ').slice(0,150)}.`:'Story composition completed.'
+    }
+    if(stage==='reviewer'||stage==='confirmation'){
+      const feedback=typeof value==='object'&&value!==null&&Array.isArray((value as {featureFeedback?:unknown}).featureFeedback)?(value as {featureFeedback:Array<{issues?:Array<{severity?:unknown}>}>}).featureFeedback:[]
+      const issues=feedback.flatMap(entry=>entry.issues??[])
+      const high=issues.filter(issue=>issue.severity==='high').length
+      const instructions=typeof value==='object'&&value!==null&&Array.isArray((value as {revisionInstructions?:unknown}).revisionInstructions)?(value as {revisionInstructions:unknown[]}).revisionInstructions:[]
+      const first=typeof instructions[0]==='string'?text(instructions[0],90):null
+      const headline=stage==='reviewer'?'Review':'Confirmation'
+      return `${headline}: ${issues.length} finding${issues.length===1?'':'s'} (${high} high).${first?` ${first}`:''}`
+    }
+    if(stage==='revision'){
+      const count=articles(value)?.length
+      return typeof count==='number'?`Revised prose for ${count} article${count===1?'':'s'}.`:'Revision completed.'
+    }
+    return `${MODEL_CALL_TASK[stage]??stage} completed.`
+  }catch{return `${MODEL_CALL_TASK[stage]??stage} completed.`}
+}
+// Failure summaries reuse only the already-public failure code, never
+// provider messages, prompts or prose.
+function summarizeModelFailure(error:unknown):string{
+  if(error instanceof ArticleWorkflowError||error instanceof ArticleValidationError)return `Failed: ${error.code}.`
+  return 'Failed: provider_or_validation.'
 }
 
 function factualSources(pool:ArticlePool){
@@ -245,8 +285,14 @@ export function confirmationAdvisoryIssues(review:EditorialReviewOutput):Confirm
 // reader-facing responses. Readers receive only the editorial tier label.
 export type ArticleAssessment={finalScore:number;dimensionScores:Record<string,number>;tier:EditorialTierId;advisoryIssues:ConfirmationAdvisoryIssue[]}
 
-export async function articleEditorialResponse(request:Request,env:Bindings,p:EditorialPreferences,mode:EditorialMode,preparedPool?:ArticlePool,articleCount:1|3=3,onStage?:(stage:ArticleGenerationStage)=>unknown,schedule?:(task:Promise<unknown>)=>void,reportAssessment?:(assessment:ArticleAssessment)=>void){
-  const reportStage=async(stage:ArticleGenerationStage)=>{try{await onStage?.(stage)}catch{/* Progress reporting never breaks generation. */}}
+export async function articleEditorialResponse(request:Request,env:Bindings,p:EditorialPreferences,mode:EditorialMode,preparedPool?:ArticlePool,articleCount:1|3=3,onStage?:(stage:ArticleGenerationStage,modelCalls?:ModelCallEvent[])=>unknown,schedule?:(task:Promise<unknown>)=>void,reportAssessment?:(assessment:ArticleAssessment)=>void){
+  // Backend-observed Meta invocations for the Live Logs panel. Entries are
+  // recorded around real inference calls only: never simulated, and never
+  // an extra call. Pollers receive a copy with every stage report; the
+  // final response carries the same array.
+  const modelCalls:ModelCallEvent[]=[]
+  const modelCallsSnapshot=():ModelCallEvent[]=>modelCalls.map(call=>({...call}))
+  const reportStage=async(stage:ArticleGenerationStage)=>{try{await onStage?.(stage,modelCallsSnapshot())}catch{/* Progress reporting never breaks generation. */}}
   const single=articleCount===1
   const v3=single&&env.EDITORIAL_WORKFLOW_V3_ENABLED==='true'
   const researchTimeoutMs=env.EDITORIAL_RESEARCH_TIMEOUT_MS===undefined?15000:Number(env.EDITORIAL_RESEARCH_TIMEOUT_MS)
@@ -307,7 +353,7 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
     const requestId=failure?crypto.randomUUID():null
     const diagnostic=failure?{stage:failure.stage,code:failure.code,chiefModel:chiefModel(mode).model,editorialMode:mode,...(failure.detail?{detail:failure.detail}:{}),...(extra??{})}:null
     if(diagnostic)console.error(JSON.stringify({event:'article_editorial_failure',requestId,elapsedMs:Math.round(performance.now()-started),...diagnostic}))
-    const response=Response.json({...base,status:'fallback',fallbackReason:reason,...(budget?{budget}:{}),...(diagnostic?{requestId,validationDiagnostic:diagnostic}:{}),inference:{attempted:called>0,reservedUnits,latencyMs:Math.round(performance.now()-started),usage:measurements.length?{inputTokens:measurements.reduce((n,row)=>n+row.inputTokens,0),outputTokens:measurements.reduce((n,row)=>n+row.outputTokens,0),totalTokens:measurements.reduce((n,row)=>n+row.totalTokens,0)}:null}})
+    const response=Response.json({...base,status:'fallback',fallbackReason:reason,...(budget?{budget}:{}),...(diagnostic?{requestId,validationDiagnostic:diagnostic}:{}),...(modelCalls.length?{modelCalls:modelCallsSnapshot()}:{}),inference:{attempted:called>0,reservedUnits,latencyMs:Math.round(performance.now()-started),usage:measurements.length?{inputTokens:measurements.reduce((n,row)=>n+row.inputTokens,0),outputTokens:measurements.reduce((n,row)=>n+row.outputTokens,0),totalTokens:measurements.reduce((n,row)=>n+row.totalTokens,0)}:null}})
     if(requestId)response.headers.set('X-Curio-Request-Id',requestId)
     return response
   }
@@ -320,11 +366,23 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
     const reservation=new InferenceReservation(units)
     const call=async<T>(callStage:ArticleStage,model:string,instruction:string,input:unknown,schema:z.ZodType<T>,name:string,maxTokens:number)=>{
       stage=callStage
-      if(callStage!=='reservation')await reportStage(callStage)
+      // The local claim gates everything: a failed claim means no model
+      // call, so neither a stage report nor a log entry.
       if(!reservation.claim())throw new ArticleWorkflowError(stage,'workflow_limit')
-      const result=await structuredMuse(env.META_API_KEY!,model,instruction,input,schema,name,maxTokens,stage,()=>{called++},stage==='chief_editor'?chiefTimeoutMs:stage==='reviewer'?reviewTimeoutMs:ARTICLE_REVIEW_STEP_TIMEOUT_MS,workflowSignal)
-      if(result.usage)measurements.push(result.usage)
-      return result.value
+      // One report per stage, as before: it carries every previously
+      // completed entry plus the new calling one. Terminal responses carry
+      // the final array, so no completion report is needed.
+      const event:ModelCallEvent|undefined=callStage==='reservation'?undefined:{id:crypto.randomUUID(),model,stage:callStage,startedAt:Date.now(),endedAt:null,status:'calling'}
+      if(event){modelCalls.push(event);if(callStage!=='reservation')await reportStage(callStage)}
+      try{
+        const result=await structuredMuse(env.META_API_KEY!,model,instruction,input,schema,name,maxTokens,stage,()=>{called++},stage==='chief_editor'?chiefTimeoutMs:stage==='reviewer'?reviewTimeoutMs:ARTICLE_REVIEW_STEP_TIMEOUT_MS,workflowSignal)
+        if(result.usage)measurements.push(result.usage)
+        if(event){event.endedAt=Date.now();event.status='completed';event.summary=summarizeModelCall(callStage,result.value)}
+        return result.value
+      }catch(error){
+        if(event){event.endedAt=Date.now();event.status='failed';event.summary=summarizeModelFailure(error)}
+        throw error
+      }
     }
     const catalog=catalogEntries(selectedItems)
     let plan:z.infer<typeof articlePlan>|null=null,research:Awaited<ReturnType<typeof researchForArticle>>|null=null
@@ -387,7 +445,7 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
     if(cache.size>=20)cache.delete(cache.keys().next().value!)
     if(env.EDITORIAL_FEEDBACK_ENABLED!=='true')cache.set(cacheKey,{edition,generation,evidence,researchSources:referencedResearch(edition,sources),editorialTier,expires:Date.now()+300_000})
     outcome='completed'
-    const published=Response.json({format,source:'meta',retrieval:'d1',cached:false,articleEdition:edition,items:selectedItems,generation,evidence,editorialTier,requestId:gradedId,requestedCount:count,publishedCount:edition.articles.length,partial:edition.articles.length<count,...(v3?{researchReferences:referencedResearch(edition,sources),aiDisclosure:ARTICLE_AI_DISCLOSURE}:{}),inference:{attempted:true,reservedUnits:units,latencyMs:Math.round(performance.now()-started),usage:measurements.length?{inputTokens:measurements.reduce((n,row)=>n+row.inputTokens,0),outputTokens:measurements.reduce((n,row)=>n+row.outputTokens,0),totalTokens:measurements.reduce((n,row)=>n+row.totalTokens,0)}:null}})
+    const published=Response.json({format,source:'meta',retrieval:'d1',cached:false,articleEdition:edition,items:selectedItems,generation,evidence,editorialTier,requestId:gradedId,requestedCount:count,publishedCount:edition.articles.length,partial:edition.articles.length<count,...(v3?{researchReferences:referencedResearch(edition,sources),aiDisclosure:ARTICLE_AI_DISCLOSURE}:{}),...(modelCalls.length?{modelCalls:modelCallsSnapshot()}:{}),inference:{attempted:true,reservedUnits:units,latencyMs:Math.round(performance.now()-started),usage:measurements.length?{inputTokens:measurements.reduce((n,row)=>n+row.inputTokens,0),outputTokens:measurements.reduce((n,row)=>n+row.outputTokens,0),totalTokens:measurements.reduce((n,row)=>n+row.totalTokens,0)}:null}})
     published.headers.set('X-Curio-Request-Id',gradedId)
     return published
   }catch(error){return fallback('provider_or_validation',undefined,workflowFailure(stage,error))}

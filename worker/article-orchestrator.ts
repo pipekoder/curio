@@ -12,6 +12,7 @@ import {ARTICLE_EVIDENCE_VERSION,ARTICLE_INTERPRETATION_VERSION} from '../shared
 import {resolveArticlePreparationPolicy} from './article-preparation-policy'
 import {publicBudgetDenial} from '../shared/budget-diagnostic'
 import {editorialSources,type EditorialSource} from '../shared/editorial-sources'
+import {modelCallEvents,type ModelCallEvent} from '../shared/article-model-calls'
 import {approvedArticleVersions} from './editorial-revisions'
 
 const JOB_VERSION='curio-article-job-demo-v2'
@@ -35,14 +36,23 @@ const storedProgress=(job:JobRow):Progress=>{
   }catch{/* No saved progress yet. */}
   return emptyProgress
 }
-const pendingResponse=(base:Record<string,unknown>,requiredImages:number,progress:Progress,outcome:string,retryAfterMs:number,generationStage?:ArticleGenerationStage|null)=>Response.json({...base,status:'preparing',fallbackReason:'analysis_pending',eligibleImages:progress.eligibleImages,requiredImages,
-  preparation:{outcome,remainingCandidates:progress.remainingCandidates,processing:progress.processing,retryAfterMs},...(generationStage?{generationStage}:{})},{status:202})
+const pendingResponse=(base:Record<string,unknown>,requiredImages:number,progress:Progress,outcome:string,retryAfterMs:number,generationStage?:ArticleGenerationStage|null,modelCalls?:ModelCallEvent[])=>Response.json({...base,status:'preparing',fallbackReason:'analysis_pending',eligibleImages:progress.eligibleImages,requiredImages,
+  preparation:{outcome,remainingCandidates:progress.remainingCandidates,processing:progress.processing,retryAfterMs},...(generationStage?{generationStage}:{}),...(modelCalls?.length?{modelCalls}:{})},{status:202})
 const storedStage=(job:JobRow):ArticleGenerationStage|null=>{
   try{
     const value=(JSON.parse(job.result_json??'{}') as {stage?:unknown}).stage
     if(value==='evidence'||value==='planning'||value==='research'||value==='chief_editor'||value==='reviewer'||value==='revision'||value==='confirmation')return value
   }catch{/* No reported stage yet. */}
   return null
+}
+// Backend-observed invocation log written by the lease owner: malformed or
+// absent entries read as no calls, never as fabricated ones.
+const storedModelCalls=(job:JobRow):ModelCallEvent[]=>{
+  try{
+    const parsed=modelCallEvents.safeParse((JSON.parse(job.result_json??'{}') as {modelCalls?:unknown}).modelCalls)
+    if(parsed.success)return parsed.data
+  }catch{/* No reported invocations yet. */}
+  return []
 }
 const failedResponse=(base:Record<string,unknown>,requiredImages:number,eligibleImages:number)=>Response.json({...base,status:'insufficient_content',fallbackReason:'insufficient_content',eligibleImages,requiredImages},{status:409})
 const evidenceDigest=(pool:ArticlePool,edition:ArticleEditionBody,research:readonly EditorialSource[]=[])=>{
@@ -99,7 +109,7 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
   }
   if(job.state==='completed'&&job.result_json)try{
     if(!pool)throw Error('Article pool unavailable')
-    const saved=JSON.parse(job.result_json) as {articleEdition:ArticleEditionBody;generation:unknown;evidence?:{interpretations:number}|null;researchReferences?:unknown;aiDisclosure?:string;editorialTier?:unknown}
+    const saved=JSON.parse(job.result_json) as {articleEdition:ArticleEditionBody;generation:unknown;evidence?:{interpretations:number}|null;researchReferences?:unknown;aiDisclosure?:string;editorialTier?:unknown;modelCalls?:unknown}
     const research=editorialSources.parse(saved.researchReferences??[])
     if(!researchReferencesCurrent(research,env.RESEARCH_SOURCE_ORIGINS))throw Error('Research evidence expired')
     const approved=env.EDITORIAL_FEEDBACK_ENABLED==='true'?await approvedArticleVersions(db,identity.id,saved.articleEdition):{edition:saved.articleEdition,revisedIds:[]}
@@ -108,8 +118,9 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
     // Saved internal assessments are never re-served: readers receive only
     // the public tier label. Rows written before tiers omit the label.
     const tier=editorialTierLabel.safeParse(saved.editorialTier)
+    const savedCalls=modelCallEvents.safeParse(saved.modelCalls)
     return Response.json({format,source:'meta',retrieval:'d1',cached:true,articleEdition:edition,items:pool.items,generation:approved.revisedIds.length?{...(saved.generation as Record<string,unknown>),revisionModel:'muse-spark-1.3',confirmationModel:'muse-spark-1.3'}:saved.generation,
-      ...(saved.evidence!==undefined?{evidence:saved.evidence}:{}),...(tier.success?{editorialTier:tier.data}:{}),requestedCount:articleCount,publishedCount:edition.articles.length,partial:edition.articles.length<articleCount,...(saved.aiDisclosure?{researchReferences:research,aiDisclosure:saved.aiDisclosure}:{}),inference:{attempted:false,reservedUnits:0,latencyMs:null,usage:null}})
+      ...(saved.evidence!==undefined?{evidence:saved.evidence}:{}),...(tier.success?{editorialTier:tier.data}:{}),...(savedCalls.success?{modelCalls:savedCalls.data}:{}),requestedCount:articleCount,publishedCount:edition.articles.length,partial:edition.articles.length<articleCount,...(saved.aiDisclosure?{researchReferences:research,aiDisclosure:saved.aiDisclosure}:{}),inference:{attempted:false,reservedUnits:0,latencyMs:null,usage:null}})
   }catch{/* A changed version, source or grant invalidates the saved result. */}
   if(job.state==='completed'){
     const changed={...base,status:'unavailable',fallbackReason:'evidence_changed'}
@@ -124,10 +135,10 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
     return failedResponse(base,minEligible,storedProgress(job).eligibleImages)
   }
   if(job.state==='generating'&&(!job.lease_until||job.lease_until<now))return Response.json({...base,status:'fallback',fallbackReason:'generation_interrupted'},{status:503})
-  if(job.lease_until&&job.lease_until>=now)return pendingResponse(base,minEligible,storedProgress(job),job.state==='generating'?'reviewing':'processing',15_000,storedStage(job))
+  if(job.lease_until&&job.lease_until>=now)return pendingResponse(base,minEligible,storedProgress(job),job.state==='generating'?'reviewing':'processing',15_000,storedStage(job),storedModelCalls(job))
   const token=crypto.randomUUID()
   const claimed=await db.prepare(`UPDATE article_edition_jobs SET lease_token=?,lease_until=?,updated_at=? WHERE id=? AND (lease_until IS NULL OR lease_until<?) AND state='preparing' RETURNING id`).bind(token,now+leaseMs,now,identity.id,now).first()
-  if(!claimed)return pendingResponse(base,minEligible,storedProgress(job),'processing',15_000)
+  if(!claimed)return pendingResponse(base,minEligible,storedProgress(job),'processing',15_000,undefined,storedModelCalls(job))
   try{
     // Only the lease owner rebuilds the pool. Waiting pollers read the job row.
     try{pool=await editorialArticlePool(env,p)}catch(error){
@@ -147,24 +158,25 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
       const generationNow=Date.now()
       const generationClaim=await db.prepare(`UPDATE article_edition_jobs SET state='generating',lease_until=?,updated_at=? WHERE id=? AND lease_token=? AND (SELECT COUNT(*) FROM article_edition_jobs WHERE updated_at>? AND state='generating' AND lease_until>?)<2 RETURNING id`)
         .bind(generationNow+leaseMs,generationNow,identity.id,token,generationNow-leaseMs,generationNow).first()
-      if(!generationClaim)return pendingResponse(base,minEligible,progress,'waiting_for_capacity',15_000)
-      const reportGenerationStage=async(stage:ArticleGenerationStage)=>{
-        await db.prepare(`UPDATE article_edition_jobs SET result_json=?,updated_at=? WHERE id=? AND lease_token=?`).bind(JSON.stringify({progress,stage}),Date.now(),identity.id,token).run()
+      if(!generationClaim)return pendingResponse(base,minEligible,progress,'waiting_for_capacity',15_000,undefined,storedModelCalls(job))
+      const reportGenerationStage=async(stage:ArticleGenerationStage,modelCalls?:ModelCallEvent[])=>{
+        await db.prepare(`UPDATE article_edition_jobs SET result_json=?,updated_at=? WHERE id=? AND lease_token=?`).bind(JSON.stringify({progress,stage,...(modelCalls?.length?{modelCalls}:{})}),Date.now(),identity.id,token).run()
       }
       let assessment:ArticleAssessment|null=null
       const result=await articleEditorialResponse(request,env,p,mode,pool,articleCount,reportGenerationStage,schedule,recorded=>{assessment=recorded})
-      const payload=await result.clone().json() as {source?:string;articleEdition?:unknown;generation?:unknown;evidence?:{interpretations:number}|null;researchReferences?:unknown;aiDisclosure?:string;editorialTier?:unknown}
+      const payload=await result.clone().json() as {source?:string;articleEdition?:unknown;generation?:unknown;evidence?:{interpretations:number}|null;researchReferences?:unknown;aiDisclosure?:string;editorialTier?:unknown;modelCalls?:unknown}
       if(payload.source==='meta'&&payload.articleEdition){
         const research=editorialSources.parse(payload.researchReferences??[])
         const tier=editorialTierLabel.safeParse(payload.editorialTier)
+        const calls=modelCallEvents.safeParse(payload.modelCalls)
         await db.prepare(`UPDATE article_edition_jobs SET state='completed',result_json=?,evidence_digest=?,lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`)
-          .bind(JSON.stringify({articleEdition:payload.articleEdition,generation:payload.generation,evidence:payload.evidence??null,researchReferences:research,aiDisclosure:payload.aiDisclosure,...(tier.success?{editorialTier:tier.data}:{}),...(assessment?{assessment}:{})}),await evidenceDigest(pool,payload.articleEdition as ArticleEditionBody,research),Date.now(),identity.id,token).run()
+          .bind(JSON.stringify({articleEdition:payload.articleEdition,generation:payload.generation,evidence:payload.evidence??null,researchReferences:research,aiDisclosure:payload.aiDisclosure,...(tier.success?{editorialTier:tier.data}:{}),...(assessment?{assessment}:{}),...(calls.success?{modelCalls:calls.data}:{})}),await evidenceDigest(pool,payload.articleEdition as ArticleEditionBody,research),Date.now(),identity.id,token).run()
       }else await db.prepare(`UPDATE article_edition_jobs SET state='failed',result_json=?,lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(JSON.stringify({failure:{status:result.status,body:payload}}),Date.now(),identity.id,token).run()
       return result
     }
     const selected=(pool.preparation?.pendingVersionIds??[]).slice(0,Math.min(policy.concurrency,minEligible-pool.eligibleCount))
     if(!selected.length){
-      if(pool.preparation?.processing)return pendingResponse(base,minEligible,progress,'processing',15_000)
+      if(pool.preparation?.processing)return pendingResponse(base,minEligible,progress,'processing',15_000,undefined,storedModelCalls(job))
       await db.prepare(`UPDATE article_edition_jobs SET state='failed',lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(Date.now(),identity.id,token).run()
       return failedResponse(base,minEligible,pool.eligibleCount)
     }
@@ -183,7 +195,7 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
       await db.prepare(`UPDATE article_edition_jobs SET state='failed',lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(Date.now(),identity.id,token).run()
       return failedResponse(base,minEligible,pool.eligibleCount)
     }
-    return pendingResponse(base,minEligible,nextProgress,pool.eligibleCount>=minEligible?'evidence_ready':'processing',pool.eligibleCount>=minEligible?0:policy.windowSeconds*1000)
+    return pendingResponse(base,minEligible,nextProgress,pool.eligibleCount>=minEligible?'evidence_ready':'processing',pool.eligibleCount>=minEligible?0:policy.windowSeconds*1000,undefined,storedModelCalls(job))
   }catch{
     await db.prepare(`UPDATE article_edition_jobs SET state='failed',lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(Date.now(),identity.id,token).run().catch(()=>{})
     return Response.json({...base,status:'fallback',fallbackReason:'job_unavailable'},{status:503})
