@@ -295,7 +295,11 @@ it('reports a bounded Chief provider timeout without calling Reviewer or refundi
  }))
  vi.stubGlobal('fetch',send)
  const response=await post({ARTICLE_RETRY_BACKOFF_BASE_MS:'0'}, {interests:'Bounded delayed Chief Editor timeout test'})
- expect(await response.json()).toMatchObject({source:'deterministic',fallbackReason:'provider_or_validation',validationDiagnostic:{stage:'chief_editor',code:'provider_timeout'},inference:{attempted:true,reservedUnits:6},resume:{recoverable:true,attemptsUsed:3,chargedUnits:6}})
+ const chiefBody=await response.json() as Record<string,unknown>
+ expect(chiefBody).toMatchObject({source:'deterministic',fallbackReason:'provider_or_validation',validationDiagnostic:{stage:'chief_editor',code:'provider_timeout'},inference:{attempted:true,reservedUnits:6}})
+ // The direct path has no job row to resume from, so it must not promise
+ // resume metadata; only the orchestrated path may send it.
+ expect(chiefBody).not.toHaveProperty('resume')
  expect(send).toHaveBeenCalledTimes(3)
 })
 it('rejects unsafe Chief timeout settings before reserving or calling Meta',async()=>{
@@ -356,7 +360,9 @@ it('reports a bounded Reviewer provider timeout after Chief hydration succeeds',
   const response=await post({ARTICLE_RETRY_BACKOFF_BASE_MS:'0'},{interests:'Bounded delayed Reviewer timeout test'})
   body=await response.json() as Record<string,unknown>
  }finally{console.error=original}
- expect(body).toMatchObject({source:'deterministic',fallbackReason:'provider_or_validation',validationDiagnostic:{stage:'reviewer',code:'provider_timeout'},inference:{attempted:true,reservedUnits:6},resume:{recoverable:true,attemptsUsed:4,chargedUnits:6}})
+ expect(body).toMatchObject({source:'deterministic',fallbackReason:'provider_or_validation',validationDiagnostic:{stage:'reviewer',code:'provider_timeout'},inference:{attempted:true,reservedUnits:6}})
+ // Direct path: no job row exists, so no resume metadata is promised.
+ expect(body).not.toHaveProperty('resume')
  expect(send).toHaveBeenCalledTimes(4)
  expect(seen).toContain(120000)
  const event=JSON.parse(records.find(record=>record.includes('article_editorial_failure'))!) as Record<string,unknown>
@@ -516,11 +522,11 @@ it('discloses the exact caller limit without model calls or global usage leakage
  expect(body.budget).not.toHaveProperty('limit')
  expect(send).not.toHaveBeenCalled()
 })
-function preparationDb(){
+function preparationDb(withCheckpoints=true){
  const sqlite=new DatabaseSync(':memory:')
  sqlite.exec('CREATE TABLE asset_versions(id TEXT PRIMARY KEY)')
  sqlite.exec(readFileSync('migrations/0007_article_edition_jobs.sql','utf8'))
- sqlite.exec(readFileSync('migrations/0011_article_edition_checkpoints.sql','utf8'))
+ if(withCheckpoints)sqlite.exec(readFileSync('migrations/0011_article_edition_checkpoints.sql','utf8'))
  for(const item of items)sqlite.prepare('INSERT INTO asset_versions(id) VALUES(?)').run(item.image.id)
  const db={prepare:(sql:string)=>({bind:(...params:unknown[])=>({
   first:async()=>sqlite.prepare(sql).get(...params as (string|number)[])??null,
@@ -770,6 +776,41 @@ it('stores a timed-out generation as resumable and resumes without repeating pai
   expect(completed.modelCalls.filter(call=>call.stage==='chief_editor')).toHaveLength(1)
   expect(send).toHaveBeenCalledTimes(7)
  }finally{sqlite.close()}
+})
+it('completes a 3-story edition when the checkpoints table is missing pre-migration',async()=>{
+ // Production may run code newer than its applied migrations: with 0011
+ // unapplied, every checkpoint write fails. Generation must degrade to
+ // completing without resume safety — never loop paid Chief calls that
+ // can never adopt.
+ const {sqlite,db}=preparationDb(false)
+ try{
+  vi.mocked(editorialArticlePool).mockResolvedValue(prepared(6,[]))
+  const send=provider();vi.stubGlobal('fetch',send)
+  const config={EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db}
+  const prompt={interests:'A pre-migration checkpoint study'}
+  const result=await post(config,prompt)
+  expect(result.status).toBe(200)
+  const completed=await result.json() as {source:string;articleEdition:{articles:unknown[]};modelCalls:{stage:string;status:string}[]}
+  expect(completed.source).toBe('meta')
+  expect(completed.articleEdition.articles).toHaveLength(3)
+  expect(send).toHaveBeenCalledTimes(4)
+  expect(completed.modelCalls.filter(call=>call.stage==='chief_editor')).toHaveLength(1)
+  // A later poll re-serves the completed edition without new inference.
+  const again=await post(config,prompt)
+  expect((await again.json() as {source:string}).source).toBe('meta')
+  expect(send).toHaveBeenCalledTimes(4)
+ }finally{sqlite.close()}
+})
+it('stays resumable when a checkpoint write fails for a reason other than a missing table',async()=>{
+ mockPool()
+ const send=provider()
+ vi.stubGlobal('fetch',send)
+ const body=await (await articleEditorialResponse(liveLogRequest(),environment({ARTICLE_RETRY_BACKOFF_BASE_MS:'0'}),{...preferences,interests:'A checkpoint outage study in quiet interiors'},'lite',undefined,3,undefined,undefined,undefined,
+   {jobKey:'job-checkpoint-outage-1',onCheckpoint:async()=>{throw Error('D1_ERROR: database is locked')}})).json() as {fallbackReason?:string;validationDiagnostic?:{code:string};resume?:{recoverable:boolean}}
+ expect(body.fallbackReason).toBe('provider_or_validation')
+ expect(body.validationDiagnostic).toMatchObject({code:'checkpoint_unavailable'})
+ expect(body.resume).toMatchObject({recoverable:true})
+ expect(send).toHaveBeenCalledTimes(1)
 })
 it('stores distinct source-linked perspectives for different curiosity prompts and reuses identical evidence',async()=>{
  const {sqlite,db}=preparationDb()
@@ -1490,7 +1531,8 @@ it('retries recoverable failures and records each attempt',async()=>{
     'Reviewer request failed; retrying (attempt 2 of 3).',
     'Reviewer request failed; retrying (attempt 3 of 3).',
   ])
-  expect(body.resume).toMatchObject({recoverable:true,attemptsUsed:4})
+  // Direct call without a job context: no row exists to resume from.
+  expect(body).not.toHaveProperty('resume')
 })
 it('replays stored invocation entries on in-flight polls',async()=>{
   const {sqlite,db}=preparationDb()
@@ -1692,7 +1734,8 @@ it('reports workflow timeouts without retrying them',async()=>{
   expect(body.validationDiagnostic).toMatchObject({code:'workflow_timeout'})
   expect(send).toHaveBeenCalledTimes(1)
   expect(body.modelCalls).toHaveLength(1)
-  expect(body.resume).toMatchObject({recoverable:true})
+  // Direct call without a job context: no resume metadata is promised.
+  expect(body).not.toHaveProperty('resume')
 },10000)
 it('fails validation errors without retrying or resuming',async()=>{
   mockPool()
@@ -1706,7 +1749,7 @@ it('fails validation errors without retrying or resuming',async()=>{
   expect(body.modelCalls).toHaveLength(1)
   expect(body.resume).toBeUndefined()
 })
-it('keeps the original error and stays resumable when a top-up is denied',async()=>{
+it('keeps the original error when a top-up is denied',async()=>{
   mockPool()
   vi.stubGlobal('fetch',byNameProvider((name,count)=>name==='curio_articles_confirmation_v1'&&count===1?abortError():null))
   let reserves=0
@@ -1715,7 +1758,9 @@ it('keeps the original error and stays resumable when a top-up is denied',async(
   expect(body.validationDiagnostic).toMatchObject({code:'provider_timeout'})
   expect(body.modelCalls).toHaveLength(4)
   expect(body.notices!.map(notice=>notice.text)).toContain('Confirmation retry allowance unavailable; not retrying.')
-  expect(body.resume).toMatchObject({recoverable:true,attemptsUsed:4})
+  // Direct call without a job context: the original error stands, and no
+  // resume metadata is promised without a row to resume from.
+  expect(body).not.toHaveProperty('resume')
 })
 it('resumes a timed-out confirmation at confirmation and publishes meta content',async()=>{
   const {sqlite,db}=preparationDb()

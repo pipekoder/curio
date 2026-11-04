@@ -98,9 +98,18 @@ backend marks `resume.recoverable` (provider timeouts, 429/5xx, lost
 leases, expired workflow budgets) and the lapsed-lease `503
 generation_interrupted` are transitional: the driver keeps polling and a
 later request resumes the same job from checkpoints, surfacing the carried
-invocation log meanwhile. Budget denials, deterministic validation
-failures and the exhausted 30-attempt cap stay terminal with their real
-reasons. Every 202 carries the static labels `status: preparing` and
+invocation log meanwhile. Owner-run failures arrive as HTTP 200 fallback
+bodies, so the transitional verdict applies there too — not only to
+non-200 responses. `resume` is promised only on the orchestrated path
+with a job row; the direct path has nothing to resume from and stays
+terminal. Budget denials, deterministic validation failures and the
+exhausted 30-attempt cap stay terminal with their real reasons. When the
+checkpoints table itself is missing (code deployed ahead of migration
+0011), checkpoint writes degrade instead of failing the run: the edition
+still completes without resume safety, with one notice and one operator
+log entry per run. Apply migration 0011 to restore durable resume; until
+then an interrupted run restarts from Chief Editor rather than adopting
+stages. Every 202 carries the static labels `status: preparing` and
 `fallbackReason: analysis_pending` even while generating; the live phase
 is `preparation.outcome` (`reviewing` once the owner generates) together
 with `generationStage` and `modelCalls`.
