@@ -33,6 +33,13 @@ describe('spatial article edition fetch', () => {
     expect(edition!.articleEdition.articles).toHaveLength(3)
     expect(edition!.articleEdition.articles[0].images).toHaveLength(3)
   })
+  it('parses the public editorial tier without numeric scores', async () => {
+    const tier={label:'Wild Perspectives',description:'An unexpected angle, a curious connection, or a different way of seeing familiar things.'}
+    const {edition} = await call(ok(articleResponseFixture({editorialTier:tier})))
+    expect(edition!.editorialTier).toEqual(tier)
+    const legacy = await call(ok(articleResponseFixture()))
+    expect(legacy.edition!.editorialTier).toBeUndefined()
+  })
   it('continues one Generate action through truthful preparation to a reviewed edition', async () => {
     const responses = [
       new Response(JSON.stringify({status:'preparing',preparation:{retryAfterMs:0},eligibleImages:4,requiredImages:6}),{status:202}),

@@ -107,3 +107,17 @@ it('leaves feature exhibits on the existing layout',()=>{
   expect(root.querySelector('h2')?.textContent).toBe('The Quiet Craft')
   expect(root.textContent).toContain('Gallery 0 · Rights 0')
 })
+it('shows the editorial tier label and description without numeric scores',()=>{
+  const tier={label:'Curious Findings',description:'Small discoveries, interesting details and ideas that invite a closer look.'}
+  const {container}=render(<ArticleCard {...props({editorialTier:tier})}/>)
+  const root=container.querySelector('article')!
+  expect(root.querySelector('.spatial-eyebrow')?.textContent).toContain('Curious Findings')
+  expect(root.querySelector('.eb-tier')?.textContent).toBe(tier.description)
+  expect(root.textContent).not.toMatch(/score|70|50|PASS|REJECT/i)
+})
+it('omits the tier display for editions without a label',()=>{
+  const {container}=render(<ArticleCard {...props()}/>)
+  const root=container.querySelector('article')!
+  expect(root.querySelector('.spatial-eyebrow')?.textContent).toBe('Story · Exhibit 1 of 1')
+  expect(root.querySelector('.eb-tier')).toBeNull()
+})

@@ -3,7 +3,8 @@ import type {EditorialMode} from './editorial-model-routing'
 import type {Bindings} from './index'
 import {ARTICLE_CONTRACT_VERSION,ARTICLE_MIN_ELIGIBLE_IMAGES,ARTICLE_SINGLE_CONTRACT_VERSION,ARTICLE_SINGLE_MIN_ELIGIBLE_IMAGES} from '../shared/editorial-articles'
 import type {ArticleEditionBody} from '../shared/editorial-articles'
-import {articleEditorialResponse,researchReferencesCurrent,validateArticleEdition,type ArticleGenerationStage} from './editorial-articles'
+import {articleEditorialResponse,researchReferencesCurrent,validateArticleEdition,type ArticleAssessment,type ArticleGenerationStage} from './editorial-articles'
+import {editorialTierLabel} from '../shared/editorial-tiers'
 import {editorialArticlePool,reportArticlePoolFailure,type ArticlePool} from './editorial-article-pool'
 import {runClassification,AssetAnalysisError} from './asset-classifier'
 import {catalogDigest} from './catalog-store'
@@ -98,14 +99,17 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
   }
   if(job.state==='completed'&&job.result_json)try{
     if(!pool)throw Error('Article pool unavailable')
-    const saved=JSON.parse(job.result_json) as {articleEdition:ArticleEditionBody;generation:unknown;evidence?:{interpretations:number}|null;researchReferences?:unknown;aiDisclosure?:string}
+    const saved=JSON.parse(job.result_json) as {articleEdition:ArticleEditionBody;generation:unknown;evidence?:{interpretations:number}|null;researchReferences?:unknown;aiDisclosure?:string;editorialTier?:unknown}
     const research=editorialSources.parse(saved.researchReferences??[])
     if(!researchReferencesCurrent(research,env.RESEARCH_SOURCE_ORIGINS))throw Error('Research evidence expired')
     const approved=env.EDITORIAL_FEEDBACK_ENABLED==='true'?await approvedArticleVersions(db,identity.id,saved.articleEdition):{edition:saved.articleEdition,revisedIds:[]}
     const edition=validateArticleEdition(approved.edition,pool.items,[...pool.sources,...research],pool.visualContexts,saved.articleEdition.articles.length)
     if(job.evidence_digest!==await evidenceDigest(pool,edition,research))throw Error('Evidence changed')
+    // Saved internal assessments are never re-served: readers receive only
+    // the public tier label. Rows written before tiers omit the label.
+    const tier=editorialTierLabel.safeParse(saved.editorialTier)
     return Response.json({format,source:'meta',retrieval:'d1',cached:true,articleEdition:edition,items:pool.items,generation:approved.revisedIds.length?{...(saved.generation as Record<string,unknown>),revisionModel:'muse-spark-1.3',confirmationModel:'muse-spark-1.3'}:saved.generation,
-      ...(saved.evidence!==undefined?{evidence:saved.evidence}:{}),...(saved.aiDisclosure?{researchReferences:research,aiDisclosure:saved.aiDisclosure}:{}),inference:{attempted:false,reservedUnits:0,latencyMs:null,usage:null}})
+      ...(saved.evidence!==undefined?{evidence:saved.evidence}:{}),...(tier.success?{editorialTier:tier.data}:{}),...(saved.aiDisclosure?{researchReferences:research,aiDisclosure:saved.aiDisclosure}:{}),inference:{attempted:false,reservedUnits:0,latencyMs:null,usage:null}})
   }catch{/* A changed version, source or grant invalidates the saved result. */}
   if(job.state==='completed'){
     const changed={...base,status:'unavailable',fallbackReason:'evidence_changed'}
@@ -147,12 +151,14 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
       const reportGenerationStage=async(stage:ArticleGenerationStage)=>{
         await db.prepare(`UPDATE article_edition_jobs SET result_json=?,updated_at=? WHERE id=? AND lease_token=?`).bind(JSON.stringify({progress,stage}),Date.now(),identity.id,token).run()
       }
-      const result=await articleEditorialResponse(request,env,p,mode,pool,articleCount,reportGenerationStage,schedule)
-      const payload=await result.clone().json() as {source?:string;articleEdition?:unknown;generation?:unknown;evidence?:{interpretations:number}|null;researchReferences?:unknown;aiDisclosure?:string}
+      let assessment:ArticleAssessment|null=null
+      const result=await articleEditorialResponse(request,env,p,mode,pool,articleCount,reportGenerationStage,schedule,recorded=>{assessment=recorded})
+      const payload=await result.clone().json() as {source?:string;articleEdition?:unknown;generation?:unknown;evidence?:{interpretations:number}|null;researchReferences?:unknown;aiDisclosure?:string;editorialTier?:unknown}
       if(payload.source==='meta'&&payload.articleEdition){
         const research=editorialSources.parse(payload.researchReferences??[])
+        const tier=editorialTierLabel.safeParse(payload.editorialTier)
         await db.prepare(`UPDATE article_edition_jobs SET state='completed',result_json=?,evidence_digest=?,lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`)
-          .bind(JSON.stringify({articleEdition:payload.articleEdition,generation:payload.generation,evidence:payload.evidence??null,researchReferences:research,aiDisclosure:payload.aiDisclosure}),await evidenceDigest(pool,payload.articleEdition as ArticleEditionBody,research),Date.now(),identity.id,token).run()
+          .bind(JSON.stringify({articleEdition:payload.articleEdition,generation:payload.generation,evidence:payload.evidence??null,researchReferences:research,aiDisclosure:payload.aiDisclosure,...(tier.success?{editorialTier:tier.data}:{}),...(assessment?{assessment}:{})}),await evidenceDigest(pool,payload.articleEdition as ArticleEditionBody,research),Date.now(),identity.id,token).run()
       }else await db.prepare(`UPDATE article_edition_jobs SET state='failed',result_json=?,lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(JSON.stringify({failure:{status:result.status,body:payload}}),Date.now(),identity.id,token).run()
       return result
     }

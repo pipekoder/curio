@@ -55,6 +55,8 @@ it('runs one V3 Chief plan, skips unrequested research, and retains the reviewed
   calls.push(body.response_format.json_schema.name)
   const value=calls.length===1?{topic:'The everyday chair',angle:'How seating shapes daily rituals',argument:'Seating gives ordinary reflection a physical place.',selectedAssetIds:[version(1),version(2)],researchQuestions:[]}
    :calls.length===2?toDraft(edition(1,2))
+   :calls.length===3?review(input.edition)
+   :calls.length===4?toRevisionDraft(input.edition)
    :review(input.edition)
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
  })
@@ -62,7 +64,7 @@ it('runs one V3 Chief plan, skips unrequested research, and retains the reviewed
  const result=await post({EDITORIAL_WORKFLOW_V3_ENABLED:'true'},{interests:'A V3 chair story without external history',editionFormat:ARTICLE_SINGLE_CONTRACT_VERSION})
  expect(result.status).toBe(200)
  expect(await result.json()).toMatchObject({format:ARTICLE_SINGLE_CONTRACT_VERSION,source:'meta',researchReferences:[],inference:{attempted:true,reservedUnits:5}})
- expect(calls).toEqual(['curio_article_plan_v3','curio_article_v1','curio_articles_review_v1'])
+ expect(calls).toEqual(['curio_article_plan_v3','curio_article_v1','curio_articles_review_v1','curio_article_v1_revision','curio_articles_confirmation_v1'])
 })
 
 it('binds retrieved cultural evidence to a reviewed article and returns only its cited source',async()=>{
@@ -83,7 +85,8 @@ it('binds retrieved cultural evidence to a reviewed article and returns only its
    draftValue.articles[0].narrative+=' Bauhaus was a German art school that combined crafts and the fine arts.'
    draftValue.articles[0].culturalClaims=[{ref:cited.claimRef,narrativeText:'Bauhaus was a German art school that combined crafts and the fine arts.'}]
    value=draftValue
-  }else value=review(input.edition)
+  }else if(museCalls===4)value=toRevisionDraft(input.edition)
+  else value=review(input.edition)
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
  })
  vi.stubGlobal('fetch',send)
@@ -93,7 +96,7 @@ it('binds retrieved cultural evidence to a reviewed article and returns only its
  expect(body.researchReferences).toMatchObject([{source:'cultural_research',citations:[{url:'https://en.wikipedia.org/wiki/Bauhaus',publication:'Wikipedia'}]}])
  expect(body.articleEdition.articles[0].narrative).toContain('[1]')
  expect(body.aiDisclosure).toContain('AI assistance')
- expect(museCalls).toBe(3)
+ expect(museCalls).toBe(5)
 })
 
 it('validates exactly three articles with two or three unique exact-version images',()=>{
@@ -247,9 +250,9 @@ it('uses one four-unit reservation for Lite Chief and independent Reviewer and s
  const lite=await (await post()).json() as Record<string,unknown>
  expect(lite).toMatchObject({source:'meta',retrieval:'d1',generation:{chiefEditorModel:'muse-spark-1.3',reviewerModel:'muse-spark-1.3'},inference:{reservedUnits:4,attempted:true}})
  expect((lite.articleEdition as EditorialArticleEdition).articles).toHaveLength(3)
- expect(send).toHaveBeenCalledTimes(2)
+ expect(send).toHaveBeenCalledTimes(4)
  expect((await post({EDITORIAL_HYBRID_ENABLED:'true',EDITORIAL_WONDER_PROVIDER_VERIFIED:'true',META_WONDER_MODEL:'muse-wonder-1.0'},{editorialMode:'hybrid'})).status).toBe(200)
- expect(JSON.parse(String(send.mock.calls[2][1].body)).model).toBe('muse-wonder-1.0')
+ expect(JSON.parse(String(send.mock.calls[4][1].body)).model).toBe('muse-wonder-1.0')
 })
 it('uses a bounded 60-second Chief timeout and 30-second Reviewer timeout for both one- and three-story editions',async()=>{
  mockPool(9)
@@ -268,7 +271,7 @@ it('uses a bounded 60-second Chief timeout and 30-second Reviewer timeout for bo
   vi.stubGlobal('fetch',send)
   const result=await post({}, {interests:`Delayed ${count} article Chief Editor test`,...(count===1?{editionFormat:ARTICLE_SINGLE_CONTRACT_VERSION}:{})})
   expect(await result.json()).toMatchObject({source:'meta',inference:{attempted:true,reservedUnits:4}})
-  expect(send).toHaveBeenCalledTimes(2)
+  expect(send).toHaveBeenCalledTimes(4)
  }
  expect(limits.filter(ms=>ms===60000)).toHaveLength(2)
  expect(limits.filter(ms=>ms===30000)).toHaveLength(2)
@@ -403,10 +406,11 @@ it('identifies Reviewer, Revision and Confirmation failures without publishing a
   expect(send).toHaveBeenCalledTimes(failedCall)
  }
 })
-it('requires final independent confirmation after revision and falls back if that review fails',async()=>{
+it('publishes the confirmed edition with its tier even when the final score is low',async()=>{
  mockPool();const send=provider(3,1);vi.stubGlobal('fetch',send)
  const result=await (await post({}, {interests:'A separate confirmation-failure investigation of living spaces'})).json() as Record<string,unknown>
- expect(result).toMatchObject({source:'deterministic',status:'fallback',fallbackReason:'editorial_rejected',inference:{reservedUnits:4,attempted:true}})
+ expect(result).toMatchObject({source:'meta',editorialTier:{label:'Curious Findings'},inference:{reservedUnits:4,attempted:true}})
+ expect((result.articleEdition as {articles:unknown[]}).articles).toHaveLength(3)
  expect(send).toHaveBeenCalledTimes(4)
 })
 it('merges revision prose onto validated identities without changing references',()=>{
@@ -454,7 +458,7 @@ it('rejects an edition whose reviewer-flagged image problem prose cannot fix',as
  })
  vi.stubGlobal('fetch',send)
  const body=await (await post({},{interests:'An unfixable image-grounding study'})).json() as Record<string,unknown>
- expect(body).toMatchObject({source:'deterministic',status:'fallback',fallbackReason:'editorial_rejected'})
+ expect(body).toMatchObject({source:'deterministic',status:'fallback',fallbackReason:'editorial_blocked',validationDiagnostic:{stage:'confirmation',code:'editorial_blocked'}})
  expect(send).toHaveBeenCalledTimes(4)
  const revisionCall=JSON.parse(String(send.mock.calls[2][1].body))
  expect(revisionCall.response_format.json_schema.name).toBe('curio_articles_v1_revision')
@@ -522,7 +526,7 @@ it('analyzes two authorized versions concurrently, then activates the reviewed e
   const second=await post({EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db},{interests:'Prepare an interior article with ritual in mind'})
   expect(second.status).toBe(200)
   const secondBody=await second.json();expect(secondBody).toMatchObject({source:'meta',format:ARTICLE_CONTRACT_VERSION})
-  expect(send).toHaveBeenCalledTimes(2)
+  expect(send).toHaveBeenCalledTimes(4)
   const chiefInput=JSON.parse(JSON.parse(String(send.mock.calls[0][1].body)).messages[1].content)
   const reviewerInput=JSON.parse(JSON.parse(String(send.mock.calls[1][1].body)).messages[1].content)
   expect(chiefInput.editorialEvidence.version).toBe('curio-article-evidence-v1')
@@ -535,11 +539,11 @@ it('analyzes two authorized versions concurrently, then activates the reviewed e
   const reused=await post({EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db},{interests:'Prepare an interior article with ritual in mind'})
   expect(await reused.json()).toMatchObject({source:'meta',cached:true})
   expect(sqlQueries.slice(-1)).toEqual(['SELECT * FROM article_edition_jobs WHERE id=?'])
-  expect(send).toHaveBeenCalledTimes(2)
+  expect(send).toHaveBeenCalledTimes(4)
   const revoked=await post({EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db},{interests:'Prepare an interior article with ritual in mind'})
   expect(revoked.status).toBe(409)
   expect(await revoked.json()).toMatchObject({source:'deterministic',fallbackReason:'evidence_changed'})
-  expect(send).toHaveBeenCalledTimes(2)
+  expect(send).toHaveBeenCalledTimes(4)
  }finally{sqlite.close()}
 })
 it('does not retry failed analysis, and keeps budget refusal explicit',async()=>{
@@ -593,7 +597,7 @@ it('caps simultaneous generation claims without blocking existing job status rea
   const result=await post(config,prompt)
   expect(result.status).toBe(200)
   expect((await result.json() as {source:string}).source).toBe('meta')
-  expect(send).toHaveBeenCalledTimes(2)
+  expect(send).toHaveBeenCalledTimes(4)
  }finally{sqlite.close()}
 })
 it('renews the D1 lease at generation claim and prevents pollers from duplicating a delayed Chief call',async()=>{
@@ -617,7 +621,7 @@ it('renews the D1 lease at generation claim and prevents pollers from duplicatin
   expect(send).toHaveBeenCalledOnce()
   release()
   expect((await (await first).json() as {source:string}).source).toBe('meta')
-  expect(send).toHaveBeenCalledTimes(2)
+  expect(send).toHaveBeenCalledTimes(4)
  }finally{sqlite.close()}
 })
 it('stores a timed-out generation as failed and does not repeat its paid call on the next poll',async()=>{
@@ -691,7 +695,7 @@ it('generates exactly one reviewed story from a three-image pool in single-artic
   const result=await (await post({},{editionFormat:ARTICLE_SINGLE_CONTRACT_VERSION})).json() as Record<string,unknown>
   expect(result).toMatchObject({format:ARTICLE_SINGLE_CONTRACT_VERSION,source:'meta',retrieval:'d1',inference:{reservedUnits:4,attempted:true}})
   expect((result.articleEdition as {articles:unknown[]}).articles).toHaveLength(1)
-  expect(send).toHaveBeenCalledTimes(2)
+  expect(send).toHaveBeenCalledTimes(4)
   const chiefInput=JSON.parse(JSON.parse(String(send.mock.calls[0][1].body)).messages[1].content)
   expect(chiefInput.articleCount).toBe(1)
   expect(chiefInput.catalog).toHaveLength(3)
@@ -728,21 +732,21 @@ it('keeps single-story and three-story jobs for the same prompt separate',async(
     const body=await one.json() as Record<string,unknown>
     expect(body).toMatchObject({format:ARTICLE_SINGLE_CONTRACT_VERSION,source:'meta'})
     expect((body.articleEdition as {articles:unknown[]}).articles).toHaveLength(1)
-    expect(send).toHaveBeenCalledTimes(2)
+    expect(send).toHaveBeenCalledTimes(4)
     const rows=sqlite.prepare('SELECT id,state FROM article_edition_jobs').all() as {id:string;state:string}[]
     expect(rows).toHaveLength(2)
     expect(new Set(rows.map(row=>row.id)).size).toBe(2)
     expect(rows.map(row=>row.state).sort()).toEqual(['completed','failed'])
   }finally{sqlite.close()}
 })
-it('reports chief and reviewer stage entries through the progress hook',async()=>{
+it('reports chief, reviewer, revision and confirmation entries through the progress hook',async()=>{
   mockPool()
   vi.stubGlobal('fetch',provider())
   const seen:string[]=[]
   const request=new Request(origin,{method:'POST',headers:{Origin:origin,'CF-Connecting-IP':'192.0.2.9'}})
   const response=await articleEditorialResponse(request,environment(),preferences,'lite',undefined,3,stage=>{seen.push(stage)})
   expect(response.status).toBe(200)
-  expect(seen).toEqual(['chief_editor','reviewer'])
+  expect(seen).toEqual(['chief_editor','reviewer','revision','confirmation'])
 })
 it('reports revision and confirmation entries when review requests changes',async()=>{
   mockPool()
@@ -798,5 +802,130 @@ it('includes the reported generation stage on in-flight polls',async()=>{
     const second=await post({EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db})
     expect(second.status).toBe(202)
     expect(await second.json()).toMatchObject({preparation:{outcome:'reviewing'},generationStage:'reviewer',eligibleImages:5})
+  }finally{sqlite.close()}
+})
+// PR1: graded publication replaces quality rejection. Low scores publish
+// with a public tier; only hard integrity failures block publication.
+const dimScores=(editorialQuality:number,discoveryValue:number,originality:number,narrativeCoherence:number,readability:number)=>({editorialQuality,discoveryValue,originality,narrativeCoherence,readability})
+const uniform=(score:number)=>dimScores(score,score,score,score,score)
+function scoredReview(value:EditorialArticleEdition,dims:Record<string,number>,issues:{severity:'low'|'medium'|'high';code:string}[]=[]){
+  return {rubricVersion:EDITORIAL_STANDARD_VERSION,
+    dimensions:Object.fromEntries(Object.entries(dims).map(([key,score])=>[key,{score,reason:'Independent assessment against supplied evidence.',evidenceRefs:[`feature:${value.articles[0].heroAssetId}`]}])),
+    magazineFeedback:'The edition is assessed.',
+    featureFeedback:value.articles.map((article,i)=>({assetId:article.heroAssetId,strengths:[],issues:i===0?issues.map(issue=>({...issue,evidenceRefs:[article.images[0].brandSourceId],instruction:'Address the flagged concern.'})):[]})),
+    revisionInstructions:issues.length?['Address the flagged concern.']:[]}
+}
+function stagedProvider(first:(ed:EditorialArticleEdition)=>unknown,confirm:(ed:EditorialArticleEdition)=>unknown){
+  let calls=0
+  return vi.fn(async(_url:string,init:RequestInit)=>{
+    const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content);calls++
+    const value=calls===1?toDraft(edition(input.articleCount,input.catalog.length>=9?3:2)):calls===2?first(input.edition):calls===3?toRevisionDraft(input.edition):confirm(input.edition)
+    return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
+  })
+}
+it('publishes a low-score edition with its tier after exactly one revision',async()=>{
+  mockPool()
+  const send=stagedProvider(ed=>review(ed,1),ed=>scoredReview(ed,uniform(2)))
+  vi.stubGlobal('fetch',send)
+  const body=await (await post({},{interests:'A low-score graded study of seating nooks'})).json() as Record<string,unknown>
+  expect(body).toMatchObject({source:'meta',retrieval:'d1',editorialTier:{label:'Curious Findings',description:'Small discoveries, interesting details and ideas that invite a closer look.'},generation:{revisionModel:'muse-spark-1.3',confirmationModel:'muse-spark-1.3'}})
+  expect((body.articleEdition as {articles:unknown[]}).articles).toHaveLength(3)
+  expect(send).toHaveBeenCalledTimes(4)
+})
+it('assigns Wild Perspectives and Editor\'s Pick tiers from confirmation scores',async()=>{
+  mockPool()
+  const mid=stagedProvider(ed=>review(ed,5),ed=>scoredReview(ed,uniform(3)))
+  vi.stubGlobal('fetch',mid)
+  expect(await (await post({},{interests:'A mid-score graded study of reading corners'})).json()).toMatchObject({source:'meta',editorialTier:{label:'Wild Perspectives'}})
+  expect(mid).toHaveBeenCalledTimes(4)
+  const top=stagedProvider(ed=>review(ed,5),ed=>scoredReview(ed,uniform(5)))
+  vi.stubGlobal('fetch',top)
+  expect(await (await post({},{interests:'A top-score graded study of morning light'})).json()).toMatchObject({source:'meta',editorialTier:{label:"Editor's Pick"}})
+  expect(top).toHaveBeenCalledTimes(4)
+})
+it('publishes boundary confirmation scores with the correct tier',async()=>{
+  mockPool()
+  const cases:[Record<string,number>,string][]=[
+    [dimScores(5,5,5,5,5),"Editor's Pick"],[dimScores(5,3,3,3,2),"Editor's Pick"],
+    [dimScores(4,4,3,3,2),'Wild Perspectives'],[dimScores(3,2,3,2,2),'Wild Perspectives'],
+    [dimScores(2,3,3,2,2),'Curious Findings'],
+  ]
+  let n=0
+  for(const [dims,label] of cases){
+    const send=stagedProvider(ed=>review(ed,5),ed=>scoredReview(ed,dims))
+    vi.stubGlobal('fetch',send)
+    const body=await (await post({},{interests:`A boundary tier study number ${++n} for quiet rooms`})).json() as Record<string,unknown>
+    expect(body).toMatchObject({source:'meta',editorialTier:{label}})
+    expect(send).toHaveBeenCalledTimes(4)
+  }
+})
+it('blocks confirmation hard integrity failures without publishing',async()=>{
+  mockPool()
+  for(const code of ['fact_integrity','visual_grounding','brand_integrity','safety']){
+    const send=stagedProvider(ed=>review(ed,5),ed=>scoredReview(ed,uniform(5),[{severity:'high',code}]))
+    vi.stubGlobal('fetch',send)
+    const response=await post({},{interests:`A hard-block study of ${code} in sitting rooms`})
+    const body=await response.json() as Record<string,unknown>
+    expect(body).toMatchObject({source:'deterministic',status:'fallback',fallbackReason:'editorial_blocked',articleEdition:null,validationDiagnostic:{stage:'confirmation',code:'editorial_blocked'}})
+    expect(response.headers.get('X-Curio-Request-Id')).toMatch(/^[0-9a-f-]{36}$/)
+    expect(send).toHaveBeenCalledTimes(4)
+  }
+})
+it('treats high-severity quality criticism as tier input, not a block',async()=>{
+  mockPool()
+  const send=stagedProvider(ed=>review(ed,5),ed=>scoredReview(ed,uniform(4),[{severity:'high',code:'generic_copy'}]))
+  vi.stubGlobal('fetch',send)
+  const body=await (await post({},{interests:'A quality-criticism study of window seats'})).json() as Record<string,unknown>
+  expect(body).toMatchObject({source:'meta',editorialTier:{label:"Editor's Pick"}})
+  expect(send).toHaveBeenCalledTimes(4)
+})
+it('fails closed on unrecognized confirmation issue codes',async()=>{
+  mockPool()
+  const send=stagedProvider(ed=>review(ed,5),ed=>scoredReview(ed,uniform(5),[{severity:'high',code:'invented_code'}]))
+  vi.stubGlobal('fetch',send)
+  const body=await (await post({},{interests:'An unknown-code study of hallway nooks'})).json() as Record<string,unknown>
+  expect(body).toMatchObject({source:'deterministic',fallbackReason:'provider_or_validation',validationDiagnostic:{stage:'confirmation'}})
+  expect(send).toHaveBeenCalledTimes(4)
+})
+it('keeps numeric scores out of the public graded response',async()=>{
+  mockPool()
+  const send=stagedProvider(ed=>review(ed,1),ed=>scoredReview(ed,uniform(2)))
+  vi.stubGlobal('fetch',send)
+  const body=await (await post({},{interests:'A score-privacy study of attic corners'})).json() as Record<string,unknown>
+  const keys:string[]=[]
+  const walk=(value:unknown)=>{if(Array.isArray(value))value.forEach(walk);else if(value&&typeof value==='object')for(const [key,entry] of Object.entries(value)){keys.push(key);walk(entry)}}
+  walk(body)
+  expect(keys.filter(key=>/score/i.test(key))).toEqual([])
+  expect(JSON.stringify(body)).not.toMatch(/REJECT|REVISE|[^_]PASS/)
+  expect(body.editorialTier).toEqual({label:'Curious Findings',description:'Small discoveries, interesting details and ideas that invite a closer look.'})
+})
+it('reports graded publication scores to the operator log only',async()=>{
+  mockPool()
+  const send=stagedProvider(ed=>review(ed,1),ed=>scoredReview(ed,uniform(2)))
+  vi.stubGlobal('fetch',send)
+  const errors:string[]=[]
+  const spy=vi.spyOn(console,'error').mockImplementation((...args:unknown[])=>{errors.push(args.map(String).join(' '))})
+  try{
+    await (await post({},{interests:'A log-privacy study of cellar stairs'})).json()
+    const graded=errors.map(line=>{try{return JSON.parse(line)}catch{return null}}).find(row=>row?.event==='article_editorial_graded')
+    expect(graded).toMatchObject({finalScore:40,tier:'curious_findings',editorialMode:'lite',articleCount:3})
+    expect(graded.dimensionScores).toEqual({editorialQuality:2,discoveryValue:2,originality:2,narrativeCoherence:2,readability:2})
+    expect(JSON.stringify(graded)).not.toContain('invite a different way')
+  }finally{spy.mockRestore()}
+})
+it('persists the public tier on completed jobs while withholding internal scores',async()=>{
+  const {sqlite,db}=preparationDb()
+  try{
+    vi.mocked(editorialArticlePool).mockResolvedValue(prepared(9,[]))
+    vi.stubGlobal('fetch',provider())
+    const config={EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db}
+    const first=await (await post(config,{interests:'A tier-persistence study of garden rooms'})).json() as Record<string,unknown>
+    expect(first).toMatchObject({source:'meta',editorialTier:{label:"Editor's Pick"}})
+    expect(first).not.toHaveProperty('assessment')
+    const row=sqlite.prepare('SELECT result_json FROM article_edition_jobs').get() as {result_json:string}
+    expect(JSON.parse(row.result_json).assessment).toMatchObject({finalScore:100,tier:'editors_pick'})
+    const second=await (await post(config,{interests:'A tier-persistence study of garden rooms'})).json() as Record<string,unknown>
+    expect(second).toMatchObject({source:'meta',cached:true,editorialTier:{label:"Editor's Pick"}})
+    expect(second).not.toHaveProperty('assessment')
   }finally{sqlite.close()}
 })

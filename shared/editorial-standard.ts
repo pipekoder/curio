@@ -28,7 +28,7 @@ export const editorialReviewOutput=z.strictObject({
   rubricVersion:z.literal(EDITORIAL_STANDARD_VERSION),
   dimensions:z.strictObject({editorialQuality:dimensionReview,discoveryValue:dimensionReview,originality:dimensionReview,narrativeCoherence:dimensionReview,readability:dimensionReview}),
   magazineFeedback:z.string().trim().min(1).max(600),
-  featureFeedback:z.array(z.strictObject({assetId:z.string().max(100),strengths:z.array(z.string().trim().min(1).max(220)).max(4),issues:z.array(z.strictObject({severity:z.enum(['low','medium','high']),code:z.enum(['fact_integrity','visual_grounding','brand_integrity','generic_copy','weak_discovery','repetition','coherence','readability']),evidenceRefs:z.array(z.string().trim().min(1).max(180)).max(8),instruction:z.string().trim().min(1).max(260)})).max(6)})).max(8),
+  featureFeedback:z.array(z.strictObject({assetId:z.string().max(100),strengths:z.array(z.string().trim().min(1).max(220)).max(4),issues:z.array(z.strictObject({severity:z.enum(['low','medium','high']),code:z.enum(['fact_integrity','visual_grounding','brand_integrity','safety','generic_copy','weak_discovery','repetition','coherence','readability']),evidenceRefs:z.array(z.string().trim().min(1).max(180)).max(8),instruction:z.string().trim().min(1).max(260)})).max(6)})).max(8),
   revisionInstructions:z.array(z.string().trim().min(1).max(260)).max(8),
 })
 export type EditorialReviewOutput=z.infer<typeof editorialReviewOutput>
