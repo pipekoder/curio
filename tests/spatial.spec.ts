@@ -286,7 +286,7 @@ test('discover headline, subtitle and control rows align with the prompt input',
   await page.route('**/api/editorial/capabilities',route=>route.fulfill({status:200,json:modelCaps}))
   await page.goto('/spatial')
   await expect(page.locator('.spatial-canvas')).toBeVisible()
-  await expect(page.getByRole('heading',{name:'Read. Discover. Shop. Beyond ads.'})).toBeVisible()
+  await expect(page.getByRole('heading',{name:'Beyond ads. Into discovery.'})).toBeVisible()
   await expect(page.locator('.spatial-dock')).toContainText('Follow your curiosity through stories, brands and discoveries that speak to your interests.')
   await expect(page.locator('.spatial-seed-row').getByRole('button',{name:'Surprise me'})).toHaveCount(0)
   // Measure at steady state: the dock entrance scales from .55 to 1 over 1.6s.
@@ -316,7 +316,7 @@ test('discover control rows stay within the viewport at mobile width',async({pag
   await page.setViewportSize({width:390,height:844})
   await page.goto('/spatial')
   await expect(page.locator('.spatial-canvas')).toBeVisible()
-  await expect(page.getByRole('heading',{name:'Read. Discover. Shop. Beyond ads.'})).toBeVisible()
+  await expect(page.getByRole('heading',{name:'Beyond ads. Into discovery.'})).toBeVisible()
   await page.locator('.spatial-dock').evaluate(el=>Promise.all(el.getAnimations().map(animation=>animation.finished)))
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+1)
   expect(overflow).toBe(false)
@@ -368,6 +368,52 @@ test('hybrid mode propagates, shows while generating, and confirms on the chip',
   await expect(page.locator('.spatial-crumb')).toContainText('Exhibit 1 of',{timeout:15000})
   expect((bodies[0] as Record<string,unknown>).editorialMode).toBe('hybrid')
   await expect(page.getByTestId('spatial-edition-chip')).toContainText('AI-curated edition · Meta AI · Hybrid')
+})
+
+test('generating panel is wide, centered and legible while composing',async({page})=>{
+  await page.route('**/api/editorial',async route=>{
+    await new Promise(resolve=>setTimeout(resolve,1500))
+    return route.fulfill({status:200,json:{plan:metaPlan,items:groundedItems,source:'meta',retrieval:'d1',cached:false}})
+  })
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await expect(page.locator('.spatial-canvas')).toBeVisible()
+  await submitPrompt(page)
+  const panel=page.locator('.spatial-generating')
+  await expect(panel).toContainText('Composing your exhibition…')
+  const box=await panel.boundingBox()
+  expect(box!.width).toBeGreaterThanOrEqual(650)
+  expect(box!.width).toBeLessThanOrEqual(680)
+  // Horizontally centered; vertically centered within the viewport area
+  // below the fixed navigation header.
+  expect(Math.abs((box!.x+box!.width/2)-720)).toBeLessThan(2)
+  const header=await page.locator('.spatial-hud').boundingBox()
+  const areaCenterY=header!.height+(900-header!.height)/2
+  expect(Math.abs((box!.y+box!.height/2)-areaCenterY)).toBeLessThan(30)
+  expect(box!.y).toBeGreaterThanOrEqual(header!.height)
+  // Informational progress messages use the darker label gray when shown.
+  const feed=page.locator('.editorial-progress-feed')
+  if(await feed.count()){
+    expect(await feed.evaluate(element=>getComputedStyle(element).color)).toBe('rgb(16, 18, 25)')
+  }
+  await expect(page.getByTestId('spatial-edition-chip')).toBeVisible({timeout:15000})
+})
+
+test('generating panel fits narrow viewports without horizontal overflow',async({page})=>{
+  await page.route('**/api/editorial',async route=>{
+    await new Promise(resolve=>setTimeout(resolve,1500))
+    return route.fulfill({status:200,json:{plan:metaPlan,items:groundedItems,source:'meta',retrieval:'d1',cached:false}})
+  })
+  await page.setViewportSize({width:390,height:844})
+  await page.goto('/spatial')
+  await expect(page.locator('.spatial-canvas')).toBeVisible()
+  await submitPrompt(page)
+  const panel=page.locator('.spatial-generating')
+  await expect(panel).toContainText('Composing your exhibition…')
+  const box=await panel.boundingBox()
+  expect(box!.x).toBeGreaterThanOrEqual(-1)
+  expect(box!.x+box!.width).toBeLessThanOrEqual(391)
+  await expect(page.getByTestId('spatial-edition-chip')).toBeVisible({timeout:15000})
 })
 
 test('article opt-in stages three docks and renders deck plus brand captions',async({page})=>{
