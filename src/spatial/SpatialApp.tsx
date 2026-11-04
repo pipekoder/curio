@@ -881,7 +881,7 @@ export default function SpatialApp(){
     {!composing&&status&&<p role="status" className={`spatial-chip${editionLabel?' is-sub':''}`}>{status}</p>}
     {showDock&&<section className={`spatial-dock${entered?' is-docked':''}${composing?' is-composing':''}`} aria-labelledby="spatial-prompt-heading">
       <p className="spatial-eyebrow">01 · Discover</p>
-      <h1 id="spatial-prompt-heading" tabIndex={-1}>Read. Discover. Shop. Beyond ads.</h1>
+      <h1 id="spatial-prompt-heading" tabIndex={-1}>Beyond ads. Into discovery.</h1>
       <p className="spatial-fine">Follow your curiosity through stories, brands and discoveries that speak to your interests.</p>
       <form onSubmit={submit}>
         <label className="spatial-sr" htmlFor="spatial-prompt">Your curiosity</label>

@@ -286,7 +286,7 @@ test('discover headline, subtitle and control rows align with the prompt input',
   await page.route('**/api/editorial/capabilities',route=>route.fulfill({status:200,json:modelCaps}))
   await page.goto('/spatial')
   await expect(page.locator('.spatial-canvas')).toBeVisible()
-  await expect(page.getByRole('heading',{name:'Read. Discover. Shop. Beyond ads.'})).toBeVisible()
+  await expect(page.getByRole('heading',{name:'Beyond ads. Into discovery.'})).toBeVisible()
   await expect(page.locator('.spatial-dock')).toContainText('Follow your curiosity through stories, brands and discoveries that speak to your interests.')
   await expect(page.locator('.spatial-seed-row').getByRole('button',{name:'Surprise me'})).toHaveCount(0)
   // Measure at steady state: the dock entrance scales from .55 to 1 over 1.6s.
@@ -316,7 +316,7 @@ test('discover control rows stay within the viewport at mobile width',async({pag
   await page.setViewportSize({width:390,height:844})
   await page.goto('/spatial')
   await expect(page.locator('.spatial-canvas')).toBeVisible()
-  await expect(page.getByRole('heading',{name:'Read. Discover. Shop. Beyond ads.'})).toBeVisible()
+  await expect(page.getByRole('heading',{name:'Beyond ads. Into discovery.'})).toBeVisible()
   await page.locator('.spatial-dock').evaluate(el=>Promise.all(el.getAnimations().map(animation=>animation.finished)))
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+1)
   expect(overflow).toBe(false)
