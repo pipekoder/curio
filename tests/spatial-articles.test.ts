@@ -189,9 +189,36 @@ describe('spatial article edition fetch', () => {
     const result = await fetchArticleEdition('quiet rooms', true, fetcher as unknown as typeof fetch, {onPoll: poll => seen.push(poll)})
     expect(result.edition?.articleEdition.articles).toHaveLength(3)
     expect(seen).toEqual([
-      {outcome: 'processing', eligibleImages: 2, requiredImages: 6, remainingCandidates: 4, processing: 1, generationStage: null},
-      {outcome: 'reviewing', eligibleImages: 6, requiredImages: 6, remainingCandidates: 0, processing: 0, generationStage: 'chief_editor'},
+      {outcome: 'processing', eligibleImages: 2, requiredImages: 6, remainingCandidates: 4, processing: 1, generationStage: null, modelCalls: null},
+      {outcome: 'reviewing', eligibleImages: 6, requiredImages: 6, remainingCandidates: 0, processing: 0, generationStage: 'chief_editor', modelCalls: null},
     ])
+  })
+  it('passes backend-observed model invocations from polls to the progress callback', async () => {
+    const seen: ArticlePoll[] = []
+    const calls = [
+      {id: 'call-1', model: 'muse-spark-1.3', stage: 'chief_editor', startedAt: 1760000000000, endedAt: 1760000018400, status: 'completed', summary: 'Drafted: A Room for 1.'},
+      {id: 'call-2', model: 'muse-spark-1.3', stage: 'reviewer', startedAt: 1760000019000, endedAt: null, status: 'calling'},
+    ]
+    const responses = [
+      new Response(JSON.stringify({status: 'preparing', fallbackReason: 'analysis_pending', eligibleImages: 6, requiredImages: 6, preparation: {outcome: 'reviewing', remainingCandidates: 0, processing: 0, retryAfterMs: 0}, generationStage: 'reviewer', modelCalls: calls}), {status: 202}),
+      new Response(JSON.stringify(articleResponseFixture({modelCalls: calls.map(call => ({...call, endedAt: 1760000020000, status: 'completed'}))})), {status: 200}),
+    ]
+    const fetcher = vi.fn(async () => responses.shift()!)
+    const result = await fetchArticleEdition('quiet rooms', true, fetcher as unknown as typeof fetch, {onPoll: poll => seen.push(poll)})
+    expect(seen).toHaveLength(1)
+    expect(seen[0].modelCalls).toHaveLength(2)
+    expect(seen[0].modelCalls![0]).toMatchObject({model: 'muse-spark-1.3', stage: 'chief_editor', status: 'completed'})
+    expect(seen[0].modelCalls![1]).toMatchObject({stage: 'reviewer', status: 'calling'})
+    expect(result.modelCalls).toHaveLength(2)
+    expect(result.modelCalls![1]).toMatchObject({status: 'completed'})
+  })
+  it('carries the invocation log on failure responses without inventing entries', async () => {
+    const calls = [{id: 'call-1', model: 'muse-spark-1.3', stage: 'chief_editor', startedAt: 1760000000000, endedAt: 1760000005000, status: 'failed', summary: 'Failed: provider_timeout.'}]
+    const failed = await fetchArticleEdition('quiet rooms', true, err(503, {format: ARTICLE_CONTRACT_VERSION, source: 'deterministic', retrieval: 'd1', cached: false, articleEdition: null, status: 'fallback', fallbackReason: 'provider_or_validation', modelCalls: calls}) as unknown as typeof fetch)
+    expect(failed.modelCalls).toHaveLength(1)
+    expect(failed.modelCalls![0]).toMatchObject({status: 'failed'})
+    const empty = await fetchArticleEdition('quiet rooms', true, err(503, {status: 'fallback', fallbackReason: 'provider_or_validation'}) as unknown as typeof fetch)
+    expect(empty.modelCalls).toBeNull()
   })
   it('stages a single dock for the one-story edition', () => {
     const {articleEdition, items} = articleEditionFixture()

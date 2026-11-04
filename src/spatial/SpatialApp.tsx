@@ -509,7 +509,7 @@ export default function SpatialApp(){
       if(submitId!==submitIdRef.current)return
       if(!result.edition){
         tearDownAssembly()
-        setProgress(tracker.finish({ok:false,evidence:result.evidence,revised:false,failureStage:result.validationStage??null,fallbackReason:result.fallbackReason??result.status,frozen:result.timedOut||result.status==='request_failed'}))
+        setProgress(tracker.finish({ok:false,evidence:result.evidence,revised:false,failureStage:result.validationStage??null,fallbackReason:result.fallbackReason??result.status,frozen:result.timedOut||result.status==='request_failed',modelCalls:result.modelCalls}))
         const copy=articleStatusCopy(result)
         setArticleError(copy)
         setStatus(copy.title)
@@ -518,7 +518,7 @@ export default function SpatialApp(){
       const articleStaged=stageArticleEdition(result.edition,wantCount)
       if(!hasStageableArticles(articleStaged.exhibits.length)){
         tearDownAssembly()
-        setProgress(tracker.finish({ok:true,staged:false,evidence:result.evidence,revised:result.generation?.revisionModel!=null}))
+        setProgress(tracker.finish({ok:true,staged:false,evidence:result.evidence,revised:result.generation?.revisionModel!=null,modelCalls:result.modelCalls}))
         const incomplete=wantCount===1
           ?{title:'The AI story arrived incomplete.',detail:'The story could not be verified against the catalog. The standard edition below remains available.'}
           :{title:'The article edition arrived incomplete.',detail:'Fewer than three articles could be verified against the catalog. The standard edition below remains available.'}
@@ -530,7 +530,7 @@ export default function SpatialApp(){
       tier=result.edition.editorialTier??null
       counts={requested:result.edition.requestedCount??wantCount,published:result.edition.publishedCount??result.edition.articleEdition.articles.length}
       staged=articleStaged.exhibits;skipped=articleStaged.skipped
-      setProgress(tracker.finish({ok:true,staged:true,evidence:result.evidence,revised:result.generation?.revisionModel!=null}))
+      setProgress(tracker.finish({ok:true,staged:true,evidence:result.evidence,revised:result.generation?.revisionModel!=null,modelCalls:result.modelCalls}))
     }else{
       // The mode propagates only to a contract backend: the current strict
       // prompt shape would 400 an extra field, so omission means Lite there.

@@ -1,8 +1,9 @@
 import {expect,it} from 'vitest'
 import {createArticleTracker,createStandardTracker,stageTone,type ProgressSnapshot} from '../src/spatial/editorial-progress'
 import type {ArticlePoll} from '../src/spatial/articles'
+import type {ModelCallEvent} from '../shared/article-model-calls'
 
-const poll=(over:Partial<ArticlePoll>={}):ArticlePoll=>({outcome:null,eligibleImages:null,requiredImages:null,remainingCandidates:null,processing:null,generationStage:null,...over})
+const poll=(over:Partial<ArticlePoll>={}):ArticlePoll=>({outcome:null,eligibleImages:null,requiredImages:null,remainingCandidates:null,processing:null,generationStage:null,modelCalls:null,...over})
 const statusOf=(snap:ProgressSnapshot,id:string)=>snap.stages.find(stage=>stage.id===id)?.status
 const rowOf=(snap:ProgressSnapshot,id:string)=>snap.stages.find(stage=>stage.id===id)!
 
@@ -164,4 +165,32 @@ it('tones bars from status and measured fraction',()=>{
   expect(stageTone(row('RUNNING',0.7))).toBe('advancing')
   expect(stageTone(row('COMPLETE',1))).toBe('complete')
   expect(stageTone(row('FAILED',0.3))).toBe('failed')
+})
+
+const modelCall=(over:Partial<ModelCallEvent>={}):ModelCallEvent=>({id:'call-1',model:'muse-spark-1.3',stage:'chief_editor',startedAt:1760000000000,endedAt:null,status:'calling',...over})
+
+it('starts with no model invocations and never invents any',()=>{
+  expect(createArticleTracker().snapshot().modelCalls).toEqual([])
+  const snap=createArticleTracker().poll(poll({outcome:'reviewing',generationStage:'chief_editor'}))
+  expect(snap.modelCalls).toEqual([])
+})
+
+it('threads backend-observed invocations through polls in order',()=>{
+  const tracker=createArticleTracker()
+  const first=modelCall({id:'call-1',model:'muse-wonder-1.0',stage:'chief_editor',endedAt:1760000018400,status:'completed',summary:'Drafted: A Room for 1.'})
+  const second=modelCall({id:'call-2',stage:'reviewer',startedAt:1760000019000})
+  const snap=tracker.poll(poll({outcome:'reviewing',generationStage:'reviewer',modelCalls:[first,second]}))
+  expect(snap.modelCalls.map(call=>call.id)).toEqual(['call-1','call-2'])
+  expect(snap.modelCalls[0]).toMatchObject({model:'muse-wonder-1.0',status:'completed'})
+  // A later poll without the array keeps the last observed invocations.
+  expect(tracker.poll(poll({outcome:'reviewing',generationStage:'reviewer'})).modelCalls.map(call=>call.id)).toEqual(['call-1','call-2'])
+})
+
+it('adopts the terminal invocation log on finish, including failures',()=>{
+  const tracker=createArticleTracker()
+  const failed=modelCall({id:'call-9',stage:'reviewer',endedAt:1760000020000,status:'failed',summary:'Failed: provider_timeout.'})
+  const snap=tracker.finish({ok:false,revised:false,fallbackReason:'provider_or_validation',modelCalls:[failed]})
+  expect(snap.modelCalls).toHaveLength(1)
+  expect(snap.modelCalls[0]).toMatchObject({status:'failed',summary:'Failed: provider_timeout.'})
+  expect(createStandardTracker().snapshot().modelCalls).toEqual([])
 })
