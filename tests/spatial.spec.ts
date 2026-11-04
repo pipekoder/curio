@@ -370,6 +370,52 @@ test('hybrid mode propagates, shows while generating, and confirms on the chip',
   await expect(page.getByTestId('spatial-edition-chip')).toContainText('AI-curated edition · Meta AI · Hybrid')
 })
 
+test('generating panel is wide, centered and legible while composing',async({page})=>{
+  await page.route('**/api/editorial',async route=>{
+    await new Promise(resolve=>setTimeout(resolve,1500))
+    return route.fulfill({status:200,json:{plan:metaPlan,items:groundedItems,source:'meta',retrieval:'d1',cached:false}})
+  })
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  await expect(page.locator('.spatial-canvas')).toBeVisible()
+  await submitPrompt(page)
+  const panel=page.locator('.spatial-generating')
+  await expect(panel).toContainText('Composing your exhibition…')
+  const box=await panel.boundingBox()
+  expect(box!.width).toBeGreaterThanOrEqual(650)
+  expect(box!.width).toBeLessThanOrEqual(680)
+  // Horizontally centered; vertically centered within the viewport area
+  // below the fixed navigation header.
+  expect(Math.abs((box!.x+box!.width/2)-720)).toBeLessThan(2)
+  const header=await page.locator('.spatial-hud').boundingBox()
+  const areaCenterY=header!.height+(900-header!.height)/2
+  expect(Math.abs((box!.y+box!.height/2)-areaCenterY)).toBeLessThan(30)
+  expect(box!.y).toBeGreaterThanOrEqual(header!.height)
+  // Informational progress messages use the darker label gray when shown.
+  const feed=page.locator('.editorial-progress-feed')
+  if(await feed.count()){
+    expect(await feed.evaluate(element=>getComputedStyle(element).color)).toBe('rgb(16, 18, 25)')
+  }
+  await expect(page.getByTestId('spatial-edition-chip')).toBeVisible({timeout:15000})
+})
+
+test('generating panel fits narrow viewports without horizontal overflow',async({page})=>{
+  await page.route('**/api/editorial',async route=>{
+    await new Promise(resolve=>setTimeout(resolve,1500))
+    return route.fulfill({status:200,json:{plan:metaPlan,items:groundedItems,source:'meta',retrieval:'d1',cached:false}})
+  })
+  await page.setViewportSize({width:390,height:844})
+  await page.goto('/spatial')
+  await expect(page.locator('.spatial-canvas')).toBeVisible()
+  await submitPrompt(page)
+  const panel=page.locator('.spatial-generating')
+  await expect(panel).toContainText('Composing your exhibition…')
+  const box=await panel.boundingBox()
+  expect(box!.x).toBeGreaterThanOrEqual(-1)
+  expect(box!.x+box!.width).toBeLessThanOrEqual(391)
+  await expect(page.getByTestId('spatial-edition-chip')).toBeVisible({timeout:15000})
+})
+
 test('article opt-in stages three docks and renders deck plus brand captions',async({page})=>{
   let body:unknown=null
   await page.route('**/api/editorial',route=>{
