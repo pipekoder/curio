@@ -887,7 +887,7 @@ export default function SpatialApp(){
     </header>
     {editionLabel&&<p className="spatial-chip" role="note" data-testid="spatial-edition-chip">{HONEST_COPY[editionLabel]}{fallbackReason&&REASON_COPY[fallbackReason]?` (${REASON_COPY[fallbackReason]})`:''}{(editionLabel==='meta'||editionLabel==='meta-cached')&&generationMode==='hybrid'?' · Hybrid':''}{(editionLabel==='meta'||editionLabel==='meta-cached')&&exhibits.some(exhibit=>exhibit.article)?' · Article edition':''}{editionCounts&&editionCounts.published<editionCounts.requested?` · ${editionCounts.published} of ${editionCounts.requested} stories`:''}</p>}
     {budgetMessage&&<p className="spatial-status" role="status">{budgetMessage}</p>}
-    {(composing||articleError)&&<div role="status" className="spatial-generating">
+    {composing&&<div role="status" className="spatial-generating">
       <p className="spatial-eyebrow">02 · Generating</p>
       <p className="spatial-generating-title">Composing your exhibition…</p>
       {composing&&<p className="spatial-fine">{elapsed>0?`${elapsed}s elapsed`:'Starting…'} · {editorialMode==='hybrid'?'Hybrid · Wonder + Spark':'Lite · Spark'}</p>}
@@ -943,6 +943,7 @@ export default function SpatialApp(){
       </div>}
       {articleError&&!composing&&<div role="alert" className="spatial-mode-error">
         <p><strong>{articleError.title}</strong> {articleError.detail}</p>
+        {progress&&<Suspense fallback={null}><EditorialProgress progress={progress}/></Suspense>}
         <button type="button" onClick={()=>{setArticleFormat(false);void submit(undefined,undefined,undefined,'standard')}}>Continue with the standard edition</button>
         {articleFormat
           ?<button type="button" onClick={()=>void submit(undefined,undefined,undefined,'articles')}>Try articles again</button>
