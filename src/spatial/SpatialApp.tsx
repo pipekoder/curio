@@ -64,6 +64,7 @@ export default function SpatialApp(){
   const [exhibits,setExhibits]=useState<StagedExhibit[]>([])
   const [editionLabel,setEditionLabel]=useState<HonestState|null>(null)
   const [editionTier,setEditionTier]=useState<{label:string;description:string}|null>(null)
+  const [editionCounts,setEditionCounts]=useState<{requested:number;published:number}|null>(null)
   const [progress,setProgress]=useState<ProgressSnapshot|null>(null)
   const [fallbackReason,setFallbackReason]=useState<string|null>(null)
   const [budgetMessage,setBudgetMessage]=useState<string|null>(null)
@@ -103,7 +104,7 @@ export default function SpatialApp(){
   const fieldRef=useRef<SilverField|null>(null)
   const directorRef=useRef(new AssemblyDirector())
   const assemblyRef=useRef<AssemblyField|null>(null)
-  const stagedRef=useRef<{exhibits:StagedExhibit[];label:HonestState;skipped:number;reason?:string;timedOut:boolean;fullPlan:StagedPlan|null;generation:GenerationMetadata|null;editorialTier:{label:string;description:string}|null}|null>(null)
+  const stagedRef=useRef<{exhibits:StagedExhibit[];label:HonestState;skipped:number;reason?:string;timedOut:boolean;fullPlan:StagedPlan|null;generation:GenerationMetadata|null;editorialTier:{label:string;description:string}|null;editionCounts:{requested:number;published:number}|null}|null>(null)
   // True cancellation for the edition request: a new submit or Clear aborts
   // the in-flight fetch instead of leaving it to run out the 90s bound. The
   // submit-ID guard still ignores any response that slips through the race.
@@ -291,6 +292,7 @@ export default function SpatialApp(){
                 setExhibits(staged.exhibits)
                 setEditionLabel(staged.label)
                 setEditionTier(staged.editorialTier)
+                setEditionCounts(staged.editionCounts)
                 setFallbackReason(staged.reason??null)
                 setStatus(editionStatusCopy(staged.timedOut,staged.skipped,staged.exhibits.some(exhibit=>exhibit.article)?'article':'feature'))
                 setShowDock(false)
@@ -483,9 +485,10 @@ export default function SpatialApp(){
     let fullPlan:StagedPlan|null=null
     let honest:HonestState,reason:string|undefined,timedOut:boolean,generation:GenerationMetadata|null
     let tier:{label:string;description:string}|null=null
+    let counts:{requested:number;published:number}|null=null
     let staged:StagedExhibit[],skipped:number
     if(wantArticles||wantStory){
-      const {articleStatusCopy,fetchArticleEdition}=await import('./articles')
+      const {articleStatusCopy,fetchArticleEdition,hasStageableArticles}=await import('./articles')
       const {createArticleTracker}=await import('./editorial-progress')
       const {stageArticleEdition}=await import('./staging')
       if(submitId!==submitIdRef.current)return
@@ -502,7 +505,7 @@ export default function SpatialApp(){
         return
       }
       const articleStaged=stageArticleEdition(result.edition,wantCount)
-      if(articleStaged.exhibits.length<wantCount){
+      if(!hasStageableArticles(articleStaged.exhibits.length)){
         tearDownAssembly()
         setProgress(tracker.finish({ok:true,staged:false,evidence:result.evidence,revised:result.generation?.revisionModel!=null}))
         const incomplete=wantCount===1
@@ -514,6 +517,7 @@ export default function SpatialApp(){
       }
       honest=result.honest;reason=result.fallbackReason;timedOut=result.timedOut;generation=result.generation
       tier=result.edition.editorialTier??null
+      counts={requested:result.edition.requestedCount??wantCount,published:result.edition.publishedCount??result.edition.articleEdition.articles.length}
       staged=articleStaged.exhibits;skipped=articleStaged.skipped
       setProgress(tracker.finish({ok:true,staged:true,evidence:result.evidence,revised:result.generation?.revisionModel!=null}))
     }else{
@@ -553,6 +557,7 @@ export default function SpatialApp(){
       setExhibits(staged)
       setEditionLabel(honest)
       setEditionTier(tier)
+      setEditionCounts(counts)
       setFallbackReason(reason??null)
       setShowDock(false)
       setComposing(false)
@@ -564,7 +569,7 @@ export default function SpatialApp(){
       }))
       return
     }
-    stagedRef.current={exhibits:staged,label:honest,skipped,reason,timedOut,fullPlan,generation,editorialTier:tier}
+    stagedRef.current={exhibits:staged,label:honest,skipped,reason,timedOut,fullPlan,generation,editorialTier:tier,editionCounts:counts}
     directorRef.current.onSettled()
   }
 
@@ -601,6 +606,7 @@ export default function SpatialApp(){
     setExhibits([])
     setEditionLabel(null)
     setEditionTier(null)
+    setEditionCounts(null)
     setFallbackReason(null)
     setExpanded(false)
     setSpotlight(null)
@@ -660,7 +666,7 @@ export default function SpatialApp(){
     const removed=before.length-kept.length
     setExhibits(kept)
     setSpotlight(current=>current&&kept.some(exhibit=>exhibit.assetId===current.assetId)?current:null)
-    if(!kept.length){setShowDock(true);setEditionLabel(null);setEditionTier(null);setFallbackReason(null)}
+    if(!kept.length){setShowDock(true);setEditionLabel(null);setEditionTier(null);setEditionCounts(null);setFallbackReason(null)}
     setStatus(reason==='unverified'
       ?'The exhibition could not be verified; unverified exhibits were removed.'
       :`${removed} exhibit${removed===1?'':'s'} ${removed===1?'was':'were'} removed: the catalog no longer lists ${removed===1?'it':'them'}.`)
@@ -864,7 +870,7 @@ export default function SpatialApp(){
         {staged&&mode==='promenade'&&<button type="button" onClick={reopen}>New Discovery</button>}
       </div>
     </header>
-    {editionLabel&&<p className="spatial-chip" role="note" data-testid="spatial-edition-chip">{HONEST_COPY[editionLabel]}{fallbackReason&&REASON_COPY[fallbackReason]?` (${REASON_COPY[fallbackReason]})`:''}{(editionLabel==='meta'||editionLabel==='meta-cached')&&generationMode==='hybrid'?' · Hybrid':''}{(editionLabel==='meta'||editionLabel==='meta-cached')&&exhibits.some(exhibit=>exhibit.article)?' · Article edition':''}</p>}
+    {editionLabel&&<p className="spatial-chip" role="note" data-testid="spatial-edition-chip">{HONEST_COPY[editionLabel]}{fallbackReason&&REASON_COPY[fallbackReason]?` (${REASON_COPY[fallbackReason]})`:''}{(editionLabel==='meta'||editionLabel==='meta-cached')&&generationMode==='hybrid'?' · Hybrid':''}{(editionLabel==='meta'||editionLabel==='meta-cached')&&exhibits.some(exhibit=>exhibit.article)?' · Article edition':''}{editionCounts&&editionCounts.published<editionCounts.requested?` · ${editionCounts.published} of ${editionCounts.requested} stories`:''}</p>}
     {budgetMessage&&<p className="spatial-status" role="status">{budgetMessage}</p>}
     {(composing||articleError)&&<div role="status" className="spatial-generating">
       <p className="spatial-eyebrow">02 · Generating</p>
