@@ -1,6 +1,6 @@
 import {z} from 'zod'
 import {budgetExplanation,publicBudgetDiagnostic,type PublicBudgetDiagnostic} from '../../shared/budget-diagnostic'
-import {ARTICLE_CONTRACT_VERSION,ARTICLE_MIN_ELIGIBLE_IMAGES,ARTICLE_SINGLE_CONTRACT_VERSION,ARTICLE_SINGLE_MIN_ELIGIBLE_IMAGES,editorialArticleEdition,editorialSingleArticleEdition,type ArticleEditionBody} from '../../shared/editorial-articles'
+import {ARTICLE_CONTRACT_VERSION,ARTICLE_MIN_ELIGIBLE_IMAGES,ARTICLE_SINGLE_CONTRACT_VERSION,ARTICLE_SINGLE_MIN_ELIGIBLE_IMAGES,editorialPartialArticleEdition,editorialSingleArticleEdition,type ArticleEditionBody} from '../../shared/editorial-articles'
 import {editorialTierLabel,type EditorialTierLabel} from '../../shared/editorial-tiers'
 import {catalogItem,type CatalogItem} from '../../shared/catalog'
 import {editorialSources,type EditorialSource} from '../../shared/editorial-sources'
@@ -22,7 +22,11 @@ export type StagedArticleEdition={
   articleEdition:ArticleEditionBody;items:CatalogItem[];
   source:'meta'|'deterministic';retrieval:'d1'|'fictional';cached:boolean
   researchReferences?:EditorialSource[];aiDisclosure?:string;editorialTier?:EditorialTierLabel
+  requestedCount?:number;publishedCount?:number;partial?:boolean
 }
+// Partial editions stage whatever verified: only zero stageable articles is
+// incomplete, whether one story or three was requested.
+export function hasStageableArticles(stagedCount:number){return stagedCount>0}
 export type ArticleFetch={
   edition:StagedArticleEdition|null;honest:HonestState;articleCount:1|3;
   status:ArticleStatus|'request_failed'|null;fallbackReason?:string;
@@ -41,6 +45,9 @@ const envelope=z.object({
   evidence:z.object({interpretations:z.number().int().min(0)}).nullable().optional(),
   researchReferences:editorialSources.optional(),aiDisclosure:z.string().max(300).optional(),
   editorialTier:editorialTierLabel.optional(),
+  requestedCount:z.number().int().min(1).max(3).optional(),
+  publishedCount:z.number().int().min(1).max(3).optional(),
+  partial:z.boolean().optional(),
 })
 
 const failure=z.object({
@@ -124,12 +131,12 @@ export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImp
       const detail=parsed.success?parsed.data:{}
       return failed(detail.status??'fallback',{fallbackReason:detail.fallbackReason,budget:detail.budget,eligibleImages:detail.eligibleImages,requiredImages:detail.requiredImages,validationStage:detail.validationDiagnostic?.stage})
     }
-    const articleEdition=(articleCount===1?editorialSingleArticleEdition:editorialArticleEdition).parse(data.articleEdition)
+    const articleEdition=(articleCount===1?editorialSingleArticleEdition:editorialPartialArticleEdition).parse(data.articleEdition)
     const honest:HonestState=
       data.source==='meta'?(data.cached?'meta-cached':'meta')
       :data.retrieval==='d1'?'deterministic-d1':'deterministic-fictional'
     return {
-      edition:{articleEdition,items:data.items,source:data.source,retrieval:data.retrieval,cached:data.cached,researchReferences:data.researchReferences,aiDisclosure:data.aiDisclosure,editorialTier:data.editorialTier},
+      edition:{articleEdition,items:data.items,source:data.source,retrieval:data.retrieval,cached:data.cached,researchReferences:data.researchReferences,aiDisclosure:data.aiDisclosure,editorialTier:data.editorialTier,requestedCount:data.requestedCount,publishedCount:data.publishedCount,partial:data.partial},
       honest,articleCount,status:null,timedOut:false,generation:parseGenerationMetadata(data.generation),evidence:data.evidence,
     }
    }

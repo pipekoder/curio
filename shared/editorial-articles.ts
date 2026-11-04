@@ -43,6 +43,14 @@ export const editorialSingleArticleEdition=z.strictObject({
     ctx.addIssue({code:'custom',message:'Article image and hero identities must be unique and within the edition limit.'})
 })
 export type SingleArticleEdition=z.infer<typeof editorialSingleArticleEdition>
+// Partial three-story editions: one to three independently valid articles
+// from a three-story request. Identity and limit rules match the full shape.
+const {version:partialVersion,title:partialTitle,deck:partialDeck}=editorialArticleEdition.shape
+export const editorialPartialArticleEdition=z.strictObject({version:partialVersion,title:partialTitle,deck:partialDeck,articles:z.array(editorialArticle).min(1).max(ARTICLE_COUNT)}).superRefine((edition,ctx)=>{
+  if(new Set(edition.articles.map(article=>article.id)).size!==edition.articles.length||new Set(edition.articles.map(article=>article.heroAssetId)).size!==edition.articles.length||edition.articles.reduce((n,article)=>n+article.images.length,0)>ARTICLE_MAX_EDITION_IMAGES)
+    ctx.addIssue({code:'custom',message:'Article image and hero identities must be unique and within the edition limit.'})
+})
+export type PartialArticleEdition=z.infer<typeof editorialPartialArticleEdition>
 export type ArticleEditionBody={version:string;title:string;deck:string;articles:EditorialArticle[]}
 // Prose-only revision drafts. The Revision Editor returns text keyed by
 // exact article ID; every machine identity stays server-side and is merged
@@ -53,5 +61,6 @@ const revisionDraftArticle=z.strictObject({id:revisionArticleId,headline:revisio
 const {title:revisionEditionTitle,deck:revisionEditionDeck}=editorialArticleEdition.shape
 export const editorialRevisionDraft=z.strictObject({title:revisionEditionTitle,deck:revisionEditionDeck,articles:z.array(revisionDraftArticle).length(ARTICLE_COUNT)})
 export const editorialSingleRevisionDraft=z.strictObject({title:revisionEditionTitle,deck:revisionEditionDeck,articles:z.array(revisionDraftArticle).length(ARTICLE_SINGLE_COUNT)})
-export const revisionDraftSchema=(count:1|3)=>count===1?editorialSingleRevisionDraft:editorialRevisionDraft
+export const revisionDraftSchema=(count:number)=>z.strictObject({title:revisionEditionTitle,deck:revisionEditionDeck,articles:z.array(revisionDraftArticle).length(count)})
 export type RevisionDraft=z.infer<typeof editorialRevisionDraft>
+export type RevisionDraftBody={title:string;deck:string;articles:{id:string;headline:string;deck:string;narrative:string}[]}
