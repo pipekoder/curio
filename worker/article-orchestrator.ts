@@ -3,7 +3,7 @@ import type {EditorialMode} from './editorial-model-routing'
 import type {Bindings} from './index'
 import {ARTICLE_CONTRACT_VERSION,ARTICLE_MIN_ELIGIBLE_IMAGES,ARTICLE_SINGLE_CONTRACT_VERSION,ARTICLE_SINGLE_MIN_ELIGIBLE_IMAGES} from '../shared/editorial-articles'
 import type {ArticleEditionBody} from '../shared/editorial-articles'
-import {articleEditorialResponse,researchReferencesCurrent,validateArticleEdition,type ArticleAssessment,type ArticleGenerationStage} from './editorial-articles'
+import {articleEditorialResponse,researchReferencesCurrent,validateArticleEdition,validateReview,type ArticleAssessment,type ArticleGenerationStage,type ArticleJobContext,type AdoptedCheckpoint,type CheckpointInvocation} from './editorial-articles'
 import {editorialTierLabel} from '../shared/editorial-tiers'
 import {editorialArticlePool,reportArticlePoolFailure,type ArticlePool} from './editorial-article-pool'
 import {runClassification,AssetAnalysisError} from './asset-classifier'
@@ -12,7 +12,11 @@ import {ARTICLE_EVIDENCE_VERSION,ARTICLE_INTERPRETATION_VERSION} from '../shared
 import {resolveArticlePreparationPolicy} from './article-preparation-policy'
 import {publicBudgetDenial} from '../shared/budget-diagnostic'
 import {editorialSources,type EditorialSource} from '../shared/editorial-sources'
-import {modelCallEvents,type ModelCallEvent} from '../shared/article-model-calls'
+import {modelCallEvents,jobNotices,type ModelCallEvent,type JobNotice} from '../shared/article-model-calls'
+import {articleCheckpoint,CHECKPOINT_WORKFLOW_VERSION,type CheckpointStage,type CheckpointPayload} from '../shared/article-checkpoints'
+import {editorialReviewOutput} from '../shared/editorial-standard'
+import {ARTICLE_JOB_MAX_INVOCATIONS} from './inference-budget'
+import {ARTICLE_3STORY_LEASE_MS} from './article-provider-timeout'
 import {approvedArticleVersions} from './editorial-revisions'
 
 const JOB_VERSION='curio-article-job-demo-v2'
@@ -36,8 +40,8 @@ const storedProgress=(job:JobRow):Progress=>{
   }catch{/* No saved progress yet. */}
   return emptyProgress
 }
-const pendingResponse=(base:Record<string,unknown>,requiredImages:number,progress:Progress,outcome:string,retryAfterMs:number,generationStage?:ArticleGenerationStage|null,modelCalls?:ModelCallEvent[])=>Response.json({...base,status:'preparing',fallbackReason:'analysis_pending',eligibleImages:progress.eligibleImages,requiredImages,
-  preparation:{outcome,remainingCandidates:progress.remainingCandidates,processing:progress.processing,retryAfterMs},...(generationStage?{generationStage}:{}),...(modelCalls?.length?{modelCalls}:{})},{status:202})
+const pendingResponse=(base:Record<string,unknown>,requiredImages:number,progress:Progress,outcome:string,retryAfterMs:number,generationStage?:ArticleGenerationStage|null,modelCalls?:ModelCallEvent[],notices?:JobNotice[])=>Response.json({...base,status:'preparing',fallbackReason:'analysis_pending',eligibleImages:progress.eligibleImages,requiredImages,
+  preparation:{outcome,remainingCandidates:progress.remainingCandidates,processing:progress.processing,retryAfterMs},...(generationStage?{generationStage}:{}),...(modelCalls?.length?{modelCalls}:{}),...(notices?.length?{notices}:{})},{status:202})
 const storedStage=(job:JobRow):ArticleGenerationStage|null=>{
   try{
     const value=(JSON.parse(job.result_json??'{}') as {stage?:unknown}).stage
@@ -53,6 +57,109 @@ const storedModelCalls=(job:JobRow):ModelCallEvent[]=>{
     if(parsed.success)return parsed.data
   }catch{/* No reported invocations yet. */}
   return []
+}
+const storedNotices=(job:JobRow):JobNotice[]=>{
+  try{
+    const parsed=jobNotices.safeParse((JSON.parse(job.result_json??'{}') as {notices?:unknown}).notices)
+    if(parsed.success)return parsed.data
+  }catch{/* No reported notices yet. */}
+  return []
+}
+type JobSpend={attempts:number;charged:number}
+const storedSpend=(job:JobRow):JobSpend|null=>{
+  try{
+    const value=(JSON.parse(job.result_json??'{}') as {spend?:unknown}).spend as JobSpend|null
+    if(value&&Number.isInteger(value.attempts)&&value.attempts>=0&&Number.isInteger(value.charged)&&value.charged>=0)return {attempts:value.attempts,charged:value.charged}
+  }catch{/* No reported spend yet. */}
+  return null
+}
+type ResumeMeta={recoverable:boolean;failedStage:string|null;attemptsUsed:number;chargedUnits:number}
+// Resume metadata from a saved failure body. Anything malformed reads as
+// non-resumable: the terminal failure is re-served unchanged.
+const storedResumeMeta=(job:JobRow):ResumeMeta|null=>{
+  try{
+    const body=(JSON.parse(job.result_json??'') as {failure?:{body?:{resume?:unknown}}}).failure?.body as {resume?:ResumeMeta}|undefined
+    const meta=body?.resume
+    if(meta&&meta.recoverable===true&&(meta.failedStage===null||typeof meta.failedStage==='string')&&Number.isInteger(meta.attemptsUsed)&&meta.attemptsUsed>=0&&Number.isInteger(meta.chargedUnits)&&meta.chargedUnits>=0)return {recoverable:true,failedStage:meta.failedStage,attemptsUsed:meta.attemptsUsed,chargedUnits:meta.chargedUnits}
+  }catch{/* No resume metadata. */}
+  return null
+}
+const storedResumeHistory=(job:JobRow):{modelCalls:ModelCallEvent[];notices:JobNotice[]}=>{
+  try{
+    const body=(JSON.parse(job.result_json??'') as {failure?:{body?:{modelCalls?:unknown;notices?:unknown}}}).failure?.body
+    if(!body)return {modelCalls:[],notices:[]}
+    const calls=modelCallEvents.safeParse(body.modelCalls),notices=jobNotices.safeParse(body.notices)
+    return {modelCalls:calls.success?calls.data:[],notices:notices.success?notices.data:[]}
+  }catch{return {modelCalls:[],notices:[]}}
+}
+
+type ResumeReset={token:string;job:JobRow;spend:JobSpend}
+// Reset a resumable 3-story row to preparing under a fresh lease so the
+// normal owner path rebuilds the pool and continues generation. History
+// and spend carry over; checkpoints stay in their own table. Returns null
+// when resume is not eligible, {lostRace:true} when another request
+// claimed first (callers must serve a neutral 202, never stale state).
+async function tryResumeReset(db:D1Database,job:JobRow,kind:'failed'|'interrupted',leaseMs:number,now:number):Promise<ResumeReset|{lostRace:true}|null>{
+  const token=crypto.randomUUID()
+  let spend:JobSpend,resultJson:string
+  if(kind==='failed'){
+    const meta=storedResumeMeta(job)
+    if(!meta||meta.attemptsUsed>=ARTICLE_JOB_MAX_INVOCATIONS)return null
+    const history=storedResumeHistory(job)
+    spend={attempts:meta.attemptsUsed,charged:meta.chargedUnits}
+    resultJson=JSON.stringify({...((history.modelCalls.length||history.notices.length)?{modelCalls:history.modelCalls,notices:history.notices}:{}),spend})
+    const reset=await db.prepare(`UPDATE article_edition_jobs SET state='preparing',lease_token=?,lease_until=?,result_json=?,updated_at=? WHERE id=? AND state='failed' AND lease_token IS NULL RETURNING id`).bind(token,now+leaseMs,resultJson,now,job.id).first()
+    if(!reset)return {lostRace:true}
+  }else{
+    if(job.state!=='generating')return null
+    const history=storedModelCalls(job)
+    spend=storedSpend(job)??{attempts:history.length,charged:4}
+    if(spend.attempts>=ARTICLE_JOB_MAX_INVOCATIONS)return null
+    resultJson=job.result_json??'{}'
+    const reset=await db.prepare(`UPDATE article_edition_jobs SET state='preparing',lease_token=?,lease_until=?,result_json=?,updated_at=? WHERE id=? AND state='generating' AND (lease_token IS NULL OR lease_token=?) AND (lease_until IS NULL OR lease_until<?) RETURNING id`).bind(token,now+leaseMs,resultJson,now,job.id,job.lease_token,now).first()
+    if(!reset)return {lostRace:true}
+  }
+  return {token,job:{...job,state:'preparing',lease_token:token,lease_until:now+leaseMs,result_json:resultJson},spend}
+}
+
+// Validate stored checkpoints against a fresh pool, in stage order. The
+// first invalid checkpoint discards itself and every later one: later
+// stages depend on earlier values. Returns the adoptable prefix.
+async function loadCheckpoints(db:D1Database,jobId:string,inputDigest:string,pool:ArticlePool):Promise<AdoptedCheckpoint[]>{
+  const adopted:AdoptedCheckpoint[]=[]
+  let rows:{stage:unknown;checkpoint_json:unknown}[]=[]
+  try{
+    const found=await db.prepare('SELECT stage,checkpoint_json FROM article_edition_checkpoints WHERE job_id=?').bind(jobId).all()
+    rows=(found.results as {stage:unknown;checkpoint_json:unknown}[])??[]
+  }catch{return []}
+  const byStage=new Map(rows.map(row=>[row.stage,row.checkpoint_json]))
+  for(const stage of ['chief','review','revision','confirmation'] as CheckpointStage[]){
+    try{
+      const raw=byStage.get(stage)
+      if(typeof raw!=='string')break
+      const parsed=articleCheckpoint.parse(JSON.parse(raw))
+      if(parsed.jobId!==jobId||parsed.inputDigest!==inputDigest||parsed.version!==CHECKPOINT_WORKFLOW_VERSION||parsed.stage!==stage||parsed.articleCount!==3)break
+      const articles=(parsed.value.edition as {articles?:unknown})?.articles
+      if(!Array.isArray(articles)||articles.length<1||articles.length>3)break
+      const edition=validateArticleEdition(parsed.value.edition,pool.items,pool.sources,pool.visualContexts,articles.length)
+      if(parsed.evidenceDigest!==await evidenceDigest(pool,edition,[]))break
+      const entry:AdoptedCheckpoint={stage,edition}
+      if(stage==='review'){
+        if(parsed.value.review===undefined)break
+        const review=editorialReviewOutput.parse(parsed.value.review)
+        validateReview(review,edition,pool.sources)
+        entry.review=review
+      }
+      if(stage==='confirmation'){
+        if(parsed.value.confirmation===undefined)break
+        const confirmation=editorialReviewOutput.parse(parsed.value.confirmation)
+        validateReview(confirmation,edition,pool.sources)
+        entry.confirmation=confirmation
+      }
+      adopted.push(entry)
+    }catch{break}
+  }
+  return adopted
 }
 const failedResponse=(base:Record<string,unknown>,requiredImages:number,eligibleImages:number)=>Response.json({...base,status:'insufficient_content',fallbackReason:'insufficient_content',eligibleImages,requiredImages},{status:409})
 const evidenceDigest=(pool:ArticlePool,edition:ArticleEditionBody,research:readonly EditorialSource[]=[])=>{
@@ -76,7 +183,7 @@ async function jobIdentity(request:Request,env:Bindings,p:EditorialPreferences,m
 // serialize pollers; asset-analysis claims deduplicate exact image work.
 export async function articleJobResponse(request:Request,env:Bindings,p:EditorialPreferences,mode:EditorialMode,articleCount:1|3=3,schedule?:(task:Promise<unknown>)=>void):Promise<Response>{
   const {format,minEligible}=limitsFor(articleCount)
-  const leaseMs=articleCount===1&&env.EDITORIAL_WORKFLOW_V3_ENABLED==='true'?230_000:LEASE_MS
+  const leaseMs=articleCount===3?ARTICLE_3STORY_LEASE_MS:articleCount===1&&env.EDITORIAL_WORKFLOW_V3_ENABLED==='true'?230_000:LEASE_MS
   const base={format,source:'deterministic' as const,retrieval:'d1' as const,cached:false,articleEdition:null}
   if(env.EDITORIAL_ARTICLE_PREPARATION_ENABLED!=='true'||!p.consent||env.EDITORIAL_ARTICLES_ENABLED!=='true'||env.MAGAZINE_AI_ENABLED!=='true'||env.EDITORIAL_REVIEW_ENABLED!=='true'||env.EDITORIAL_PUBLIC_AI_ENABLED!=='true'||!env.CATALOG_DB||!env.MEDIA_BUCKET||!env.META_API_KEY||!env.INFERENCE_BUDGET)
     return articleEditorialResponse(request,env,p,mode,undefined,articleCount,undefined,schedule)
@@ -94,6 +201,7 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
       await db.prepare(env.EDITORIAL_FEEDBACK_ENABLED==='true'
         ?'DELETE FROM article_edition_jobs WHERE updated_at<? AND NOT EXISTS(SELECT 1 FROM editorial_article_feedback f WHERE f.job_id=article_edition_jobs.id)'
         :'DELETE FROM article_edition_jobs WHERE updated_at<?').bind(now-JOB_TTL_MS).run()
+      try{await db.prepare('DELETE FROM article_edition_checkpoints WHERE job_id NOT IN (SELECT id FROM article_edition_jobs)').run()}catch{/* Best effort: a missing table pre-migration must not block new jobs. */}
       await db.prepare(`INSERT INTO article_edition_jobs(id,ip_digest,input_digest,state,created_at,updated_at) VALUES(?,?,?,'preparing',?,?) ON CONFLICT(id) DO NOTHING`).bind(identity.id,identity.ipDigest,identity.inputDigest,now,now).run()
       job=await read()
     }
@@ -109,7 +217,7 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
   }
   if(job.state==='completed'&&job.result_json)try{
     if(!pool)throw Error('Article pool unavailable')
-    const saved=JSON.parse(job.result_json) as {articleEdition:ArticleEditionBody;generation:unknown;evidence?:{interpretations:number}|null;researchReferences?:unknown;aiDisclosure?:string;editorialTier?:unknown;modelCalls?:unknown}
+    const saved=JSON.parse(job.result_json) as {articleEdition:ArticleEditionBody;generation:unknown;evidence?:{interpretations:number}|null;researchReferences?:unknown;aiDisclosure?:string;editorialTier?:unknown;modelCalls?:unknown;notices?:unknown}
     const research=editorialSources.parse(saved.researchReferences??[])
     if(!researchReferencesCurrent(research,env.RESEARCH_SOURCE_ORIGINS))throw Error('Research evidence expired')
     const approved=env.EDITORIAL_FEEDBACK_ENABLED==='true'?await approvedArticleVersions(db,identity.id,saved.articleEdition):{edition:saved.articleEdition,revisedIds:[]}
@@ -119,13 +227,23 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
     // the public tier label. Rows written before tiers omit the label.
     const tier=editorialTierLabel.safeParse(saved.editorialTier)
     const savedCalls=modelCallEvents.safeParse(saved.modelCalls)
+    const reservedNotices=jobNotices.safeParse(saved.notices)
     return Response.json({format,source:'meta',retrieval:'d1',cached:true,articleEdition:edition,items:pool.items,generation:approved.revisedIds.length?{...(saved.generation as Record<string,unknown>),revisionModel:'muse-spark-1.3',confirmationModel:'muse-spark-1.3'}:saved.generation,
-      ...(saved.evidence!==undefined?{evidence:saved.evidence}:{}),...(tier.success?{editorialTier:tier.data}:{}),...(savedCalls.success?{modelCalls:savedCalls.data}:{}),requestedCount:articleCount,publishedCount:edition.articles.length,partial:edition.articles.length<articleCount,...(saved.aiDisclosure?{researchReferences:research,aiDisclosure:saved.aiDisclosure}:{}),inference:{attempted:false,reservedUnits:0,latencyMs:null,usage:null}})
+      ...(saved.evidence!==undefined?{evidence:saved.evidence}:{}),...(tier.success?{editorialTier:tier.data}:{}),...(savedCalls.success?{modelCalls:savedCalls.data}:{}),...(reservedNotices.success?{notices:reservedNotices.data}:{}),requestedCount:articleCount,publishedCount:edition.articles.length,partial:edition.articles.length<articleCount,...(saved.aiDisclosure?{researchReferences:research,aiDisclosure:saved.aiDisclosure}:{}),inference:{attempted:false,reservedUnits:0,latencyMs:null,usage:null}})
   }catch{/* A changed version, source or grant invalidates the saved result. */}
   if(job.state==='completed'){
     const changed={...base,status:'unavailable',fallbackReason:'evidence_changed'}
     await db.prepare(`UPDATE article_edition_jobs SET state='failed',result_json=?,evidence_digest=NULL,updated_at=? WHERE id=? AND state='completed'`).bind(JSON.stringify({failure:{status:409,body:changed}}),Date.now(),identity.id).run()
     return Response.json(changed,{status:409})
+  }
+  // A resumable 3-story row resets to preparing under a fresh lease and
+  // flows into the normal owner path below, which rebuilds the pool and
+  // continues from durable checkpoints.
+  let resumed:ResumeReset|null=null
+  if(job.state==='failed'&&articleCount===3){
+    const reset=await tryResumeReset(db,job,'failed',leaseMs,now)
+    if(reset&&'lostRace' in reset)return pendingResponse(base,minEligible,emptyProgress,'processing',15_000)
+    if(reset){resumed=reset;job=reset.job}
   }
   if(job.state==='failed'){
     try{
@@ -134,11 +252,18 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
     }catch{/* A preparation failure without a stored outcome stays insufficient. */}
     return failedResponse(base,minEligible,storedProgress(job).eligibleImages)
   }
-  if(job.state==='generating'&&(!job.lease_until||job.lease_until<now))return Response.json({...base,status:'fallback',fallbackReason:'generation_interrupted'},{status:503})
-  if(job.lease_until&&job.lease_until>=now)return pendingResponse(base,minEligible,storedProgress(job),job.state==='generating'?'reviewing':'processing',15_000,storedStage(job),storedModelCalls(job))
-  const token=crypto.randomUUID()
-  const claimed=await db.prepare(`UPDATE article_edition_jobs SET lease_token=?,lease_until=?,updated_at=? WHERE id=? AND (lease_until IS NULL OR lease_until<?) AND state='preparing' RETURNING id`).bind(token,now+leaseMs,now,identity.id,now).first()
-  if(!claimed)return pendingResponse(base,minEligible,storedProgress(job),'processing',15_000,undefined,storedModelCalls(job))
+  if(job.state==='generating'&&(!job.lease_until||job.lease_until<now)){
+    if(articleCount===3){
+      const reset=await tryResumeReset(db,job,'interrupted',leaseMs,now)
+      if(reset&&'lostRace' in reset)return pendingResponse(base,minEligible,emptyProgress,'processing',15_000)
+      if(reset){resumed=reset;job=reset.job}
+      else return Response.json({...base,status:'fallback',fallbackReason:'generation_interrupted'},{status:503})
+    }else return Response.json({...base,status:'fallback',fallbackReason:'generation_interrupted'},{status:503})
+  }
+  if(!resumed&&job.lease_until&&job.lease_until>=now)return pendingResponse(base,minEligible,storedProgress(job),job.state==='generating'?'reviewing':'processing',15_000,storedStage(job),storedModelCalls(job),storedNotices(job))
+  const token=resumed?resumed.token:crypto.randomUUID()
+  const claimed=resumed?{id:identity.id}:await db.prepare(`UPDATE article_edition_jobs SET lease_token=?,lease_until=?,updated_at=? WHERE id=? AND (lease_until IS NULL OR lease_until<?) AND state='preparing' RETURNING id`).bind(token,now+leaseMs,now,identity.id,now).first()
+  if(!claimed)return pendingResponse(base,minEligible,storedProgress(job),'processing',15_000,undefined,storedModelCalls(job),storedNotices(job))
   try{
     // Only the lease owner rebuilds the pool. Waiting pollers read the job row.
     try{pool=await editorialArticlePool(env,p)}catch(error){
@@ -150,33 +275,65 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
     }
     if(!pool)throw Error('Article pool unavailable')
     const progress=progressFromPool(pool)
+    // A resumed row keeps its invocation history and spend across the
+    // rewrite; fresh rows store progress alone, exactly as before.
+    const carriedCalls=storedModelCalls(job),carriedNotices=storedNotices(job),carriedSpend=resumed?resumed.spend:storedSpend(job)
+    const progressJson=JSON.stringify({progress,...(carriedCalls.length?{modelCalls:carriedCalls}:{}),...(carriedNotices.length?{notices:carriedNotices}:{}),...(carriedSpend?{spend:carriedSpend}:{})})
     await db.prepare(`UPDATE article_edition_jobs SET result_json=? WHERE id=? AND lease_token=? AND state='preparing' AND (result_json IS NULL OR result_json<>?)`)
-      .bind(JSON.stringify({progress}),identity.id,token,JSON.stringify({progress})).run()
+      .bind(progressJson,identity.id,token,progressJson).run()
     if(pool.eligibleCount>=minEligible){
       // The conditional D1 update is atomic across Worker isolates. Existing
       // jobs remain readable when the two-generation ceiling is reached.
       const generationNow=Date.now()
       const generationClaim=await db.prepare(`UPDATE article_edition_jobs SET state='generating',lease_until=?,updated_at=? WHERE id=? AND lease_token=? AND (SELECT COUNT(*) FROM article_edition_jobs WHERE updated_at>? AND state='generating' AND lease_until>?)<2 RETURNING id`)
         .bind(generationNow+leaseMs,generationNow,identity.id,token,generationNow-leaseMs,generationNow).first()
-      if(!generationClaim)return pendingResponse(base,minEligible,progress,'waiting_for_capacity',15_000,undefined,storedModelCalls(job))
-      const reportGenerationStage=async(stage:ArticleGenerationStage,modelCalls?:ModelCallEvent[])=>{
-        await db.prepare(`UPDATE article_edition_jobs SET result_json=?,updated_at=? WHERE id=? AND lease_token=?`).bind(JSON.stringify({progress,stage,...(modelCalls?.length?{modelCalls}:{})}),Date.now(),identity.id,token).run()
+      if(!generationClaim){
+        // Release the lease so the next poll retries promptly instead of
+        // stalling until expiry behind a held but unusable lease.
+        await db.prepare(`UPDATE article_edition_jobs SET lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(Date.now(),identity.id,token).run()
+        return pendingResponse(base,minEligible,progress,'waiting_for_capacity',15_000,undefined,storedModelCalls(job),storedNotices(job))
+      }
+      const reportGenerationStage=async(stage:ArticleGenerationStage,modelCalls?:ModelCallEvent[],notices?:JobNotice[],spend?:JobSpend)=>{
+        await db.prepare(`UPDATE article_edition_jobs SET result_json=?,updated_at=? WHERE id=? AND lease_token=?`).bind(JSON.stringify({progress,stage,...(modelCalls?.length?{modelCalls}:{}),...(notices?.length?{notices}:{}),...(spend?{spend}:{})}),Date.now(),identity.id,token).run()
       }
       let assessment:ArticleAssessment|null=null
-      const result=await articleEditorialResponse(request,env,p,mode,pool,articleCount,reportGenerationStage,schedule,recorded=>{assessment=recorded})
-      const payload=await result.clone().json() as {source?:string;articleEdition?:unknown;generation?:unknown;evidence?:{interpretations:number}|null;researchReferences?:unknown;aiDisclosure?:string;editorialTier?:unknown;modelCalls?:unknown}
+      let jobContext:ArticleJobContext|undefined
+      if(articleCount===3){
+        const ownedPool=pool
+        const adopted=resumed?await loadCheckpoints(db,identity.id,identity.inputDigest,ownedPool):[]
+        const historyCalls=storedModelCalls(job),historyNotices=storedNotices(job)
+        jobContext={
+          jobKey:identity.id,
+          ...(adopted.length?{adopted}:{}),
+          ...(resumed?{attemptsUsed:resumed.spend.attempts,chargedUnits:resumed.spend.charged}:{}),
+          ...((historyCalls.length||historyNotices.length)?{history:{modelCalls:historyCalls,notices:historyNotices}}:{}),
+          onCheckpoint:async(stageName:CheckpointStage,payload:CheckpointPayload,invocation:CheckpointInvocation)=>{
+            const checkpoint=articleCheckpoint.parse({version:CHECKPOINT_WORKFLOW_VERSION,jobId:identity.id,inputDigest:identity.inputDigest,
+              evidenceDigest:await evidenceDigest(ownedPool,payload.edition as ArticleEditionBody,[]),
+              stage:stageName,articleCount:3,value:payload,model:invocation.model,invocationId:invocation.invocationId,
+              startedAt:invocation.startedAt,endedAt:invocation.endedAt,usage:invocation.usage})
+            const written=await db.prepare(
+              `INSERT INTO article_edition_checkpoints(job_id,stage,checkpoint_json,created_at,updated_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM article_edition_jobs WHERE id=? AND lease_token=? AND state='generating') ON CONFLICT(job_id,stage) DO UPDATE SET checkpoint_json=excluded.checkpoint_json,updated_at=excluded.updated_at WHERE EXISTS(SELECT 1 FROM article_edition_jobs WHERE id=? AND lease_token=? AND state='generating')`
+            ).bind(identity.id,stageName,JSON.stringify(checkpoint),Date.now(),Date.now(),identity.id,token,identity.id,token).run()
+            return (written.meta?.changes??0)>0
+          },
+        }
+      }
+      const result=await articleEditorialResponse(request,env,p,mode,pool,articleCount,reportGenerationStage,schedule,recorded=>{assessment=recorded},jobContext)
+      const payload=await result.clone().json() as {source?:string;articleEdition?:unknown;generation?:unknown;evidence?:{interpretations:number}|null;researchReferences?:unknown;aiDisclosure?:string;editorialTier?:unknown;modelCalls?:unknown;notices?:unknown}
       if(payload.source==='meta'&&payload.articleEdition){
         const research=editorialSources.parse(payload.researchReferences??[])
         const tier=editorialTierLabel.safeParse(payload.editorialTier)
         const calls=modelCallEvents.safeParse(payload.modelCalls)
+        const savedNotices=jobNotices.safeParse(payload.notices)
         await db.prepare(`UPDATE article_edition_jobs SET state='completed',result_json=?,evidence_digest=?,lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`)
-          .bind(JSON.stringify({articleEdition:payload.articleEdition,generation:payload.generation,evidence:payload.evidence??null,researchReferences:research,aiDisclosure:payload.aiDisclosure,...(tier.success?{editorialTier:tier.data}:{}),...(assessment?{assessment}:{}),...(calls.success?{modelCalls:calls.data}:{})}),await evidenceDigest(pool,payload.articleEdition as ArticleEditionBody,research),Date.now(),identity.id,token).run()
+          .bind(JSON.stringify({articleEdition:payload.articleEdition,generation:payload.generation,evidence:payload.evidence??null,researchReferences:research,aiDisclosure:payload.aiDisclosure,...(tier.success?{editorialTier:tier.data}:{}),...(assessment?{assessment}:{}),...(calls.success?{modelCalls:calls.data}:{}),...(savedNotices.success?{notices:savedNotices.data}:{})}),await evidenceDigest(pool,payload.articleEdition as ArticleEditionBody,research),Date.now(),identity.id,token).run()
       }else await db.prepare(`UPDATE article_edition_jobs SET state='failed',result_json=?,lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(JSON.stringify({failure:{status:result.status,body:payload}}),Date.now(),identity.id,token).run()
       return result
     }
     const selected=(pool.preparation?.pendingVersionIds??[]).slice(0,Math.min(policy.concurrency,minEligible-pool.eligibleCount))
     if(!selected.length){
-      if(pool.preparation?.processing)return pendingResponse(base,minEligible,progress,'processing',15_000,undefined,storedModelCalls(job))
+      if(pool.preparation?.processing)return pendingResponse(base,minEligible,progress,'processing',15_000,undefined,storedModelCalls(job),storedNotices(job))
       await db.prepare(`UPDATE article_edition_jobs SET state='failed',lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(Date.now(),identity.id,token).run()
       return failedResponse(base,minEligible,pool.eligibleCount)
     }
@@ -195,7 +352,7 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
       await db.prepare(`UPDATE article_edition_jobs SET state='failed',lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(Date.now(),identity.id,token).run()
       return failedResponse(base,minEligible,pool.eligibleCount)
     }
-    return pendingResponse(base,minEligible,nextProgress,pool.eligibleCount>=minEligible?'evidence_ready':'processing',pool.eligibleCount>=minEligible?0:policy.windowSeconds*1000,undefined,storedModelCalls(job))
+    return pendingResponse(base,minEligible,nextProgress,pool.eligibleCount>=minEligible?'evidence_ready':'processing',pool.eligibleCount>=minEligible?0:policy.windowSeconds*1000,undefined,storedModelCalls(job),storedNotices(job))
   }catch{
     await db.prepare(`UPDATE article_edition_jobs SET state='failed',lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?`).bind(Date.now(),identity.id,token).run().catch(()=>{})
     return Response.json({...base,status:'fallback',fallbackReason:'job_unavailable'},{status:503})

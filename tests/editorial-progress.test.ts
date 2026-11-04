@@ -3,7 +3,7 @@ import {createArticleTracker,createStandardTracker,stageTone,type ProgressSnapsh
 import type {ArticlePoll} from '../src/spatial/articles'
 import type {ModelCallEvent} from '../shared/article-model-calls'
 
-const poll=(over:Partial<ArticlePoll>={}):ArticlePoll=>({outcome:null,eligibleImages:null,requiredImages:null,remainingCandidates:null,processing:null,generationStage:null,modelCalls:null,...over})
+const poll=(over:Partial<ArticlePoll>={}):ArticlePoll=>({outcome:null,eligibleImages:null,requiredImages:null,remainingCandidates:null,processing:null,generationStage:null,modelCalls:null,notices:null,...over})
 const statusOf=(snap:ProgressSnapshot,id:string)=>snap.stages.find(stage=>stage.id===id)?.status
 const rowOf=(snap:ProgressSnapshot,id:string)=>snap.stages.find(stage=>stage.id===id)!
 
@@ -167,7 +167,7 @@ it('tones bars from status and measured fraction',()=>{
   expect(stageTone(row('FAILED',0.3))).toBe('failed')
 })
 
-const modelCall=(over:Partial<ModelCallEvent>={}):ModelCallEvent=>({id:'call-1',model:'muse-spark-1.3',stage:'chief_editor',startedAt:1760000000000,endedAt:null,status:'calling',...over})
+const modelCall=(over:Partial<ModelCallEvent>={}):ModelCallEvent=>({id:'call-1',model:'muse-spark-1.3',stage:'chief_editor',attempt:1,startedAt:1760000000000,endedAt:null,status:'calling',...over})
 
 it('starts with no model invocations and never invents any',()=>{
   expect(createArticleTracker().snapshot().modelCalls).toEqual([])

@@ -12,6 +12,7 @@ export class InferenceBudget {
     state.storage.sql.exec('CREATE TABLE IF NOT EXISTS demo_leases (id TEXT PRIMARY KEY, tester TEXT NOT NULL, expires INTEGER NOT NULL)')
     state.storage.sql.exec('CREATE TABLE IF NOT EXISTS article_prep_leases (id TEXT PRIMARY KEY, expires INTEGER NOT NULL)')
     state.storage.sql.exec('CREATE TABLE IF NOT EXISTS reservation_events (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, units INTEGER NOT NULL, outcome TEXT NOT NULL, policy TEXT NOT NULL)')
+    state.storage.sql.exec('CREATE TABLE IF NOT EXISTS job_units (job_key TEXT PRIMARY KEY, units INTEGER NOT NULL, created_at INTEGER NOT NULL)')
     state.storage.sql.exec('CREATE TABLE IF NOT EXISTS demo_reset_events (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, action TEXT NOT NULL, scope TEXT NOT NULL, ip_digest TEXT NOT NULL, tester_digest TEXT)')
   }
   async fetch(request:Request):Promise<Response>{
@@ -69,14 +70,19 @@ export class InferenceBudget {
       return Response.json({released:true})
     }
     if(url.pathname!=='/reserve'&&url.pathname!=='/')return new Response(null,{status:404})
-    const parsed=z.strictObject({ip:z.string().regex(/^[a-f0-9]{64}$/),ceiling:z.number().int().min(1).max(500),daily:z.number().int().min(1).max(160).default(20),demo:z.boolean().default(false),demoTester:z.string().regex(/^[a-f0-9]{64}$/).optional(),demoTestingPolicy:demoTestingPolicy.optional(),units:z.union([z.literal(1),z.literal(2),z.literal(3),z.literal(4),z.literal(5)]).default(1),articleV3:z.boolean().optional(),samAssetId:z.string().regex(/^[a-z0-9-]+$/).max(80).optional(),editorialPilot:z.boolean().optional(),articlePreparation:z.boolean().optional(),articlePreparationPolicy:articlePreparationPolicy.optional(),rates:ratePolicy.default(DEFAULT_RATE_POLICY)}).safeParse(await request.json())
+    const parsed=z.strictObject({ip:z.string().regex(/^[a-f0-9]{64}$/),ceiling:z.number().int().min(1).max(500),daily:z.number().int().min(1).max(160).default(20),demo:z.boolean().default(false),demoTester:z.string().regex(/^[a-f0-9]{64}$/).optional(),demoTestingPolicy:demoTestingPolicy.optional(),units:z.union([z.literal(1),z.literal(2),z.literal(3),z.literal(4),z.literal(5)]).default(1),articleV3:z.boolean().optional(),samAssetId:z.string().regex(/^[a-z0-9-]+$/).max(80).optional(),editorialPilot:z.boolean().optional(),articlePreparation:z.boolean().optional(),articlePreparationPolicy:articlePreparationPolicy.optional(),jobUnits:z.strictObject({jobKey:z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,89}$/),jobCap:z.literal(20),topUp:z.boolean().optional()}).optional(),rates:ratePolicy.default(DEFAULT_RATE_POLICY)}).safeParse(await request.json())
     if(!parsed.success)return Response.json({error:'Invalid reservation'},{status:400})
-    const {ip,ceiling,daily,demo,demoTester,demoTestingPolicy:testing,units,articleV3=false,samAssetId,editorialPilot=false,articlePreparation=false,articlePreparationPolicy:prep,rates}=parsed.data
-    if((!demo&&(ceiling>100||daily>100||demoTester))||(demo&&(ceiling<daily||demoTester&&units!==4&&!articleV3))||(editorialPilot&&(units!==4||samAssetId))||(articlePreparation&&(units!==1||samAssetId||editorialPilot||demoTester||!prep))||(!articlePreparation&&prep)||(testing&&(!demo||!demoTester||units!==4&&!articleV3||samAssetId||articlePreparation))||(articleV3&&(units!==5||samAssetId||editorialPilot||articlePreparation||rates.reviewedHourlyUnits<5))||(units===5&&!articleV3))return Response.json({error:'Invalid policy'},{status:400})
+    const {ip,ceiling,daily,demo,demoTester,demoTestingPolicy:testing,units,articleV3=false,samAssetId,editorialPilot=false,articlePreparation=false,articlePreparationPolicy:prep,jobUnits,rates}=parsed.data
+    // Job-bound reserves (initial, resume and retry top-ups) charge unit
+    // counters like any article reserve, but skip the per-request cooldown:
+    // continuations belong to an already-admitted job, capped per job by
+    // job_units across every request and resume.
+    if((!demo&&(ceiling>100||daily>100||demoTester))||(demo&&(ceiling<daily||demoTester&&units!==4&&!articleV3&&!jobUnits))||(editorialPilot&&(units!==4||samAssetId))||(articlePreparation&&(units!==1||samAssetId||editorialPilot||demoTester||!prep))||(!articlePreparation&&prep)||(testing&&(!demo||!demoTester||units!==4&&!articleV3&&!jobUnits||samAssetId||articlePreparation))||(articleV3&&(units!==5||samAssetId||editorialPilot||articlePreparation||rates.reviewedHourlyUnits<5))||(units===5&&!articleV3)||(jobUnits&&(samAssetId||editorialPilot||articlePreparation||prep||articleV3||(jobUnits.topUp&&units!==1))))return Response.json({error:'Invalid policy'},{status:400})
     const result=this.state.storage.transactionSync(()=>{
       this.state.storage.sql.exec('DELETE FROM counters WHERE expires > 0 AND expires <= ?',now)
       this.state.storage.sql.exec('DELETE FROM demo_leases WHERE expires <= ?',now)
       this.state.storage.sql.exec('DELETE FROM article_prep_leases WHERE expires <= ?',now)
+      this.state.storage.sql.exec('DELETE FROM job_units WHERE created_at <= ?',now-7*86400000)
       const deny=(limitType:BudgetLimitType,limit:number,used:number,measure:BudgetDenial['measure'],expires:number,policy:string)=>{
         const denial:BudgetDenial={limitType,limit,used,remaining:Math.max(0,limit-used),requestedUnits:units,measure,...(expires?{retryAfterSeconds:Math.max(1,Math.ceil((expires-now)/1000)),resetAt:new Date(expires).toISOString()}:{})}
         this.record(now,units,`denied:${limitType}`,policy)
@@ -90,24 +96,33 @@ export class InferenceBudget {
         const active=this.state.storage.sql.exec<{count:number;expires:number}>('SELECT COUNT(*) AS count,MIN(expires) AS expires FROM demo_leases WHERE tester = ?',demoTester).toArray()[0]
         if((active?.count??0)>=rates.testerConcurrent)return deny('demo_tester_concurrency',rates.testerConcurrent,active?.count??0,'concurrent',active?.expires??now+minute,'demo')
       }
+      const retryPolicy=jobUnits?'article_retry':articlePreparation?'article_preparation':demo?'demo':'standard'
+      if(jobUnits){
+        const used=this.state.storage.sql.exec<{units:number}>('SELECT units FROM job_units WHERE job_key = ?',jobUnits.jobKey).toArray()[0]?.units??0
+        if(used+units>jobUnits.jobCap)return deny('job_invocation_cap',jobUnits.jobCap,used,'units',0,retryPolicy)
+      }
       const counters:{key:string;limit:number;expires:number;type:BudgetLimitType;measure:BudgetDenial['measure'];cost:number}[]=[
         ...(samAssetId?[{key:`sam-once:${samAssetId}`,limit:1,expires:0,type:'sam_once_per_asset' as const,measure:'requests' as const,cost:1}]:[]),
         {key:'lifetime',limit:ceiling,expires:0,type:'global_lifetime',measure:'units',cost:units},
         {key:`day:${Math.floor(now/day)}`,limit:daily,expires:(Math.floor(now/day)+1)*day,type:'global_daily',measure:'units',cost:units},
-        ...(!testing?[{key:articlePreparation?`article-prep-hour:${ip}:${Math.floor(now/hour)}`:`hour:${ip}:${Math.floor(now/hour)}`,limit:prep?.maxPerHour??(demoTester?rates.testerHourlyUnits:editorialPilot?rates.pilotHourlyUnits:units===4||articleV3?rates.reviewedHourlyUnits:rates.standardHourlyUnits),expires:(Math.floor(now/hour)+1)*hour,type:articlePreparation?'article_preparation_hourly' as const:'per_ip_hourly' as const,measure:'units' as const,cost:units}]:[]),
+        ...(!testing?[{key:articlePreparation?`article-prep-hour:${ip}:${Math.floor(now/hour)}`:`hour:${ip}:${Math.floor(now/hour)}`,limit:prep?.maxPerHour??(demoTester?rates.testerHourlyUnits:editorialPilot?rates.pilotHourlyUnits:units===4||articleV3||jobUnits?rates.reviewedHourlyUnits:rates.standardHourlyUnits),expires:(Math.floor(now/hour)+1)*hour,type:articlePreparation?'article_preparation_hourly' as const:'per_ip_hourly' as const,measure:'units' as const,cost:units}]:[]),
         ...(prep?[{key:`article-prep-day:${ip}:${Math.floor(now/day)}`,limit:prep.maxPerDay,expires:(Math.floor(now/day)+1)*day,type:'article_preparation_daily' as const,measure:'units' as const,cost:units}]:[]),
         ...(demoTester?[...(!testing?[{key:`tester-hour:${demoTester}:${Math.floor(now/hour)}`,limit:rates.testerHourlyUnits,expires:(Math.floor(now/hour)+1)*hour,type:'demo_tester_hourly' as const,measure:'units' as const,cost:units}]:[]),{key:`tester-day:${demoTester}:${Math.floor(now/day)}`,limit:rates.testerDailyUnits,expires:(Math.floor(now/day)+1)*day,type:'demo_tester_daily' as const,measure:'units' as const,cost:units}]:[]),
-        ...(testing?[{key:`demo-testing:${demoTester}:${testing.windowSeconds}:${Math.floor(now/(testing.windowSeconds*1000))}`,limit:testing.windowUnits,expires:(Math.floor(now/(testing.windowSeconds*1000))+1)*testing.windowSeconds*1000,type:'demo_testing_window' as const,measure:'units' as const,cost:units}]:[{key:articlePreparation?`article-prep-cooldown:${ip}`:`cooldown:${ip}`,limit:prep?.windowLimit??(demoTester?2:1),expires:now+(prep?prep.windowSeconds*1000:rates.cooldownSeconds*1000),type:articlePreparation?'article_preparation_window' as const:'per_ip_cooldown' as const,measure:'requests' as const,cost:1}]),
+        ...(testing?[{key:`demo-testing:${demoTester}:${testing.windowSeconds}:${Math.floor(now/(testing.windowSeconds*1000))}`,limit:testing.windowUnits,expires:(Math.floor(now/(testing.windowSeconds*1000))+1)*testing.windowSeconds*1000,type:'demo_testing_window' as const,measure:'units' as const,cost:units}]:jobUnits?[]:[{key:articlePreparation?`article-prep-cooldown:${ip}`:`cooldown:${ip}`,limit:prep?.windowLimit??(demoTester?2:1),expires:now+(prep?prep.windowSeconds*1000:rates.cooldownSeconds*1000),type:articlePreparation?'article_preparation_window' as const:'per_ip_cooldown' as const,measure:'requests' as const,cost:1}]),
       ]
       for(const counter of counters){
         const row=this.state.storage.sql.exec<{count:number;expires:number}>('SELECT count,expires FROM counters WHERE key = ?',counter.key).toArray()[0]
-        if((row?.count??0)+counter.cost>counter.limit)return deny(counter.type,counter.limit,row?.count??0,counter.measure,row?.expires??counter.expires,articlePreparation?'article_preparation':demo?'demo':'standard')
+        if((row?.count??0)+counter.cost>counter.limit)return deny(counter.type,counter.limit,row?.count??0,counter.measure,row?.expires??counter.expires,retryPolicy)
       }
       for(const counter of counters)this.state.storage.sql.exec('INSERT INTO counters(key,count,expires) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET count=count+excluded.count',counter.key,counter.cost,counter.expires)
-      const reservationId=demoTester||prep?crypto.randomUUID():undefined
+      if(jobUnits)this.state.storage.sql.exec('INSERT INTO job_units(job_key,units,created_at) VALUES(?,?,?) ON CONFLICT(job_key) DO UPDATE SET units=units+excluded.units',jobUnits.jobKey,units,now)
+      // Mid-flight top-ups ride the active reserve's concurrency lease; a
+      // retry must not consume an additional tester slot. Initial and
+      // resume reserves hold their own slot.
+      const reservationId=!(jobUnits&&jobUnits.topUp)&&(demoTester||prep)?crypto.randomUUID():undefined
       if(reservationId&&demoTester)this.state.storage.sql.exec('INSERT INTO demo_leases(id,tester,expires) VALUES(?,?,?)',reservationId,demoTester,now+(articleV3?230000:180000))
       if(reservationId&&prep)this.state.storage.sql.exec('INSERT INTO article_prep_leases(id,expires) VALUES(?,?)',reservationId,now+30000)
-      this.record(now,units,'reserved',articlePreparation?'article_preparation':demo?'demo':'standard')
+      this.record(now,units,'reserved',retryPolicy)
       return {allowed:true,retryAfter:0,...(reservationId?{reservationId}:{})}
     })
     return Response.json(result)

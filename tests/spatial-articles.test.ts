@@ -9,15 +9,20 @@ const err = (status: number, body: unknown) => vi.fn(async () => new Response(JS
 const call = (fetchImpl: unknown) => fetchArticleEdition('quiet rooms', true, fetchImpl as unknown as typeof fetch)
 
 describe('spatial article edition fetch', () => {
-  it('uses an Article-specific request bound while keeping the 300-second overall polling bound',async()=>{
+  it('uses generous 3-story polling bounds while single story keeps the 180/300-second bounds',async()=>{
     const original=AbortSignal.timeout
     const durations:number[]=[]
     const spy=vi.spyOn(AbortSignal,'timeout').mockImplementation(ms=>{durations.push(ms);return original(ms)})
     try{
       await call(ok(articleResponseFixture()))
+      expect(durations).toContain(800000)
+      expect(durations).toContain(900000)
+      expect(durations).not.toContain(90000)
+      durations.length=0
+      await fetchArticleEdition('quiet rooms',true,ok(articleResponseFixture()) as unknown as typeof fetch,{articleCount:1})
       expect(durations).toContain(180000)
       expect(durations).toContain(300000)
-      expect(durations).not.toContain(90000)
+      expect(durations).not.toContain(800000)
     }finally{spy.mockRestore()}
   })
   it('sends the article format with consent and the selected mode', async () => {
@@ -189,15 +194,15 @@ describe('spatial article edition fetch', () => {
     const result = await fetchArticleEdition('quiet rooms', true, fetcher as unknown as typeof fetch, {onPoll: poll => seen.push(poll)})
     expect(result.edition?.articleEdition.articles).toHaveLength(3)
     expect(seen).toEqual([
-      {outcome: 'processing', eligibleImages: 2, requiredImages: 6, remainingCandidates: 4, processing: 1, generationStage: null, modelCalls: null},
-      {outcome: 'reviewing', eligibleImages: 6, requiredImages: 6, remainingCandidates: 0, processing: 0, generationStage: 'chief_editor', modelCalls: null},
+      {outcome: 'processing', eligibleImages: 2, requiredImages: 6, remainingCandidates: 4, processing: 1, generationStage: null, modelCalls: null, notices: null},
+      {outcome: 'reviewing', eligibleImages: 6, requiredImages: 6, remainingCandidates: 0, processing: 0, generationStage: 'chief_editor', modelCalls: null, notices: null},
     ])
   })
   it('passes backend-observed model invocations from polls to the progress callback', async () => {
     const seen: ArticlePoll[] = []
     const calls = [
-      {id: 'call-1', model: 'muse-spark-1.3', stage: 'chief_editor', startedAt: 1760000000000, endedAt: 1760000018400, status: 'completed', summary: 'Drafted: A Room for 1.'},
-      {id: 'call-2', model: 'muse-spark-1.3', stage: 'reviewer', startedAt: 1760000019000, endedAt: null, status: 'calling'},
+      {id: 'call-1', model: 'muse-spark-1.3', stage: 'chief_editor', attempt: 1, startedAt: 1760000000000, endedAt: 1760000018400, status: 'completed', summary: 'Drafted: A Room for 1.'},
+      {id: 'call-2', model: 'muse-spark-1.3', stage: 'reviewer', attempt: 1, startedAt: 1760000019000, endedAt: null, status: 'calling'},
     ]
     const responses = [
       new Response(JSON.stringify({status: 'preparing', fallbackReason: 'analysis_pending', eligibleImages: 6, requiredImages: 6, preparation: {outcome: 'reviewing', remainingCandidates: 0, processing: 0, retryAfterMs: 0}, generationStage: 'reviewer', modelCalls: calls}), {status: 202}),
@@ -213,7 +218,7 @@ describe('spatial article edition fetch', () => {
     expect(result.modelCalls![1]).toMatchObject({status: 'completed'})
   })
   it('carries the invocation log on failure responses without inventing entries', async () => {
-    const calls = [{id: 'call-1', model: 'muse-spark-1.3', stage: 'chief_editor', startedAt: 1760000000000, endedAt: 1760000005000, status: 'failed', summary: 'Failed: provider_timeout.'}]
+    const calls = [{id: 'call-1', model: 'muse-spark-1.3', stage: 'chief_editor', attempt: 1, startedAt: 1760000000000, endedAt: 1760000005000, status: 'failed', summary: 'Failed: provider_timeout.'}]
     const failed = await fetchArticleEdition('quiet rooms', true, err(503, {format: ARTICLE_CONTRACT_VERSION, source: 'deterministic', retrieval: 'd1', cached: false, articleEdition: null, status: 'fallback', fallbackReason: 'provider_or_validation', modelCalls: calls}) as unknown as typeof fetch)
     expect(failed.modelCalls).toHaveLength(1)
     expect(failed.modelCalls![0]).toMatchObject({status: 'failed'})

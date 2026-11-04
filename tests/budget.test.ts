@@ -126,3 +126,55 @@ it('permits only one SAM reservation per exact asset across IPs and UTC days', a
     expect(await (await attempt('b'.repeat(64))).json()).toMatchObject({ allowed: false })
   } finally { db.close() }
 })
+// Job-bound article reserves (initial, resume and retry top-ups) charge
+// unit counters cumulatively per job, skip the per-request cooldown, and
+// enforce the 20-invocation job cap across every request and resume.
+it('caps each article job at 20 cumulative invocations across requests',async()=>{
+  const {state,db}=storage()
+  const budget=new InferenceBudget(state)
+  const tester='e'.repeat(64)
+  const attempt=(body:Record<string,unknown>)=>budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:'a'.repeat(64),ceiling:500,daily:160,demo:true,demoTester:tester,demoTestingPolicy:{windowSeconds:300,windowUnits:24},...body})}))
+  try{
+    expect(await (await attempt({units:4,jobUnits:{jobKey:'article-job-abc123',jobCap:20}})).json()).toMatchObject({allowed:true})
+    for(let i=0;i<16;i++)expect(await (await attempt({jobUnits:{jobKey:'article-job-abc123',jobCap:20,topUp:true}})).json()).toMatchObject({allowed:true})
+    const denied=await (await attempt({jobUnits:{jobKey:'article-job-abc123',jobCap:20,topUp:true}})).json() as {allowed:boolean;denial:{limitType:string}}
+    expect(denied.allowed).toBe(false)
+    expect(denied.denial.limitType).toBe('job_invocation_cap')
+    expect(await (await attempt({units:4,jobUnits:{jobKey:'article-job-other',jobCap:20}})).json()).toMatchObject({allowed:true})
+  }finally{db.close()}
+})
+it('skips the cooldown for job continuations but keeps the reviewed hourly bucket',async()=>{
+  const {state,db}=storage()
+  const budget=new InferenceBudget(state)
+  const rates={standardHourlyUnits:8,reviewedHourlyUnits:8,pilotHourlyUnits:8,testerHourlyUnits:40,testerDailyUnits:120,cooldownSeconds:60,testerConcurrent:2}
+  const attempt=(body:Record<string,unknown>)=>budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:'b'.repeat(64),ceiling:100,daily:100,rates,...body})}))
+  try{
+    expect(await (await attempt({})).json()).toMatchObject({allowed:true})
+    expect(await (await attempt({})).json()).toMatchObject({allowed:false,denial:{limitType:'per_ip_cooldown'}})
+    expect(await (await attempt({jobUnits:{jobKey:'article-job-cd',jobCap:20,topUp:true}})).json()).toMatchObject({allowed:true})
+  }finally{db.close()}
+})
+it('holds no extra concurrency slot for mid-flight top-ups',async()=>{
+  const {state,db}=storage()
+  const budget=new InferenceBudget(state)
+  const base={ip:'c'.repeat(64),ceiling:500,daily:160,demo:true,demoTester:'d'.repeat(64),rates:{standardHourlyUnits:3,reviewedHourlyUnits:8,pilotHourlyUnits:8,testerHourlyUnits:40,testerDailyUnits:120,cooldownSeconds:60,testerConcurrent:2}}
+  try{
+    const initial=await (await budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({...base,units:4,jobUnits:{jobKey:'article-job-slot',jobCap:20}})}))).json() as {allowed:boolean;reservationId?:string}
+    expect(initial.allowed).toBe(true)
+    expect(typeof initial.reservationId).toBe('string')
+    const topUp=await (await budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({...base,jobUnits:{jobKey:'article-job-slot',jobCap:20,topUp:true}})}))).json() as {allowed:boolean;reservationId?:string}
+    expect(topUp.allowed).toBe(true)
+    expect(topUp.reservationId).toBeUndefined()
+  }finally{db.close()}
+})
+it('rejects malformed job-bound reservations',async()=>{
+  const {state,db}=storage()
+  const budget=new InferenceBudget(state)
+  const attempt=(body:Record<string,unknown>)=>budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:'d'.repeat(64),ceiling:100,...body})}))
+  try{
+    expect((await attempt({units:2,jobUnits:{jobKey:'article-job-x',jobCap:20,topUp:true}})).status).toBe(400)
+    expect((await attempt({samAssetId:'asset-v1',jobUnits:{jobKey:'article-job-x',jobCap:20}})).status).toBe(400)
+    expect((await attempt({jobUnits:{jobKey:'!bad',jobCap:20}})).status).toBe(400)
+    expect((await attempt({jobUnits:{jobKey:'article-job-x',jobCap:19}})).status).toBe(400)
+  }finally{db.close()}
+})
