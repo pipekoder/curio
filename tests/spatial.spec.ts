@@ -515,6 +515,8 @@ test('insufficient article content discloses state and retries the standard edit
     const alert=page.getByRole('alert')
     await expect(alert).toContainText('Not enough approved imagery',{timeout:8000})
     await expect(alert).toContainText('5 of 6',{timeout:8000})
+    await expect(page.locator('.spatial-generating')).toHaveCount(0)
+    await expect(alert.locator('.editorial-progress')).toBeVisible({timeout:8000})
     await expect(page.getByTestId('spatial-edition-chip')).toHaveCount(0)
     expect(bodies).toHaveLength(1)
     expect((bodies[0] as Record<string,unknown>).editionFormat).toBe('curio-editorial-articles-v1')
