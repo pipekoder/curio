@@ -18,7 +18,7 @@ test('owner can bulk-upload and review a structured multi-product import without
  await page.getByLabel('Operator token').fill(token);await page.getByRole('button',{name:'Open Content Studio'}).click()
  await expect(page.getByRole('heading',{name:'Bulk images'})).toBeVisible()
  await page.locator('.studio-drop input').setInputFiles({name:'fold-chair.png',mimeType:'image/png',buffer:Buffer.from('owner-created-test-image')})
- await page.getByRole('button',{name:'Upload queued images'}).click();await expect(page.getByText('complete')).toBeVisible()
+ await page.getByRole('button',{name:'Upload queued images'}).click();await expect(page.locator('.upload-queue').getByText('complete',{exact:true})).toBeVisible()
  await page.locator('.studio-import>textarea').fill('Brand: Northline Studio\n\nProduct: Fold Chair')
  await page.getByRole('button',{name:'Extract structured records'}).click();await expect(page.getByLabel('Review and edit structured import')).toContainText('Fold Chair')
  await page.getByRole('button',{name:'Save mockup catalog'}).click()
