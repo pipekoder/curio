@@ -18,7 +18,8 @@ import {AssemblyField} from './AssemblyField'
 import {exhibitLayout,lateralBias,splinePosition,type Waypoint} from './camera-math'
 import {NETWORK_CENTER,ORBIT_DEFAULT,pickSurprise,orbitCamera} from './network-math'
 import {NetworkChamber} from './NetworkChamber'
-import {SPATIAL_SESSION_KEY,clearSpatialSession} from './clear'
+import {clearSpatialSession} from './clear'
+import {loadExplorationSession,markExplorationOutcome,saveExplorationSession} from './exploration-session'
 import type {NodeSource} from './nodes'
 import DiscoverDecor from './DiscoverDecor'
 import './spatial.css'
@@ -29,6 +30,11 @@ import './spatial.css'
 // surface preloads the same way: exhibits render only after staging.
 const EditorialProgress=lazy(()=>import('./EditorialProgress'))
 const ArticleCard=lazy(()=>import('./ArticleCard'))
+// Demo header keeps only the brand, the status crumb and New Discovery.
+// The Journey/Promenade header buttons stay out of the public Demo while
+// the network itself keeps working: scroll-to-bottom still opens it, and
+// Esc, the journey-bar back button, dive and curate still return.
+const SHOW_JOURNEY_HEADER_BUTTONS=false
 
 type DebugSnapshot={distance:number;cameraZ:number;cameraY:number;current:number;exhibits:number;nodes:number;source:NodeSource|'pending';assembly:string;mode:string;orbit:{yaw:number;pitch:number;radius:number};selected:number;staged:string[];nodeIds:string[];honest:HonestState|null}
 type Transit={t0:number;dur:number;fromPos:THREE.Vector3;fromLook:THREE.Vector3;toPos:THREE.Vector3;toLook:THREE.Vector3;onFrame?:(k:number)=>void;onDone:()=>void}
@@ -138,6 +144,11 @@ export default function SpatialApp(){
   // Guards the async revalidation window on journey/exhibit transitions so
   // a second transition cannot interleave before the first settles.
   const verifyingRef=useRef(false)
+  // Current article exploration identity: minted fresh per deliberate Begin
+  // Exploration, reused for retries of the same exploration, restored from
+  // the session record after a reload so refreshes resume the same D1 job.
+  const explorationIdRef=useRef<string|null>(null)
+  const resumedRef=useRef(false)
 
   useEffect(()=>{
     if(!supported)return
@@ -425,11 +436,26 @@ export default function SpatialApp(){
   const activeId=current>=0?exhibits[current]?.assetId??null:null
   useEffect(()=>{setExpanded(false);articleScroll.current=0},[activeId,mode])
 
+  // A reload during an unfinished article exploration restores its input
+  // state so the next Begin Exploration resumes the same D1 job. Consent is
+  // deliberately not restored: its checkbox stays the only source of true.
+  useEffect(()=>{
+    if(resumedRef.current)return
+    resumedRef.current=true
+    const stored=loadExplorationSession(sessionStorage)
+    if(!stored?.explorationId||stored.outcome)return
+    explorationIdRef.current=stored.explorationId
+    setPrompt(stored.prompt)
+    if(stored.mode==='lite'||stored.mode==='hybrid')setEditorialMode(stored.mode)
+    if(stored.format)setArticleFormat(stored.format==='articles')
+    setStatus('An exploration was interrupted. Review AI consent and press Begin exploration to resume it.')
+  },[])
+
   if(!supported){
     return <SpatialFallback/>
   }
 
-  const submit=async(event?:React.FormEvent,promptOverride?:string,modeOverride?:EditorialMode,formatOverride?:'articles'|'story'|'standard')=>{
+  const submit=async(event?:React.FormEvent,promptOverride?:string,modeOverride?:EditorialMode,formatOverride?:'articles'|'story'|'standard',keepExploration=false)=>{
     event?.preventDefault()
     const trimmed=(promptOverride??prompt).trim()
     if(!trimmed||composing)return
@@ -443,9 +469,28 @@ export default function SpatialApp(){
     setStatus('Composing your exhibition…')
     const submitId=++submitIdRef.current
     window.scrollTo(0,0)
-    try{
-      sessionStorage.setItem(SPATIAL_SESSION_KEY,JSON.stringify({version:1,prompt:trimmed.slice(0,1000),startedAt:Date.now()}))
-    }catch{/* Private browsing keeps the visit in memory only. */}
+    const selectedModeEarly=modeOverride??editorialMode
+    const wantArticlesEarly=formatOverride?formatOverride==='articles':articleFormat
+    const wantStoryEarly=!wantArticlesEarly&&(formatOverride?formatOverride==='story':consent&&!articleFormat)
+    // Fresh exploration identity: Begin Exploration mints a new ID so the
+    // backend runs the models again instead of serving a completed job.
+    // Retries reuse the live ID, and a reload-restored prompt with no
+    // recorded outcome resumes its interrupted job. Standard editions carry
+    // no job identity and keep the legacy session record.
+    let exploration:string|null=null
+    if(wantArticlesEarly||wantStoryEarly){
+      if(keepExploration)exploration=explorationIdRef.current??crypto.randomUUID()
+      else{
+        const stored=loadExplorationSession(sessionStorage)
+        exploration=stored&&!stored.outcome&&stored.explorationId&&stored.prompt===trimmed.slice(0,1000)?stored.explorationId:crypto.randomUUID()
+      }
+      explorationIdRef.current=exploration
+      saveExplorationSession(sessionStorage,{version:1,prompt:trimmed.slice(0,1000),startedAt:Date.now(),explorationId:exploration,mode:selectedModeEarly,format:wantArticlesEarly?'articles':wantStoryEarly?'story':'standard'})
+    }else{
+      explorationIdRef.current=null
+      saveExplorationSession(sessionStorage,{version:1,prompt:trimmed.slice(0,1000),startedAt:Date.now()})
+    }
+    const markOutcome=(outcome:'completed'|'failed')=>{if(submitId===submitIdRef.current&&exploration)markExplorationOutcome(sessionStorage,exploration,outcome)}
     bridgeRef.current!.emit({type:'prompt',prompt:trimmed})
     const field=fieldRef.current
     // Level flight while assembling: the idle overlook ramp would pitch the
@@ -467,9 +512,9 @@ export default function SpatialApp(){
     fetchAbortRef.current?.abort()
     const controller=new AbortController()
     fetchAbortRef.current=controller
-    const selectedMode=modeOverride??editorialMode
-    const wantArticles=formatOverride?formatOverride==='articles':articleFormat
-    const wantStory=!wantArticles&&(formatOverride?formatOverride==='story':consent&&!articleFormat)
+    const selectedMode=selectedModeEarly
+    const wantArticles=wantArticlesEarly
+    const wantStory=wantStoryEarly
     const wantCount:1|3=wantArticles?3:1
     const tearDownAssembly=()=>{
       setComposing(false)
@@ -505,7 +550,7 @@ export default function SpatialApp(){
       if(submitId!==submitIdRef.current)return
       const tracker=createArticleTracker()
       setProgress(tracker.snapshot())
-      const result=await fetchArticleEdition(trimmed,consent,fetch,{onResponse:()=>directorRef.current.onResponse(),onPoll:poll=>setProgress(tracker.poll(poll)),signal:controller.signal,editorialMode:capabilities?selectedMode:undefined,articleCount:wantCount})
+      const result=await fetchArticleEdition(trimmed,consent,fetch,{onResponse:()=>directorRef.current.onResponse(),onPoll:poll=>setProgress(tracker.poll(poll)),signal:controller.signal,editorialMode:capabilities?selectedMode:undefined,articleCount:wantCount,explorationId:exploration??undefined})
       if(submitId!==submitIdRef.current)return
       if(!result.edition){
         tearDownAssembly()
@@ -513,6 +558,7 @@ export default function SpatialApp(){
         const copy=articleStatusCopy(result)
         setArticleError(copy)
         setStatus(copy.title)
+        markOutcome('failed')
         return
       }
       const articleStaged=stageArticleEdition(result.edition,wantCount)
@@ -524,8 +570,10 @@ export default function SpatialApp(){
           :{title:'The article edition arrived incomplete.',detail:'Fewer than three articles could be verified against the catalog. The standard edition below remains available.'}
         setArticleError(incomplete)
         setStatus(incomplete.title)
+        markOutcome('failed')
         return
       }
+      markOutcome('completed')
       honest=result.honest;reason=result.fallbackReason;timedOut=result.timedOut;generation=result.generation
       tier=result.edition.editorialTier??null
       counts={requested:result.edition.requestedCount??wantCount,published:result.edition.publishedCount??result.edition.articleEdition.articles.length}
@@ -604,6 +652,7 @@ export default function SpatialApp(){
 
   const finishClear=()=>{
     submitIdRef.current++
+    explorationIdRef.current=null
     fetchAbortRef.current?.abort()
     rigRef.current?.setCinematic(null)
     setComposing(false)
@@ -879,9 +928,9 @@ export default function SpatialApp(){
         {crumb}
       </nav>
       <div className="spatial-actions">
-        {mode==='network'
+        {SHOW_JOURNEY_HEADER_BUTTONS&&(mode==='network'
           ?<button type="button" onClick={backToPromenade}>Promenade</button>
-          :<button type="button" onClick={openNetwork} disabled={!nodes.length||composing}>Journey</button>}
+          :<button type="button" onClick={openNetwork} disabled={!nodes.length||composing}>Journey</button>)}
         {staged&&mode==='promenade'&&<button type="button" onClick={reopen}>New Discovery</button>}
       </div>
     </header>
@@ -946,8 +995,8 @@ export default function SpatialApp(){
         {progress&&<Suspense fallback={null}><EditorialProgress progress={progress}/></Suspense>}
         <button type="button" onClick={()=>{setArticleFormat(false);void submit(undefined,undefined,undefined,'standard')}}>Continue with the standard edition</button>
         {articleFormat
-          ?<button type="button" onClick={()=>void submit(undefined,undefined,undefined,'articles')}>Try articles again</button>
-          :<button type="button" onClick={()=>void submit(undefined,undefined,undefined,'story')}>Try the story again</button>}
+          ?<button type="button" onClick={()=>void submit(undefined,undefined,undefined,'articles',true)}>Try articles again</button>
+          :<button type="button" onClick={()=>void submit(undefined,undefined,undefined,'story',true)}>Try the story again</button>}
       </div>}
       <p className="spatial-fine">Use Meta AI to create one original editorial story from your discovery.</p>
       {cleared&&<p role="status" className="spatial-status">

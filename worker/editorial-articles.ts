@@ -285,7 +285,7 @@ export function confirmationAdvisoryIssues(review:EditorialReviewOutput):Confirm
 // reader-facing responses. Readers receive only the editorial tier label.
 export type ArticleAssessment={finalScore:number;dimensionScores:Record<string,number>;tier:EditorialTierId;advisoryIssues:ConfirmationAdvisoryIssue[]}
 
-export async function articleEditorialResponse(request:Request,env:Bindings,p:EditorialPreferences,mode:EditorialMode,preparedPool?:ArticlePool,articleCount:1|3=3,onStage?:(stage:ArticleGenerationStage,modelCalls?:ModelCallEvent[])=>unknown,schedule?:(task:Promise<unknown>)=>void,reportAssessment?:(assessment:ArticleAssessment)=>void){
+export async function articleEditorialResponse(request:Request,env:Bindings,p:EditorialPreferences,mode:EditorialMode,preparedPool?:ArticlePool,articleCount:1|3=3,onStage?:(stage:ArticleGenerationStage,modelCalls?:ModelCallEvent[])=>unknown,schedule?:(task:Promise<unknown>)=>void,reportAssessment?:(assessment:ArticleAssessment)=>void,exploration?:string){
   // Backend-observed Meta invocations for the Live Logs panel. Entries are
   // recorded around real inference calls only: never simulated, and never
   // an extra call. Pollers receive a copy with every stage report; the
@@ -337,7 +337,10 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
   if(env.EDITORIAL_FEEDBACK_ENABLED==='true')try{principles=await activePrincipleInstruction(env.CATALOG_DB!)}catch{return Response.json({...base,status:'unavailable',fallbackReason:'configuration'},{status:503})}
   const knowledge=env.EDITORIAL_KNOWLEDGE_V2_ENABLED==='true'?editorialKnowledgeInstruction(selectEditorialVoice(p.interests)):''
   const cacheKey=await catalogDigest(JSON.stringify([ARTICLE_WORKFLOW_VERSION,v3,format,mode,p,knowledge?EDITORIAL_KNOWLEDGE_VERSION:null,knowledge,principles,selectedItems,contexts,sources,evidencePack]))
-  const previous=cache.get(cacheKey)
+  // A deliberate fresh exploration bypasses the completed-response memory
+  // cache: same-prompt polls and resume reuse the D1 job row instead, and a
+  // new explorationId always runs the models again.
+  const previous=exploration===undefined?cache.get(cacheKey):undefined
   if(env.EDITORIAL_FEEDBACK_ENABLED!=='true'&&previous&&previous.expires>Date.now())try{
     if(!researchReferencesCurrent(previous.researchSources,env.RESEARCH_SOURCE_ORIGINS))throw Error('Research evidence expired')
     const edition=validateArticleEdition(previous.edition,selectedItems,[...sources,...previous.researchSources],contexts,count)
@@ -442,8 +445,10 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
     const generation=generationMetadata(mode,true)
     const evidence=evidencePack?{interpretations:evidencePack.interpretations.length}:null
     const editorialTier={label:tier.label,description:tier.description}
-    if(cache.size>=20)cache.delete(cache.keys().next().value!)
-    if(env.EDITORIAL_FEEDBACK_ENABLED!=='true')cache.set(cacheKey,{edition,generation,evidence,researchSources:referencedResearch(edition,sources),editorialTier,expires:Date.now()+300_000})
+    if(exploration===undefined&&env.EDITORIAL_FEEDBACK_ENABLED!=='true'){
+      if(cache.size>=20)cache.delete(cache.keys().next().value!)
+      cache.set(cacheKey,{edition,generation,evidence,researchSources:referencedResearch(edition,sources),editorialTier,expires:Date.now()+300_000})
+    }
     outcome='completed'
     const published=Response.json({format,source:'meta',retrieval:'d1',cached:false,articleEdition:edition,items:selectedItems,generation,evidence,editorialTier,requestId:gradedId,requestedCount:count,publishedCount:edition.articles.length,partial:edition.articles.length<count,...(v3?{researchReferences:referencedResearch(edition,sources),aiDisclosure:ARTICLE_AI_DISCLOSURE}:{}),...(modelCalls.length?{modelCalls:modelCallsSnapshot()}:{}),inference:{attempted:true,reservedUnits:units,latencyMs:Math.round(performance.now()-started),usage:measurements.length?{inputTokens:measurements.reduce((n,row)=>n+row.inputTokens,0),outputTokens:measurements.reduce((n,row)=>n+row.outputTokens,0),totalTokens:measurements.reduce((n,row)=>n+row.totalTokens,0)}:null}})
     published.headers.set('X-Curio-Request-Id',gradedId)

@@ -30,3 +30,15 @@ The existing catalog-operator authentication protects `PATCH /api/operator/catal
 For Muse Code: request regions only for the currently displayed exact `assetId`; render a region on the image using normalized coordinates after applying the actual contain/cover fit transform. Do not stretch boxes by viewport dimensions alone. A click/touch/keyboard selection may open a compact editorial detail window; label `owner_mockup` products as fictional. On version change, route error, media 404 or returning to the exhibit, clear stale selection and refetch. Avoid treating a model box as a verified mask or product identity. Masks are not in this MVP response. Do not add decorative hotspots for images with an empty result.
 
 The six pilot images have **zero claimed SAM captures in this PR**. The 1–2 object target per image depends on separately authorized paid SAM calls and human review; no synthetic regions are inserted to meet that target. Current Editor input remains asset-level; object-aware prose and Silver Field UI require separate approval. Each new uncached Decoder request reserves one inference unit, or two when optional Muse commentary is enabled, subject to existing limits. Rollback is `SAM_DECODER_ENABLED=false`; public approved-region reads may be withheld with `CATALOG_PUBLIC_ENABLED=false`, but that also affects the catalog, so prefer blocking the review rows or reverting this route if only objects must be hidden.
+
+## Addendum — Viewport-safe Reader presentation
+
+The detail card renders in a body portal with viewport-fixed positioning,
+so figure and ancestor overflow can never clip it. On desktop it sits
+beside its hotspot (right when space allows, otherwise left) and clamps
+fully inside the viewport, tracking resizes and scrolls while open. At
+640px and below it becomes a bottom sheet with safe-area spacing and
+internal scrolling for long descriptions. Detection data, hotspot merging,
+focus handling and Escape/outside-click dismissal are unchanged; only the
+card's containing block moved. Desktop and mobile containment is covered
+by Playwright viewport assertions in `tests/spatial-objects.spec.ts`.

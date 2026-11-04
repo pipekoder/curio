@@ -60,12 +60,18 @@ const evidenceDigest=(pool:ArticlePool,edition:ArticleEditionBody,research:reado
   return catalogDigest(JSON.stringify([ARTICLE_EVIDENCE_VERSION,ARTICLE_INTERPRETATION_VERSION,pool.items.filter(item=>ids.has(item.image.id)),pool.sources.filter(source=>ids.has(source.assetId)),pool.visualContexts.filter(context=>ids.has(context.assetId)),research]))
 }
 
-async function jobIdentity(request:Request,env:Bindings,p:EditorialPreferences,mode:EditorialMode,format:string){
+async function jobIdentity(request:Request,env:Bindings,p:EditorialPreferences,mode:EditorialMode,format:string,exploration?:string){
   const ip=request.headers.get('CF-Connecting-IP')
   if(!ip||ip.length>64||!env.RATE_LIMIT_SALT||env.RATE_LIMIT_SALT.length<32)throw Error('Job identity unavailable')
   const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(env.RATE_LIMIT_SALT),{name:'HMAC',hash:'SHA-256'},false,['sign'])
   const sign=async(value:string)=>Array.from(new Uint8Array(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(value))),byte=>byte.toString(16).padStart(2,'0')).join('')
-  const inputDigest=await sign(JSON.stringify([JOB_VERSION,format,p,mode,format===ARTICLE_SINGLE_CONTRACT_VERSION&&env.EDITORIAL_WORKFLOW_V3_ENABLED==='true'?'v3':'v2']))
+  // A fresh explorationId scopes the job to one deliberate submission: the
+  // completed-job row of an earlier exploration never matches. Polls,
+  // retries, refresh-resume and recovery reuse the caller's ID and resolve
+  // to the same job. Legacy requests without an ID keep the previous
+  // prompt-derived digest byte-for-byte.
+  const legacy=[JOB_VERSION,format,p,mode,format===ARTICLE_SINGLE_CONTRACT_VERSION&&env.EDITORIAL_WORKFLOW_V3_ENABLED==='true'?'v3':'v2']
+  const inputDigest=await sign(JSON.stringify(exploration===undefined?legacy:[...legacy,exploration]))
   const ipDigest=await sign(`ip:${ip}`)
   // A same-prompt action resumes the same private job across a day boundary.
   const id=`article-job-${await sign(JSON.stringify([inputDigest,ipDigest]))}`
@@ -74,17 +80,17 @@ async function jobIdentity(request:Request,env:Bindings,p:EditorialPreferences,m
 
 // The orchestration is deterministic: no additional model agent. D1 leases
 // serialize pollers; asset-analysis claims deduplicate exact image work.
-export async function articleJobResponse(request:Request,env:Bindings,p:EditorialPreferences,mode:EditorialMode,articleCount:1|3=3,schedule?:(task:Promise<unknown>)=>void):Promise<Response>{
+export async function articleJobResponse(request:Request,env:Bindings,p:EditorialPreferences,mode:EditorialMode,articleCount:1|3=3,schedule?:(task:Promise<unknown>)=>void,exploration?:string):Promise<Response>{
   const {format,minEligible}=limitsFor(articleCount)
   const leaseMs=articleCount===1&&env.EDITORIAL_WORKFLOW_V3_ENABLED==='true'?230_000:LEASE_MS
   const base={format,source:'deterministic' as const,retrieval:'d1' as const,cached:false,articleEdition:null}
   if(env.EDITORIAL_ARTICLE_PREPARATION_ENABLED!=='true'||!p.consent||env.EDITORIAL_ARTICLES_ENABLED!=='true'||env.MAGAZINE_AI_ENABLED!=='true'||env.EDITORIAL_REVIEW_ENABLED!=='true'||env.EDITORIAL_PUBLIC_AI_ENABLED!=='true'||!env.CATALOG_DB||!env.MEDIA_BUCKET||!env.META_API_KEY||!env.INFERENCE_BUDGET)
-    return articleEditorialResponse(request,env,p,mode,undefined,articleCount,undefined,schedule)
+    return articleEditorialResponse(request,env,p,mode,undefined,articleCount,undefined,schedule,undefined,exploration)
   let policy:ReturnType<typeof resolveArticlePreparationPolicy>
   try{policy=resolveArticlePreparationPolicy(env)}catch{return Response.json({...base,status:'unavailable',fallbackReason:'configuration'},{status:503})}
   const db=env.CATALOG_DB,now=Date.now()
   let identity:Awaited<ReturnType<typeof jobIdentity>>
-  try{identity=await jobIdentity(request,env,p,mode,format)}catch{return Response.json({...base,status:'unavailable',fallbackReason:'configuration'},{status:503})}
+  try{identity=await jobIdentity(request,env,p,mode,format,exploration)}catch{return Response.json({...base,status:'unavailable',fallbackReason:'configuration'},{status:503})}
   const read=()=>db.prepare('SELECT * FROM article_edition_jobs WHERE id=?').bind(identity.id).first<JobRow>()
   let job:JobRow|null
   try{
@@ -163,7 +169,7 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
         await db.prepare(`UPDATE article_edition_jobs SET result_json=?,updated_at=? WHERE id=? AND lease_token=?`).bind(JSON.stringify({progress,stage,...(modelCalls?.length?{modelCalls}:{})}),Date.now(),identity.id,token).run()
       }
       let assessment:ArticleAssessment|null=null
-      const result=await articleEditorialResponse(request,env,p,mode,pool,articleCount,reportGenerationStage,schedule,recorded=>{assessment=recorded})
+      const result=await articleEditorialResponse(request,env,p,mode,pool,articleCount,reportGenerationStage,schedule,recorded=>{assessment=recorded},exploration)
       const payload=await result.clone().json() as {source?:string;articleEdition?:unknown;generation?:unknown;evidence?:{interpretations:number}|null;researchReferences?:unknown;aiDisclosure?:string;editorialTier?:unknown;modelCalls?:unknown}
       if(payload.source==='meta'&&payload.articleEdition){
         const research=editorialSources.parse(payload.researchReferences??[])

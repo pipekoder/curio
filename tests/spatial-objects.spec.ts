@@ -38,7 +38,22 @@ for(const width of [1440,390]){
     const markers=card.locator('.object-hotspot')
     await expect(markers.first()).toBeVisible()
     await markers.first().click()
-    await expect(card.locator('.object-popover')).toContainText('no SAM inference')
+    // The popover portals to the body: it must stay fully inside the
+    // viewport on desktop and as a bottom sheet on mobile, never clipped
+    // by the figure or an ancestor container.
+    const popover=page.locator('.object-popover')
+    await expect(popover).toContainText('no SAM inference')
+    await expect(popover.getByRole('button',{name:'Close object details'})).toBeVisible()
+    const box=await popover.boundingBox()
+    const viewport=page.viewportSize()!
+    expect(box!.x).toBeGreaterThanOrEqual(0)
+    expect(box!.y).toBeGreaterThanOrEqual(0)
+    expect(box!.x+box!.width).toBeLessThanOrEqual(viewport.width+1)
+    expect(box!.y+box!.height).toBeLessThanOrEqual(viewport.height+1)
+    if(width===390){
+      expect(box!.x).toBeLessThanOrEqual(13)
+      expect(viewport.width-(box!.x+box!.width)).toBeLessThanOrEqual(13)
+    }
     expect(calls).toBe(0)
     await expect(card.locator('h2')).not.toBeEmpty()
     await page.screenshot({path:`test-results/spatial-hotspots-${width}.png`})

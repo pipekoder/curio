@@ -67,8 +67,21 @@ it('closes the popover on outside click and returns focus to the marker',async()
   expect(document.activeElement).toBe(first)
   await user.click(first)
   expect(await screen.findByRole('dialog')).toBeTruthy()
-  fireEvent.click(container.querySelector('.object-catcher')!)
+  fireEvent.click(document.querySelector('.object-catcher')!)
   expect(screen.queryByRole('dialog')).toBeNull()
+})
+
+it('portals the popover outside clipped ancestors with viewport coordinates',async()=>{
+  vi.stubGlobal('fetch',ok())
+  const user=userEvent.setup()
+  const {container}=render(<ObjectDiscovery assetId={versionId} image="/x.png" alt="Artwork for testing" authored={[]}/>)
+  await user.click(await screen.findByRole('button',{name:'Inspect Curved seat'}))
+  const popover=await screen.findByRole('dialog',{name:'Curved seat'})
+  expect(container.querySelector('.object-popover')).toBeNull()
+  expect(popover.parentElement).toBe(document.body)
+  expect(popover.className).toContain('is-floating')
+  expect(popover.style.getPropertyValue('--pop-left')).toMatch(/^-?\d+px$/)
+  expect(popover.style.getPropertyValue('--pop-top')).toMatch(/^-?\d+px$/)
 })
 
 it('renders authored markers with honest demo detail and no duplicate for the same object',async()=>{

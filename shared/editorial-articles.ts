@@ -64,3 +64,10 @@ export const editorialSingleRevisionDraft=z.strictObject({title:revisionEditionT
 export const revisionDraftSchema=(count:number)=>z.strictObject({title:revisionEditionTitle,deck:revisionEditionDeck,articles:z.array(revisionDraftArticle).length(count)})
 export type RevisionDraft=z.infer<typeof editorialRevisionDraft>
 export type RevisionDraftBody={title:string;deck:string;articles:{id:string;headline:string;deck:string;narrative:string}[]}
+// Fresh-exploration identity: the client mints one UUID per deliberate
+// Begin Exploration and reuses it for every poll, retry, refresh-resume and
+// recovery request of that exploration. The orchestrator folds it into the
+// D1 job identity, so a new exploration never resolves to a previously
+// completed job while same-ID requests always resolve to the same job.
+// Absent for legacy clients, which keep the prompt-derived identity.
+export const explorationId=z.string().uuid().max(36)

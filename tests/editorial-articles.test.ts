@@ -1,6 +1,7 @@
 // @vitest-environment node
 import {afterEach,expect,it,vi} from 'vitest'
 import {DatabaseSync} from 'node:sqlite'
+import {randomUUID} from 'node:crypto'
 import {readFileSync} from 'node:fs'
 import {articleEvidenceForPrompt} from '../worker/article-evidence'
 import type {CatalogItem} from '../shared/catalog'
@@ -549,6 +550,67 @@ it('analyzes two authorized versions concurrently, then activates the reviewed e
   expect(await revoked.json()).toMatchObject({source:'deterministic',fallbackReason:'evidence_changed'})
   expect(send).toHaveBeenCalledTimes(4)
  }finally{sqlite.close()}
+})
+it('runs a fresh generation job per explorationId even for an identical prompt',async()=>{
+ const {sqlite,db}=preparationDb()
+ try{
+  vi.mocked(editorialArticlePool).mockResolvedValue(prepared(6,[]))
+  const config={EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db}
+  const prompt={interests:'Japanese ceramic and Nordic interiors'}
+  const first=randomUUID(),second=randomUUID()
+  const sendA=provider();vi.stubGlobal('fetch',sendA)
+  const one=await post(config,{...prompt,explorationId:first})
+  expect(one.status).toBe(200)
+  expect(await one.json()).toMatchObject({source:'meta',cached:false})
+  expect(sendA).toHaveBeenCalledTimes(4)
+  const sendB=provider();vi.stubGlobal('fetch',sendB)
+  const two=await post(config,{...prompt,explorationId:second})
+  expect(two.status).toBe(200)
+  expect(await two.json()).toMatchObject({source:'meta',cached:false})
+  expect(sendB).toHaveBeenCalledTimes(4)
+  const rows=sqlite.prepare('SELECT id,state FROM article_edition_jobs').all() as {id:string;state:string}[]
+  expect(rows).toHaveLength(2)
+  expect(new Set(rows.map(row=>row.id)).size).toBe(2)
+  expect(rows.every(row=>row.state==='completed')).toBe(true)
+ }finally{sqlite.close()}
+})
+it('resolves repeated requests with the same explorationId to the same completed job',async()=>{
+ const {sqlite,db}=preparationDb()
+ try{
+  vi.mocked(editorialArticlePool).mockResolvedValue(prepared(6,[]))
+  const config={EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db}
+  const prompt={interests:'A refresh-resilient Nordic interior study',explorationId:randomUUID()}
+  const send=provider();vi.stubGlobal('fetch',send)
+  const one=await post(config,prompt)
+  expect(one.status).toBe(200)
+  expect(await one.json()).toMatchObject({source:'meta',cached:false})
+  expect(send).toHaveBeenCalledTimes(4)
+  const two=await post(config,prompt)
+  expect(await two.json()).toMatchObject({source:'meta',cached:true,inference:{attempted:false}})
+  expect(send).toHaveBeenCalledTimes(4)
+  const rows=sqlite.prepare('SELECT id FROM article_edition_jobs').all() as {id:string}[]
+  expect(rows).toHaveLength(1)
+ }finally{sqlite.close()}
+})
+it('rejects a malformed explorationId without creating a job or calling models',async()=>{
+ const {sqlite,db}=preparationDb()
+ try{
+  vi.mocked(editorialArticlePool).mockResolvedValue(prepared(6,[]))
+  const send=provider();vi.stubGlobal('fetch',send)
+  const response=await post({EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db},{interests:'A malformed exploration study',explorationId:'not-a-uuid'})
+  expect(response.status).toBe(400)
+  expect(send).not.toHaveBeenCalled()
+  expect((sqlite.prepare('SELECT COUNT(*) AS n FROM article_edition_jobs').get() as {n:number}).n).toBe(0)
+ }finally{sqlite.close()}
+})
+it('reuses approved images across explorations but rejects repeats within one edition',()=>{
+ // The same approved assets validate in two independent editions: nothing
+ // marks an image unavailable after publication.
+ validateArticleEdition(structuredClone(edition(3,2)),items,sources,contexts,3)
+ validateArticleEdition(structuredClone(edition(3,2)),items,sources,contexts,3)
+ const dupe=structuredClone(edition(3,2))
+ dupe.articles[1].images[1]={...dupe.articles[0].images[1]}
+ expect(()=>validateArticleEdition(dupe,items,sources,contexts,3)).toThrow(/duplicate_image/)
 })
 it('does not retry failed analysis, and keeps budget refusal explicit',async()=>{
  const {sqlite,db}=preparationDb()

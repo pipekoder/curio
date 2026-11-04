@@ -28,6 +28,17 @@ async function submitPrompt(page:Page):Promise<void>{
   await page.getByRole('button',{name:'Begin exploration'}).click()
 }
 
+// The Demo header hides the Journey button; scrolling to the end of the
+// promenade is the genuine remaining entry path. Reset to the top first so
+// the bottom scroll always fires a scroll event, even when returning.
+async function openJourneyByScroll(page:Page):Promise<void>{
+  await page.waitForFunction(()=>((window.__spatial?.().nodes)??0)>0)
+  await page.evaluate(()=>window.scrollTo(0,0))
+  await page.waitForFunction(()=>window.scrollY<10)
+  await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight))
+  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+}
+
 test('/spatial opens the silver field with an immediately usable prompt',async({page})=>{
   const noise:string[]=[]
   // Resource-load failures are the handled fallback paths (no Worker in
@@ -45,8 +56,7 @@ test('/spatial opens the silver field with an immediately usable prompt',async({
   expect(snapshot?.exhibits).toBeGreaterThan(0)
   expect(snapshot?.nodes).toBeGreaterThanOrEqual(6)
   expect(snapshot?.source).toBe('manifest')
-  await page.getByRole('button',{name:'Journey',exact:true}).click()
-  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await openJourneyByScroll(page)
   await expect(page.getByRole('navigation',{name:'Journey network'})).toContainText('local manifest')
   expect(noise).toEqual([])
 })
@@ -75,6 +85,23 @@ test('scrolling to the end of the promenade opens the journey',async({page})=>{
   await page.waitForTimeout(1800)
   await page.getByRole('button',{name:'← Promenade'}).click()
   await page.waitForFunction(()=>window.__spatial?.().mode==='promenade',{timeout:10000})
+  await expect(page.getByLabel('Your curiosity')).toBeVisible()
+})
+
+test('demo header hides journey buttons while the network keeps working',async({page})=>{
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/spatial')
+  const header=page.locator('.spatial-hud')
+  await expect(header.getByRole('button',{name:'Journey',exact:true})).toHaveCount(0)
+  await expect(header.getByRole('button',{name:'Promenade',exact:true})).toHaveCount(0)
+  await openJourneyByScroll(page)
+  await expect(header.getByRole('button',{name:'Promenade',exact:true})).toHaveCount(0)
+  await page.getByRole('button',{name:'← Promenade'}).click()
+  await page.waitForFunction(()=>window.__spatial?.().mode==='promenade',{timeout:10000})
+  await submitPrompt(page)
+  await expect(page.getByTestId('spatial-edition-chip')).toBeVisible({timeout:15000})
+  await expect(page.getByRole('button',{name:'New Discovery'})).toBeVisible()
+  await page.getByRole('button',{name:'New Discovery'}).click()
   await expect(page.getByLabel('Your curiosity')).toBeVisible()
 })
 
@@ -618,7 +645,7 @@ test('a hotspot marker shows its authored detail and releases',async({page})=>{
   await expect(page.locator('.spatial-rail')).toBeVisible()
   const card=page.locator('#spatial-rail .rail-story')
   await card.getByRole('button',{name:/^Inspect /}).first().click()
-  const popover=card.locator('.object-popover')
+  const popover=page.locator('.object-popover')
   await expect(popover).toBeVisible()
   await expect(popover.locator('h3')).not.toBeEmpty()
   await expect(popover).toContainText('no SAM inference')
@@ -735,7 +762,7 @@ const stageVersionedEdition=async(page:Page,records:VersionedRecord[])=>{
   await page.goto('/')
   await submitPrompt(page)
   await expect(page.getByTestId('spatial-edition-chip')).toContainText('Meta AI',{timeout:15000})
-  await expect(page.getByRole('button',{name:'Journey',exact:true})).toBeEnabled({timeout:15000})
+  await page.waitForFunction(()=>((window.__spatial?.().nodes)??0)>0)
 }
 
 test('re-entering journey drops records revoked mid-session',async({page})=>{
@@ -744,16 +771,14 @@ test('re-entering journey drops records revoked mid-session',async({page})=>{
   await page.setViewportSize({width:1440,height:900})
   await page.goto('/')
   await page.waitForFunction(()=>((window.__spatial?.().nodes)??0)>0)
-  await page.getByRole('button',{name:'Journey',exact:true}).click()
-  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await openJourneyByScroll(page)
   await page.waitForTimeout(1800)
   await expect(page.getByRole('navigation',{name:'Journey network'})).toContainText('live catalog')
   expect(await page.evaluate(()=>window.__spatial?.().nodes)).toBe(2)
   revoked.add(publishedRecords[1].image.id)
   await page.getByRole('button',{name:'← Promenade'}).click()
   await page.waitForFunction(()=>window.__spatial?.().mode==='promenade',{timeout:10000})
-  await page.getByRole('button',{name:'Journey',exact:true}).click()
-  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await openJourneyByScroll(page)
   await expect(page.getByRole('navigation',{name:'Journey network'})).toContainText('1 records')
   expect(await page.evaluate(()=>window.__spatial?.().nodeIds)).toEqual([publishedRecords[0].image.id])
   await expect(page.getByRole('status').last()).toContainText('removed from the journey')
@@ -763,8 +788,7 @@ test('entering a revoked exhibit stays in journey and prunes it',async({page})=>
   const revoked=new Set<string>()
   await page.route('**/api/catalog/published*',publishedRoute(()=>[...revoked]))
   await stageVersionedEdition(page,publishedRecords)
-  await page.getByRole('button',{name:'Journey',exact:true}).click()
-  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await openJourneyByScroll(page)
   await page.waitForTimeout(1800)
   const target=await page.evaluate(()=>{
     const snapshot=window.__spatial?.()
@@ -787,8 +811,7 @@ test('returning to the promenade drops exhibits revoked mid-session',async({page
   const revoked=new Set<string>()
   await page.route('**/api/catalog/published*',publishedRoute(()=>[...revoked]))
   await stageVersionedEdition(page,publishedRecords)
-  await page.getByRole('button',{name:'Journey',exact:true}).click()
-  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await openJourneyByScroll(page)
   await page.waitForTimeout(1800)
   revoked.add(publishedRecords[0].image.id)
   await page.getByRole('button',{name:'← Promenade'}).click()
@@ -810,8 +833,7 @@ test('unverifiable journey records fall back to the labeled manifest',async({pag
   await page.goto('/')
   await page.waitForFunction(()=>((window.__spatial?.().nodes)??0)>0)
   expect(await page.evaluate(()=>window.__spatial?.().source)).toBe('published')
-  await page.getByRole('button',{name:'Journey',exact:true}).click()
-  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await openJourneyByScroll(page)
   await expect(page.getByRole('navigation',{name:'Journey network'})).toContainText('local manifest')
   expect(await page.evaluate(()=>window.__spatial?.().nodes)).toBeGreaterThanOrEqual(6)
   await expect(page.getByRole('status').last()).toContainText('could not be verified')
@@ -827,8 +849,7 @@ test('failed journey revalidation also removes staged server exhibits',async({pa
   })
   await stageVersionedEdition(page,publishedRecords)
   expect(await page.evaluate(()=>window.__spatial?.().exhibits)).toBe(2)
-  await page.getByRole('button',{name:'Journey',exact:true}).click()
-  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await openJourneyByScroll(page)
   await expect(page.getByRole('navigation',{name:'Journey network'})).toContainText('local manifest')
   expect(await page.evaluate(()=>window.__spatial?.().exhibits)).toBe(0)
   await expect(page.getByTestId('spatial-edition-chip')).toBeHidden()
@@ -848,11 +869,10 @@ test('failed journey revalidation leaves local demo exhibits alone',async({page}
   await page.goto('/')
   await submitPrompt(page)
   await expect(page.getByTestId('spatial-edition-chip')).toContainText('AI not used',{timeout:15000})
-  await expect(page.getByRole('button',{name:'Journey',exact:true})).toBeEnabled({timeout:15000})
+  await page.waitForFunction(()=>((window.__spatial?.().nodes)??0)>0)
   const staged=await page.evaluate(()=>window.__spatial?.().exhibits??0)
   expect(staged).toBeGreaterThan(0)
-  await page.getByRole('button',{name:'Journey',exact:true}).click()
-  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await openJourneyByScroll(page)
   await expect(page.getByRole('navigation',{name:'Journey network'})).toContainText('local manifest')
   expect(await page.evaluate(()=>window.__spatial?.().exhibits)).toBe(staged)
   await expect(page.getByTestId('spatial-edition-chip')).toContainText('AI not used')
@@ -920,13 +940,13 @@ test('ai-length headlines and narratives stay readable without overflow',async({
     await expect(page.locator('.spatial-rail')).toBeVisible()
     await expect(page.locator('.spatial-rail-card h2').first()).toContainText('A closer look')
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true)
-    await expect(page.getByRole('button',{name:'Journey',exact:true})).toBeVisible()
+    await expect(page.getByRole('button',{name:'New Discovery'})).toBeVisible()
     const card=page.locator('.spatial-rail-card').first()
     await card.getByRole('button',{name:/^Inspect /}).first().click()
-    await expect(card.locator('.object-popover')).toBeVisible()
-    await expect(card.locator('.object-popover p').first()).not.toBeEmpty()
+    await expect(page.locator('.object-popover')).toBeVisible()
+    await expect(page.locator('.object-popover p').first()).not.toBeEmpty()
     await page.keyboard.press('Escape')
-    await expect(card.locator('.object-popover')).toHaveCount(0)
+    await expect(page.locator('.object-popover')).toHaveCount(0)
   }
 })
 
@@ -952,15 +972,13 @@ test('Clear wipes the visit session and says what was removed',async({page})=>{
   await page.getByRole('button',{name:'Begin exploration'}).click()
   await expect(page.getByTestId('spatial-edition-chip')).toBeVisible()
   expect(await page.evaluate(()=>sessionStorage.getItem('curio.spatial.session.v1'))).not.toBeNull()
-  await page.getByRole('button',{name:'Journey',exact:true}).click()
-  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await openJourneyByScroll(page)
   await page.getByRole('button',{name:'Clear',exact:true}).click()
   await page.waitForFunction(()=>window.__spatial?.().mode==='promenade',{timeout:10000})
   expect(await page.evaluate(()=>sessionStorage.getItem('curio.spatial.session.v1'))).toBeNull()
   await expect(page.getByRole('status').last()).toContainText('curio.spatial.session.v1')
   await expect(page.getByRole('status').last()).toContainText('pending confirmation')
-  await page.getByRole('button',{name:'Journey',exact:true}).click()
-  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await openJourneyByScroll(page)
   await page.getByRole('button',{name:'Clear',exact:true}).click()
   await page.waitForFunction(()=>window.__spatial?.().mode==='promenade',{timeout:10000})
   await expect(page.getByRole('status').last()).toContainText('No visit data was found in this browser')
@@ -979,8 +997,7 @@ async function stageFallbackEdition(page:Page):Promise<void>{
 
 async function openJourney(page:Page):Promise<void>{
   await stageFallbackEdition(page)
-  await page.getByRole('button',{name:'Journey',exact:true}).click()
-  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await openJourneyByScroll(page)
   await page.waitForTimeout(1800)
 }
 
@@ -1067,8 +1084,7 @@ test('clear from the network exhales and wipes the visit',async({page})=>{
 test('reduced-motion journey uses the toolbar and panel',async({page})=>{
   await page.emulateMedia({reducedMotion:'reduce'})
   await stageFallbackEdition(page)
-  await page.getByRole('button',{name:'Journey',exact:true}).click()
-  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await openJourneyByScroll(page)
   await expect(page.getByRole('navigation',{name:'Journey network'})).toBeVisible()
   await page.getByRole('button',{name:'Surprise me'}).click()
   const panel=page.getByTestId('spatial-node-panel')
@@ -1089,8 +1105,7 @@ test('network stays usable at mobile width',async({page})=>{
   await page.getByLabel('Your curiosity').fill('Bold garments')
   await page.getByRole('button',{name:'Begin exploration'}).click()
   await expect(page.getByTestId('spatial-edition-chip')).toBeVisible({timeout:15000})
-  await page.getByRole('button',{name:'Journey',exact:true}).click()
-  await page.waitForFunction(()=>window.__spatial?.().mode==='network')
+  await openJourneyByScroll(page)
   await page.waitForTimeout(1800)
   await expect(page.getByRole('navigation',{name:'Journey network'})).toBeVisible()
   await page.getByRole('button',{name:'Surprise me'}).click()

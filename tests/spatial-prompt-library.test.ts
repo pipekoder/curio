@@ -1,29 +1,29 @@
 import {describe,expect,it} from 'vitest'
 import {INTEREST_SEEDS,SEED_DISPLAY,SUGGESTION_COUNT,drawSurprise,pickSuggestions} from '../src/spatial/prompt-library'
 
-// Oracle transcribed from the Step 2 amendment. Display wording must match
-// every seed exactly; any drift fails loudly here.
+// Oracle transcribed from the Hackathon Demo curation. Display wording must
+// match every seed exactly; any drift fails loudly here.
 const SPECIFIED:[string,string][]=[
-  ['Scandinavian furniture','craftsmanship and everyday living'],
-  ['Warm minimalism','natural materials and atmosphere'],
-  ['Vintage interiors','objects with history and character'],
-  ['Contemporary living spaces','architecture and cultural influence'],
-  ['Contemporary sculpture','form, texture and emotion'],
-  ['Abstract art','color and visual expression'],
-  ['Photography','places, memory and perspective'],
-  ['Art and everyday objects','unexpected creative connections'],
-  ['Contemporary fashion','personal identity and expression'],
-  ['Timeless wardrobe pieces','silhouettes and craftsmanship'],
-  ['Jewelry and adornment','symbolism and cultural traditions'],
-  ['Textiles and fabrics','techniques and creative heritage'],
-  ['Slow living','everyday rituals and meaningful objects'],
-  ['Food and table culture','design and shared experiences'],
-  ['Nature-inspired living','materials and sensory experiences'],
-  ['Contemporary wellbeing','spaces, habits and lifestyles'],
-  ['Japanese cities','architecture and everyday culture'],
-  ['Mediterranean destinations','craftsmanship and local traditions'],
-  ['Scandinavian landscapes','design, nature and ways of living'],
-  ['Hidden urban places','independent culture and creative communities'],
+  ['Quiet Nordic interiors','wood, light and calm spaces'],
+  ['Swedish homes','shaped by wood and light'],
+  ['Nordic concrete interiors','natural materials and texture'],
+  ['Nordic stone interiors','quiet monumental calm'],
+  ['Handcrafted Scandinavian interiors','natural materials and craft'],
+  ['Nordic homes in glass and light','craft and transparency'],
+  ['Timeless Nordic homes','metal, wood and honest craft'],
+  ['Swedish country homes','wood, stone and craft'],
+  ['Minimal Japanese homes','stone, wood and shadow'],
+  ['Japanese wood interiors','handcrafted warmth'],
+  ['Natural Japanese interiors','light and emptiness'],
+  ['Japanese concrete homes','architecture and stillness'],
+  ['Asian ceramic homes','vessels and quiet rituals'],
+  ['Scandinavian home rituals','morning light and linen'],
+  ['Japanese ceramic rituals','tea bowls and morning routines'],
+  ['Scandinavian clothing','everyday life and honest fabrics'],
+  ['Japanese travel','design and architecture'],
+  ['Scandinavian linen clothing','timeless everyday wear'],
+  ['Contemporary Nordic travel','cabins and coastlines'],
+  ['Timeless Swedish clothing','linen layers and quiet tailoring'],
 ]
 
 describe('curiosity interest seeds',()=>{
@@ -36,7 +36,16 @@ describe('curiosity interest seeds',()=>{
   })
   it('fills the specified example sentence verbatim',()=>{
     expect(INTEREST_SEEDS[0].sentence).toBe(
-      "I'm curious about Scandinavian furniture, especially its craftsmanship and connection to everyday living.")
+      "I'm curious about quiet Nordic interiors, especially their wood, light and calm spaces.")
+  })
+  it('keeps every subject inside the curated region and category vocabulary',()=>{
+    const regions=['swedish','scandinavian','nordic','japanese','asian']
+    const categories=['interior','home','ceramic','clothing','travel']
+    for(const seed of INTEREST_SEEDS){
+      const subject=seed.subject.toLowerCase()
+      expect(regions.some(region=>subject.includes(region))).toBe(true)
+      expect(categories.some(category=>subject.includes(category))).toBe(true)
+    }
   })
   it('gives every seed a natural editable sentence naming its subject',()=>{
     for(const seed of INTEREST_SEEDS){
