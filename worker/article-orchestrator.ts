@@ -55,7 +55,7 @@ async function jobIdentity(request:Request,env:Bindings,p:EditorialPreferences,m
   if(!ip||ip.length>64||!env.RATE_LIMIT_SALT||env.RATE_LIMIT_SALT.length<32)throw Error('Job identity unavailable')
   const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(env.RATE_LIMIT_SALT),{name:'HMAC',hash:'SHA-256'},false,['sign'])
   const sign=async(value:string)=>Array.from(new Uint8Array(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(value))),byte=>byte.toString(16).padStart(2,'0')).join('')
-  const inputDigest=await sign(JSON.stringify([JOB_VERSION,format,p,mode,format===ARTICLE_SINGLE_CONTRACT_VERSION&&env.EDITORIAL_WORKFLOW_V3_ENABLED==='true'?'v3':'v2']))
+  const inputDigest=await sign(JSON.stringify([JOB_VERSION,format,p,mode,env.EDITORIAL_WORKFLOW_V3_ENABLED==='true'?'v3':'v2']))
   const ipDigest=await sign(`ip:${ip}`)
   // A same-prompt action resumes the same private job across a day boundary.
   const id=`article-job-${await sign(JSON.stringify([inputDigest,ipDigest]))}`
@@ -66,7 +66,7 @@ async function jobIdentity(request:Request,env:Bindings,p:EditorialPreferences,m
 // serialize pollers; asset-analysis claims deduplicate exact image work.
 export async function articleJobResponse(request:Request,env:Bindings,p:EditorialPreferences,mode:EditorialMode,articleCount:1|3=3,schedule?:(task:Promise<unknown>)=>void):Promise<Response>{
   const {format,minEligible}=limitsFor(articleCount)
-  const leaseMs=articleCount===1&&env.EDITORIAL_WORKFLOW_V3_ENABLED==='true'?230_000:LEASE_MS
+  const leaseMs=env.EDITORIAL_WORKFLOW_V3_ENABLED==='true'?230_000:LEASE_MS
   const base={format,source:'deterministic' as const,retrieval:'d1' as const,cached:false,articleEdition:null}
   if(env.EDITORIAL_ARTICLE_PREPARATION_ENABLED!=='true'||!p.consent||env.EDITORIAL_ARTICLES_ENABLED!=='true'||env.MAGAZINE_AI_ENABLED!=='true'||env.EDITORIAL_REVIEW_ENABLED!=='true'||env.EDITORIAL_PUBLIC_AI_ENABLED!=='true'||!env.CATALOG_DB||!env.MEDIA_BUCKET||!env.META_API_KEY||!env.INFERENCE_BUDGET)
     return articleEditorialResponse(request,env,p,mode,undefined,articleCount,undefined,schedule)

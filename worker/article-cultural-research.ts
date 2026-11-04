@@ -6,8 +6,8 @@ export const articlePlan=z.strictObject({
   topic:z.string().trim().min(4).max(120),
   angle:z.string().trim().min(8).max(240),
   argument:z.string().trim().min(12).max(320),
-  selectedAssetIds:z.array(z.string().regex(/^version-[a-f0-9]{64}$/)).min(2).max(3),
-  researchQuestions:z.array(z.strictObject({question:z.string().trim().min(12).max(160),why:z.string().trim().min(12).max(200),query:z.string().trim().min(3).max(100),complex:z.boolean()})).max(2),
+  selectedAssetIds:z.array(z.string().regex(/^version-[a-f0-9]{64}$/)).min(2).max(9),
+  researchQuestions:z.array(z.strictObject({question:z.string().trim().min(12).max(160),why:z.string().trim().min(12).max(200),query:z.string().trim().min(3).max(100),complex:z.boolean(),assetId:z.string().regex(/^version-[a-f0-9]{64}$/)})).max(2),
 })
 export type ArticlePlan=z.infer<typeof articlePlan>
 export type ResearchFinding={id:string;title:string;institution:string;url:string;passage:string;assetId:string;retrievedAt:string;status:'automatically_eligible'}
@@ -70,6 +70,7 @@ export async function researchForArticle(plan:ArticlePlan,originList:string|unde
   let examined=0,allAnswered=true
   try{
     for(const question of plan.researchQuestions){
+      if(!plan.selectedAssetIds.includes(question.assetId)){allAnswered=false;continue}
       if(prohibited.test(question.question)||prohibited.test(question.query)||brandNames.some(name=>name.length>=4&&[question.question,question.query].some(text=>text.toLowerCase().includes(name.toLowerCase())))){allAnswered=false;continue}
       let answered=0
       const institutions=new Set<string>()
@@ -88,10 +89,10 @@ export async function researchForArticle(plan:ArticlePlan,originList:string|unde
         // validator as a candidate. Only this fixed-source, short-passage
         // path can become automatically eligible; no operator approval is
         // forged in the stored evidence model.
-        try{validateCulturalEvidence({version:CULTURAL_EVIDENCE_VERSION,id:`auto-research:${fingerprint.slice(0,32)}`,createdAt:new Date().toISOString(),assetVersionIds:[plan.selectedAssetIds[0]],sourceIds:[id],sources:[{id,canonicalUrl:source.url,origin:new URL(source.url).origin,retrievedAt:new Date().toISOString(),sha256:fingerprint,author:null,publication:source.institution,publishedAt:null,rights:'pending',verification:'pending'}],passages:[{id:passageId,sourceId:id,text:source.passage,documentSha256:fingerprint,start:0,end:source.passage.length}],claims:[{id:`claim:${fingerprint.slice(0,32)}`,text:source.passage,kind:'factual',assetVersionIds:[plan.selectedAssetIds[0]],passageIds:[passageId],status:'pending',conflict:null}],relationships:[],reviewRevision:0,reviewHistory:[],status:'candidate'},plan.selectedAssetIds)}catch{continue}
+        try{validateCulturalEvidence({version:CULTURAL_EVIDENCE_VERSION,id:`auto-research:${fingerprint.slice(0,32)}`,createdAt:new Date().toISOString(),assetVersionIds:[question.assetId],sourceIds:[id],sources:[{id,canonicalUrl:source.url,origin:new URL(source.url).origin,retrievedAt:new Date().toISOString(),sha256:fingerprint,author:null,publication:source.institution,publishedAt:null,rights:'pending',verification:'pending'}],passages:[{id:passageId,sourceId:id,text:source.passage,documentSha256:fingerprint,start:0,end:source.passage.length}],claims:[{id:`claim:${fingerprint.slice(0,32)}`,text:source.passage,kind:'factual',assetVersionIds:[question.assetId],passageIds:[passageId],status:'pending',conflict:null}],relationships:[],reviewRevision:0,reviewHistory:[],status:'candidate'},plan.selectedAssetIds)}catch{continue}
         seen.add(id)
         if(question.complex&&institutions.has(source.institution))continue
-        findings.push({...source,id,assetId:plan.selectedAssetIds[0],retrievedAt:new Date().toISOString(),status:'automatically_eligible'})
+        findings.push({...source,id,assetId:question.assetId,retrievedAt:new Date().toISOString(),status:'automatically_eligible'})
         institutions.add(source.institution)
         answered++
         if(!question.complex||answered>=2)break

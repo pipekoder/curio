@@ -78,7 +78,7 @@ it('binds retrieved cultural evidence to a reviewed article and returns only its
   museCalls++
   const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content)
   let value:unknown
-  if(museCalls===1)value={topic:'The everyday chair',angle:'Craft and domestic attention',argument:'A chair can connect everyday utility with design education.',selectedAssetIds:[version(1),version(2)],researchQuestions:[{question:'How did Bauhaus combine crafts and fine arts?',why:'A direct historical comparison deepens the angle.',query:'Bauhaus crafts fine arts',complex:false}]}
+  if(museCalls===1)value={topic:'The everyday chair',angle:'Craft and domestic attention',argument:'A chair can connect everyday utility with design education.',selectedAssetIds:[version(1),version(2)],researchQuestions:[{question:'How did Bauhaus combine crafts and fine arts?',why:'A direct historical comparison deepens the angle.',query:'Bauhaus crafts fine arts',complex:false,assetId:version(1)}]}
   else if(museCalls===2){
    const cited=(input.sources as (EditorialSource&{claimRef:string})[]).find(source=>source.source==='cultural_research')!
    const draftValue=toDraft(edition(1,2))
@@ -1072,4 +1072,98 @@ it('schedules hotspots only for published articles',async()=>{
   const {collectHotspotTargets}=await import('../worker/sam-hotspots')
   const full=edition(3,3)
   expect(collectHotspotTargets({version:full.version,title:full.title,deck:full.deck,articles:full.articles.slice(1)})).toEqual([data[3],data[4],data[5],data[6],data[7],data[8]].map(row=>row.item.image.id))
+})
+// PR4: cultural research generalizes to three-story editions. Disabled by
+// default; these tests activate it per request with mocked sources.
+const wikiMock=()=>vi.fn(async(url:string)=>{
+  if(url.includes('list=search'))return Response.json({query:{search:[{title:url.includes('Fika')?'Fika':'Bauhaus'}]}})
+  if(url.includes('prop=extracts')){
+    if(url.includes('Fika'))return Response.json({query:{pages:{'1':{title:'Fika',fullurl:'https://en.wikipedia.org/wiki/Fika',extract:'Fika is a Swedish coffee break ritual combining coffee and conversation.'}}}})
+    return Response.json({query:{pages:{'1':{title:'Bauhaus',fullurl:'https://en.wikipedia.org/wiki/Bauhaus',extract:'Bauhaus was a German art school that combined crafts and the fine arts.'}}}})
+  }
+  return Response.json({objectIDs:[]})
+})
+function threeStoryResearchSend(){
+  let museCalls=0
+  const wiki=wikiMock()
+  const send=vi.fn(async(url:string,init:RequestInit)=>{
+    if(!url.includes('api.meta.ai'))return wiki(url)
+    museCalls++
+    const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content)
+    let value:unknown
+    if(museCalls===1)value={topic:'Shared rituals of sitting',angle:'How seating gathers everyday attention',argument:'Chairs anchor ordinary rituals across cultures.',selectedAssetIds:Array.from({length:9},(_,i)=>version(i+1)),researchQuestions:[
+      {question:'How did Bauhaus combine crafts and fine arts?',why:'A direct historical comparison deepens the angle.',query:'Bauhaus crafts fine arts',complex:false,assetId:version(1)},
+      {question:'What Swedish coffee ritual is Fika?',why:'A second ritual comparison for another article.',query:'Fika Swedish coffee ritual',complex:false,assetId:version(4)}]}
+    else if(museCalls===2){
+      const cited=(input.sources as (EditorialSource&{claimRef:string})[]).filter(source=>source.source==='cultural_research')
+      const bauhaus=cited.find(source=>source.citations?.[0]?.title==='Bauhaus')!,fika=cited.find(source=>source.citations?.[0]?.title==='Fika')!
+      const draftValue=toDraft(edition(input.articleCount,3))
+      draftValue.articles[0].narrative+=' Bauhaus was a German art school that combined crafts and the fine arts.'
+      draftValue.articles[0].culturalClaims=[{ref:bauhaus.claimRef,narrativeText:'Bauhaus was a German art school that combined crafts and the fine arts.'}]
+      draftValue.articles[1].narrative+=' Fika is a Swedish coffee break ritual combining coffee and conversation.'
+      draftValue.articles[1].culturalClaims=[{ref:fika.claimRef,narrativeText:'Fika is a Swedish coffee break ritual combining coffee and conversation.'}]
+      value=draftValue
+    }
+    else if(museCalls===4)value=toRevisionDraft(input.edition)
+    else value=review(input.edition,5)
+    return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
+  })
+  return {send,calls:()=>museCalls}
+}
+it('researches cultural context for a three-story edition',async()=>{
+  mockPool()
+  const {send,calls}=threeStoryResearchSend()
+  vi.stubGlobal('fetch',send)
+  const body=await (await post({EDITORIAL_WORKFLOW_V3_ENABLED:'true',RESEARCH_SOURCE_ORIGINS:'https://en.wikipedia.org'},{interests:'Connect seating to verified design rituals'})).json() as {source:string;articleEdition:EditorialArticleEdition;researchReferences:EditorialSource[];aiDisclosure:string;requestedCount:number;publishedCount:number;partial:boolean}
+  expect(body.source).toBe('meta')
+  expect(body.researchReferences).toHaveLength(2)
+  expect(body.researchReferences.map(source=>source.citations?.[0]?.title).sort()).toEqual(['Bauhaus','Fika'])
+  expect(body.articleEdition.articles[0].narrative).toContain('[1]')
+  expect(body.articleEdition.articles[1].narrative).toContain('[1]')
+  expect(body.aiDisclosure).toContain('AI assistance')
+  expect([body.requestedCount,body.publishedCount,body.partial]).toEqual([3,3,false])
+  expect(calls()).toBe(5)
+})
+it('researches three-story editions with the Hybrid chief model',async()=>{
+  mockPool()
+  const {send}=threeStoryResearchSend()
+  vi.stubGlobal('fetch',send)
+  const body=await (await post({EDITORIAL_WORKFLOW_V3_ENABLED:'true',RESEARCH_SOURCE_ORIGINS:'https://en.wikipedia.org',EDITORIAL_HYBRID_ENABLED:'true',EDITORIAL_WONDER_PROVIDER_VERIFIED:'true',META_WONDER_MODEL:'muse-wonder-1.0'},{interests:'A hybrid researched study of gathering chairs',editorialMode:'hybrid'})).json() as {source:string;researchReferences:EditorialSource[]}
+  expect(body.source).toBe('meta')
+  expect(body.researchReferences).toHaveLength(2)
+  const metaModels=send.mock.calls.filter(([url])=>String(url).includes('api.meta.ai')).map(([,init])=>JSON.parse(String((init as RequestInit).body)).model)
+  expect(metaModels).toEqual(['muse-wonder-1.0','muse-wonder-1.0','muse-spark-1.3','muse-spark-1.3','muse-spark-1.3'])
+})
+it('proceeds without findings when three-story research sources are unconfigured',async()=>{
+  mockPool(9)
+  let museCalls=0,chiefStatus:string|undefined
+  const send=vi.fn(async(_url:string,init:RequestInit)=>{
+    const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content);museCalls++
+    let value:unknown
+    if(museCalls===1)value={topic:'Shared rituals of sitting',angle:'How seating gathers everyday attention',argument:'Chairs anchor ordinary rituals across cultures.',selectedAssetIds:Array.from({length:9},(_,i)=>version(i+1)),researchQuestions:[{question:'How did Bauhaus combine crafts and fine arts?',why:'A direct historical comparison deepens the angle.',query:'Bauhaus crafts fine arts',complex:false,assetId:version(1)}]}
+    else if(museCalls===2){chiefStatus=input.researchStatus as string|undefined;value=toDraft(edition(input.articleCount,3))}
+    else if(museCalls===4)value=toRevisionDraft(input.edition)
+    else value=review(input.edition,5)
+    return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
+  })
+  vi.stubGlobal('fetch',send)
+  const body=await (await post({EDITORIAL_WORKFLOW_V3_ENABLED:'true'},{interests:'An unconfigured research study of tall cabinets'})).json() as {source:string;researchReferences:unknown[];aiDisclosure:string}
+  expect(body.source).toBe('meta')
+  expect(chiefStatus).toBe('unavailable')
+  expect(body.researchReferences).toEqual([])
+  expect(body.aiDisclosure).toContain('AI assistance')
+  expect(museCalls).toBe(5)
+})
+it('rejects research questions bound outside the planned assets',async()=>{
+  mockPool(9)
+  let museCalls=0
+  const send=vi.fn(async(_url:string,init:RequestInit)=>{
+    const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content);museCalls++
+    const value=museCalls===1?{topic:'Shared rituals of sitting',angle:'How seating gathers everyday attention',argument:'Chairs anchor ordinary rituals across cultures.',selectedAssetIds:[version(1),version(2)],researchQuestions:[{question:'How did Bauhaus combine crafts and fine arts?',why:'A direct historical comparison deepens the angle.',query:'Bauhaus crafts fine arts',complex:false,assetId:version(9)}]}:review(input.edition,5)
+    return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
+  })
+  vi.stubGlobal('fetch',send)
+  const body=await (await post({EDITORIAL_WORKFLOW_V3_ENABLED:'true',RESEARCH_SOURCE_ORIGINS:'https://en.wikipedia.org'},{interests:'A misbound research study of low benches'})).json() as Record<string,unknown>
+  expect(body).toMatchObject({source:'deterministic',fallbackReason:'provider_or_validation',validationDiagnostic:{stage:'planning',code:'image_identity'}})
+  expect(museCalls).toBe(1)
 })
