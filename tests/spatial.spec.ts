@@ -251,16 +251,15 @@ test('the inspiration row fills the prompt with a sentence without generating',a
   const seed=row.locator('.spatial-seed')
   await expect(seed).toHaveCount(1)
   expect(await seed.textContent()).toContain('·')
-  // Seed plus two perfectly round icon buttons share one row.
+  // Seed plus one perfectly round icon button share one row.
   const circles=row.locator('.spatial-circle')
-  await expect(circles).toHaveCount(2)
+  await expect(circles).toHaveCount(1)
   for(const circle of await circles.all()){
     const box=await circle.boundingBox()
     expect(Math.abs(box!.width-box!.height)).toBeLessThan(0.5)
     expect(box!.width).toBeGreaterThanOrEqual(36)
   }
   await expect(row.getByRole('button',{name:'Refresh suggestion'})).toHaveAttribute('title','Refresh suggestion')
-  await expect(row.getByRole('button',{name:'Surprise me'})).toHaveAttribute('title','Show me something unexpected')
   await seed.click()
   const filled=await page.getByLabel('Your curiosity').inputValue()
   expect(filled.startsWith("I'm curious about ")).toBe(true)
@@ -282,20 +281,50 @@ test('refresh swaps the seed without repeating it',async({page})=>{
   expect(second).not.toBe(first)
 })
 
-test('surprise me fills an empty input with varied directions',async({page})=>{
+test('discover headline, subtitle and control rows align with the prompt input',async({page})=>{
   await page.setViewportSize({width:1440,height:900})
+  await page.route('**/api/editorial/capabilities',route=>route.fulfill({status:200,json:modelCaps}))
   await page.goto('/spatial')
   await expect(page.locator('.spatial-canvas')).toBeVisible()
-  await expect(page.getByLabel('Your curiosity')).toHaveValue('')
-  const surprise=page.locator('.spatial-seed-row').getByRole('button',{name:'Surprise me'})
-  await surprise.click()
-  const first=await page.getByLabel('Your curiosity').inputValue()
-  expect(first.startsWith("I'm curious about ")).toBe(true)
-  await surprise.click()
-  const second=await page.getByLabel('Your curiosity').inputValue()
-  expect(second.startsWith("I'm curious about ")).toBe(true)
-  expect(second).not.toBe(first)
-  await expect(page.getByTestId('spatial-edition-chip')).toHaveCount(0)
+  await expect(page.getByRole('heading',{name:'Read. Discover. Shop. Beyond ads.'})).toBeVisible()
+  await expect(page.locator('.spatial-dock')).toContainText('Follow your curiosity through stories, brands and discoveries that speak to your interests.')
+  await expect(page.locator('.spatial-seed-row').getByRole('button',{name:'Surprise me'})).toHaveCount(0)
+  // Measure at steady state: the dock entrance scales from .55 to 1 over 1.6s.
+  await page.locator('.spatial-dock').evaluate(el=>Promise.all(el.getAnimations().map(animation=>animation.finished)))
+  const input=await page.getByLabel('Your curiosity').boundingBox()
+  const label=await page.locator('.spatial-suggestions-label').boundingBox()
+  const seed=await page.locator('.spatial-seed').boundingBox()
+  const refresh=await page.locator('.spatial-seed-row').getByRole('button',{name:'Refresh suggestion'}).boundingBox()
+  const modeText=await page.locator('.spatial-mode-row .spatial-fine').boundingBox()
+  const modeSwitch=await page.locator('.spatial-mode-row fieldset').boundingBox()
+  // The prompt input is the horizontal alignment reference.
+  expect(Math.abs(label!.x-input!.x)).toBeLessThan(1.5)
+  expect(Math.abs((refresh!.x+refresh!.width)-(input!.x+input!.width))).toBeLessThan(1.5)
+  expect(Math.abs((modeSwitch!.x+modeSwitch!.width)-(input!.x+input!.width))).toBeLessThan(1.5)
+  // Each control row shares one horizontal row.
+  const center=(box:{y:number;height:number})=>box.y+box.height/2
+  expect(Math.abs(center(label!)-center(seed!))).toBeLessThan(12)
+  expect(Math.abs(center(seed!)-center(refresh!))).toBeLessThan(1.5)
+  expect(Math.abs(center(modeText!)-center(modeSwitch!))).toBeLessThan(12)
+  // The mode description tracks the selected mode.
+  await expect(page.locator('.spatial-mode-row .spatial-fine')).toContainText('Faster delivery.')
+  await page.locator('input[name=editorial-mode][value=hybrid]').check()
+  await expect(page.locator('.spatial-mode-row .spatial-fine')).toContainText('Deeper editorial exploration.')
+})
+
+test('discover control rows stay within the viewport at mobile width',async({page})=>{
+  await page.setViewportSize({width:390,height:844})
+  await page.goto('/spatial')
+  await expect(page.locator('.spatial-canvas')).toBeVisible()
+  await expect(page.getByRole('heading',{name:'Read. Discover. Shop. Beyond ads.'})).toBeVisible()
+  await page.locator('.spatial-dock').evaluate(el=>Promise.all(el.getAnimations().map(animation=>animation.finished)))
+  const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+1)
+  expect(overflow).toBe(false)
+  for(const selector of ['.spatial-suggestions-label','.spatial-seed','.spatial-mode-row fieldset']){
+    const box=await page.locator(selector).first().boundingBox()
+    expect(box!.x).toBeGreaterThanOrEqual(-1)
+    expect(box!.x+box!.width).toBeLessThanOrEqual(391)
+  }
 })
 
 const modelCaps={version:'curio-editorial-model-routing-v1',defaultMode:'lite',liteAvailable:true,hybridAvailable:true,modes:[]}
