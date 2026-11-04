@@ -96,6 +96,7 @@ it('binds retrieved cultural evidence to a reviewed article and returns only its
  expect(body.researchReferences).toMatchObject([{source:'cultural_research',citations:[{url:'https://en.wikipedia.org/wiki/Bauhaus',publication:'Wikipedia'}]}])
  expect(body.articleEdition.articles[0].narrative).toContain('[1]')
  expect(body.aiDisclosure).toContain('AI assistance')
+ expect(body).toMatchObject({editorialTier:{label:"Editor's Pick"}})
  expect(museCalls).toBe(5)
 })
 
@@ -901,7 +902,7 @@ it('publishes boundary confirmation scores with the correct tier',async()=>{
 })
 it('blocks confirmation hard integrity failures without publishing',async()=>{
   mockPool()
-  for(const code of ['fact_integrity','visual_grounding','brand_integrity','safety']){
+  for(const code of ['visual_grounding','brand_integrity','safety']){
     const send=stagedProvider(ed=>review(ed,5),ed=>multiReview(ed,uniform(5),{0:[{severity:'high',code}],1:[{severity:'high',code}],2:[{severity:'high',code}]}))
     vi.stubGlobal('fetch',send)
     const response=await post({},{interests:`A hard-block study of ${code} in sitting rooms`})
@@ -1002,7 +1003,7 @@ it('publishes two of three articles when one chief article is invalid',async()=>
 })
 it('drops one confirmation hard-blocked article and publishes two',async()=>{
   mockPool()
-  const send=stagedProvider(ed=>review(ed,5),ed=>multiReview(ed,uniform(5),{0:[{severity:'high',code:'fact_integrity'}]}))
+  const send=stagedProvider(ed=>review(ed,5),ed=>multiReview(ed,uniform(5),{0:[{severity:'high',code:'brand_integrity'}]}))
   vi.stubGlobal('fetch',send)
   const body=await (await post({},{interests:'A partial hard-block study of laundry rooms'})).json() as {source:string;articleEdition:{articles:{heroAssetId:string}[]};requestedCount:number;publishedCount:number;partial:boolean;editorialTier:{label:string}}
   expect(body.source).toBe('meta')
@@ -1054,7 +1055,7 @@ it('persists partial editions on completed jobs with counts',async()=>{
   const {sqlite,db}=preparationDb()
   try{
     vi.mocked(editorialArticlePool).mockResolvedValue(prepared(9,[]))
-    vi.stubGlobal('fetch',stagedProvider(ed=>review(ed,5),ed=>multiReview(ed,uniform(5),{1:[{severity:'high',code:'fact_integrity'}]})))
+    vi.stubGlobal('fetch',stagedProvider(ed=>review(ed,5),ed=>multiReview(ed,uniform(5),{1:[{severity:'high',code:'brand_integrity'}]})))
     const config={EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db}
     const first=await (await post(config,{interests:'A partial persistence study of garden sheds'})).json() as {source:string;articleEdition:{articles:unknown[]};requestedCount:number;publishedCount:number;partial:boolean;editorialTier:{label:string}}
     expect(first.source).toBe('meta')
@@ -1086,12 +1087,42 @@ it('sends imaginative-association calibration to 3-Story review and confirmation
     expect(instruction).not.toContain('Research citations must refer to the actual supplied passage')
   }
 })
-it('keeps fabricated historical and brand claims blocked in 3-Story',async()=>{
+it('publishes despite high-severity fact_integrity opinions',async()=>{
   mockPool()
   const flagged=(ed:EditorialArticleEdition)=>{const value=multiReview(ed,uniform(5),{0:[{severity:'high',code:'fact_integrity'}],1:[{severity:'high',code:'fact_integrity'}],2:[{severity:'high',code:'fact_integrity'}]});value.featureFeedback[0].issues[0].instruction='Remove the invented Bauhaus influence on this chair.';value.featureFeedback[1].issues[0].instruction='Remove the fabricated founding date of this studio.';value.featureFeedback[2].issues[0].instruction='Remove the unsupported claim that this lamp shaped a national style.';return value}
   const send=stagedProvider(ed=>review(ed,5),flagged);vi.stubGlobal('fetch',send)
-  const body=await (await post({},{interests:'A fabrication-block study of armchairs'})).json() as Record<string,unknown>
-  expect(body).toMatchObject({source:'deterministic',status:'fallback',fallbackReason:'editorial_blocked',articleEdition:null,validationDiagnostic:{stage:'confirmation',code:'editorial_blocked'}})
+  const body=await (await post({},{interests:'A fabrication-advisory study of armchairs'})).json() as {source:string;articleEdition:{articles:unknown[]};requestedCount:number;publishedCount:number;partial:boolean}
+  expect(body.source).toBe('meta')
+  expect([body.requestedCount,body.publishedCount,body.partial]).toEqual([3,3,false])
+  expect(send).toHaveBeenCalledTimes(4)
+})
+it('publishes when optional citations are missing',async()=>{
+  mockPool()
+  const flagged=(ed:EditorialArticleEdition)=>{const value=multiReview(ed,uniform(4),{0:[{severity:'high',code:'fact_integrity'}],2:[{severity:'high',code:'fact_integrity'}]});value.featureFeedback[0].issues[0].instruction='No external citation supports this cultural connection.';value.featureFeedback[2].issues[0].instruction='Missing optional research for this design claim.';return value}
+  const send=stagedProvider(ed=>review(ed,5),flagged);vi.stubGlobal('fetch',send)
+  const body=await (await post({},{interests:'A missing-citation study of footstools'})).json() as {source:string;articleEdition:{articles:unknown[]};requestedCount:number;publishedCount:number;partial:boolean}
+  expect(body.source).toBe('meta')
+  expect([body.requestedCount,body.publishedCount,body.partial]).toEqual([3,3,false])
+  expect(send).toHaveBeenCalledTimes(4)
+})
+it('publishes a single story without external research or citations',async()=>{
+  mockPool(3)
+  const send=provider();vi.stubGlobal('fetch',send)
+  const body=await (await post({},{editionFormat:ARTICLE_SINGLE_CONTRACT_VERSION,interests:'A single no-research study of window seats'})).json() as Record<string,unknown>
+  expect(body).toMatchObject({format:ARTICLE_SINGLE_CONTRACT_VERSION,source:'meta'})
+  expect(body).not.toHaveProperty('researchReferences')
+  expect((body.articleEdition as {articles:unknown[]}).articles).toHaveLength(1)
+  expect(send).toHaveBeenCalledTimes(4)
+})
+it('publishes creative interpretation without citations across three articles',async()=>{
+  mockPool()
+  const send=customProvider(input=>{const draft=toDraft(edition(input.articleCount,3));draft.articles.forEach(article=>{article.narrative='Perhaps the chair keeps a quiet vigil over morning rituals, and the room answers in soft timber light.'});return draft},ed=>review(ed,5),ed=>review(ed,5))
+  vi.stubGlobal('fetch',send)
+  const body=await (await post({},{interests:'An imaginative triptych study of reading corners'})).json() as {source:string;articleEdition:{articles:{narrative:string}[]};requestedCount:number;publishedCount:number;partial:boolean}
+  expect(body.source).toBe('meta')
+  expect([body.requestedCount,body.publishedCount,body.partial]).toEqual([3,3,false])
+  expect(body.articleEdition.articles.every(article=>article.narrative.includes('quiet vigil'))).toBe(true)
+  expect(body).not.toHaveProperty('researchReferences')
   expect(send).toHaveBeenCalledTimes(4)
 })
 it('sends imaginative calibration to single-story v2 review for single/triple consistency',async()=>{
@@ -1182,7 +1213,7 @@ it('fails closed when confirmation feedback cannot be attributed',async()=>{
 })
 it('logs blocked-article attribution when confirmation blocks all articles',async()=>{
   mockPool()
-  const send=stagedProvider(ed=>review(ed,5),ed=>multiReview(ed,uniform(5),{0:[{severity:'high',code:'fact_integrity'}],1:[{severity:'high',code:'fact_integrity'}],2:[{severity:'high',code:'fact_integrity'}]}))
+  const send=stagedProvider(ed=>review(ed,5),ed=>multiReview(ed,uniform(5),{0:[{severity:'high',code:'safety'}],1:[{severity:'high',code:'safety'}],2:[{severity:'high',code:'safety'}]}))
   vi.stubGlobal('fetch',send)
   const errors:string[]=[]
   const spy=vi.spyOn(console,'error').mockImplementation((...args:unknown[])=>{errors.push(args.map(String).join(' '))})
@@ -1193,7 +1224,7 @@ it('logs blocked-article attribution when confirmation blocks all articles',asyn
     const failure=errors.map(line=>{try{return JSON.parse(line)}catch{return null}}).find(row=>row?.event==='article_editorial_failure')
     expect(failure).toMatchObject({stage:'confirmation',code:'editorial_blocked',affectedArticles:3})
     expect(failure.requestId).toMatch(/^[0-9a-f-]{36}$/)
-    expect(failure.blockedIssues).toEqual([data[0].item.image.id,data[3].item.image.id,data[6].item.image.id].map(heroAssetId=>({heroAssetId,code:'fact_integrity'})))
+    expect(failure.blockedIssues).toEqual([data[0].item.image.id,data[3].item.image.id,data[6].item.image.id].map(heroAssetId=>({heroAssetId,code:'safety'})))
     expect(JSON.stringify(failure)).not.toContain('invite a different way')
   }finally{spy.mockRestore()}
 })

@@ -232,10 +232,11 @@ function validateReview(value:z.infer<typeof editorialReviewOutput>,edition:Arti
   if(feedback.length!==ids.length||new Set(feedback).size!==ids.length||feedback.some(id=>!ids.includes(id)))throw Error('Invalid review feedback identity')
   return scoreEditorialReview(value)
 }
-// Quality criticism never blocks publication; only high-severity findings
-// on hard integrity codes do. Unknown or missing codes cannot reach this
+// Publication blockers are essential technical integrity and safety only.
+// AI fact_integrity opinions are advisory: they guide Revision and scoring
+// but never block publication. Unknown or missing codes cannot reach this
 // check: the strict review schema rejects them first (fail closed).
-const hardIssueCodes=new Set(['fact_integrity','visual_grounding','brand_integrity','safety'])
+const hardIssueCodes=new Set(['visual_grounding','brand_integrity','safety'])
 export type ConfirmationHardIssue={heroAssetId:string;code:string}
 export function confirmationHardIssues(review:EditorialReviewOutput):ConfirmationHardIssue[]{
   return review.featureFeedback.flatMap(row=>row.issues.filter(issue=>issue.severity==='high'&&hardIssueCodes.has(issue.code)).map(issue=>({heroAssetId:row.assetId,code:issue.code})))
