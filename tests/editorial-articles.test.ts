@@ -448,7 +448,7 @@ it('fails closed when revised prose drops a cultural-claim passage',()=>{
  draft.articles[0].narrative='Revised prose without the quoted passage.'
  expect(()=>validateArticleEdition(mergeRevisionProse(ed,draft),items,claimed,contexts,3)).toThrow('cultural_claim')
 })
-it('publishes the valid articles when one reviewer-flagged image problem prose cannot fix',async()=>{
+it('publishes all articles when image-grounding findings are advisory',async()=>{
  mockPool(6)
  const grounding=(ed:EditorialArticleEdition)=>({...review(ed,3),featureFeedback:review(ed,3).featureFeedback.map((row,i)=>i?row:{...row,issues:[{severity:'high',code:'visual_grounding',evidenceRefs:[`feature:${ed.articles[0].heroAssetId}`],instruction:'The credited image cannot support this claim.'}]})})
  let calls=0
@@ -459,10 +459,10 @@ it('publishes the valid articles when one reviewer-flagged image problem prose c
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
  })
  vi.stubGlobal('fetch',send)
- const body=await (await post({},{interests:'An unfixable image-grounding study'})).json() as {source:string;articleEdition:{articles:{heroAssetId:string}[]};requestedCount:number;publishedCount:number;partial:boolean}
+ const body=await (await post({},{interests:'An advisory image-grounding study'})).json() as {source:string;articleEdition:{articles:{heroAssetId:string}[]};requestedCount:number;publishedCount:number;partial:boolean}
  expect(body.source).toBe('meta')
- expect([body.requestedCount,body.publishedCount,body.partial]).toEqual([3,2,true])
- expect(body.articleEdition.articles).toHaveLength(2)
+ expect([body.requestedCount,body.publishedCount,body.partial]).toEqual([3,3,false])
+ expect(body.articleEdition.articles).toHaveLength(3)
  expect(send).toHaveBeenCalledTimes(4)
  const revisionCall=JSON.parse(String(send.mock.calls[2][1].body))
  expect(revisionCall.response_format.json_schema.name).toBe('curio_articles_v1_revision')
@@ -900,15 +900,14 @@ it('publishes boundary confirmation scores with the correct tier',async()=>{
     expect(send).toHaveBeenCalledTimes(4)
   }
 })
-it('blocks confirmation hard integrity failures without publishing',async()=>{
+it('publishes despite high-severity findings on any review code',async()=>{
   mockPool()
-  for(const code of ['visual_grounding','brand_integrity','safety']){
+  for(const code of ['fact_integrity','visual_grounding','brand_integrity','safety','generic_copy','weak_discovery','repetition','coherence','readability']){
     const send=stagedProvider(ed=>review(ed,5),ed=>multiReview(ed,uniform(5),{0:[{severity:'high',code}],1:[{severity:'high',code}],2:[{severity:'high',code}]}))
     vi.stubGlobal('fetch',send)
-    const response=await post({},{interests:`A hard-block study of ${code} in sitting rooms`})
-    const body=await response.json() as Record<string,unknown>
-    expect(body).toMatchObject({source:'deterministic',status:'fallback',fallbackReason:'editorial_blocked',articleEdition:null,validationDiagnostic:{stage:'confirmation',code:'editorial_blocked'}})
-    expect(response.headers.get('X-Curio-Request-Id')).toMatch(/^[0-9a-f-]{36}$/)
+    const body=await (await post({},{interests:`A publish-despite study of ${code} in sitting rooms`})).json() as {source:string;requestedCount:number;publishedCount:number;partial:boolean}
+    expect(body.source).toBe('meta')
+    expect([body.requestedCount,body.publishedCount,body.partial]).toEqual([3,3,false])
     expect(send).toHaveBeenCalledTimes(4)
   }
 })
@@ -972,11 +971,11 @@ it('persists the public tier on completed jobs while withholding internal scores
 })
 // PR3: partial 3-Story publication. Independently valid articles publish with
 // requested/published counts; only zero survivors fail explicitly.
-function customProvider(chief:(input:{articleCount:number;catalog:unknown[]})=>unknown,first:(ed:EditorialArticleEdition)=>unknown,confirm:(ed:EditorialArticleEdition)=>unknown){
+function customProvider(chief:(input:{articleCount:number;catalog:unknown[]})=>unknown,first:(ed:EditorialArticleEdition)=>unknown,confirm:(ed:EditorialArticleEdition)=>unknown,revision:(ed:EditorialArticleEdition)=>unknown=(ed:EditorialArticleEdition)=>toRevisionDraft(ed)){
   let calls=0
   return vi.fn(async(_url:string,init:RequestInit)=>{
     const body=JSON.parse(String(init.body)),input=JSON.parse(body.messages[1].content);calls++
-    const value=calls===1?chief(input):calls===2?first(input.edition):calls===3?toRevisionDraft(input.edition):confirm(input.edition)
+    const value=calls===1?chief(input):calls===2?first(input.edition):calls===3?revision(input.edition):confirm(input.edition)
     return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
   })
 }
@@ -999,27 +998,6 @@ it('publishes two of three articles when one chief article is invalid',async()=>
   expect(body.publishedCount).toBe(2)
   expect(body.partial).toBe(true)
   expect(body.articleEdition.articles.map(article=>article.heroAssetId)).toEqual([data[0].item.image.id,data[3].item.image.id])
-  expect(send).toHaveBeenCalledTimes(4)
-})
-it('drops one confirmation hard-blocked article and publishes two',async()=>{
-  mockPool()
-  const send=stagedProvider(ed=>review(ed,5),ed=>multiReview(ed,uniform(5),{0:[{severity:'high',code:'brand_integrity'}]}))
-  vi.stubGlobal('fetch',send)
-  const body=await (await post({},{interests:'A partial hard-block study of laundry rooms'})).json() as {source:string;articleEdition:{articles:{heroAssetId:string}[]};requestedCount:number;publishedCount:number;partial:boolean;editorialTier:{label:string}}
-  expect(body.source).toBe('meta')
-  expect([body.requestedCount,body.publishedCount,body.partial]).toEqual([3,2,true])
-  expect(body.articleEdition.articles.map(article=>article.heroAssetId)).toEqual([data[3].item.image.id,data[6].item.image.id])
-  expect(body.editorialTier.label).toBe("Editor's Pick")
-  expect(send).toHaveBeenCalledTimes(4)
-})
-it('publishes one of three when two articles are hard-blocked',async()=>{
-  mockPool()
-  const send=stagedProvider(ed=>review(ed,5),ed=>multiReview(ed,uniform(5),{0:[{severity:'high',code:'brand_integrity'}],1:[{severity:'high',code:'visual_grounding'}]}))
-  vi.stubGlobal('fetch',send)
-  const body=await (await post({},{interests:'A single-survivor study of boot rooms'})).json() as {source:string;articleEdition:{articles:{heroAssetId:string}[]};requestedCount:number;publishedCount:number;partial:boolean}
-  expect(body.source).toBe('meta')
-  expect([body.requestedCount,body.publishedCount,body.partial]).toEqual([3,1,true])
-  expect(body.articleEdition.articles.map(article=>article.heroAssetId)).toEqual([data[6].item.image.id])
   expect(send).toHaveBeenCalledTimes(4)
 })
 it('drops a revised article that loses its cultural-claim passage',async()=>{
@@ -1054,8 +1032,9 @@ it('fails closed when chief produces zero valid articles',async()=>{
 it('persists partial editions on completed jobs with counts',async()=>{
   const {sqlite,db}=preparationDb()
   try{
-    vi.mocked(editorialArticlePool).mockResolvedValue(prepared(9,[]))
-    vi.stubGlobal('fetch',stagedProvider(ed=>review(ed,5),ed=>multiReview(ed,uniform(5),{1:[{severity:'high',code:'brand_integrity'}]})))
+    const pool=prepared(9,[]),claimAsset=data[6].item.image.id
+    vi.mocked(editorialArticlePool).mockResolvedValue({...pool,sources:[...pool.sources,claimSource(claimAsset,`${claimAsset}:cultural_claim_1`)]})
+    vi.stubGlobal('fetch',customProvider(input=>{const draft=toDraft(edition(input.articleCount,3));draft.articles[2].culturalClaims=[{ref:'S1',narrativeText:'An unquoted ceremonial passage.'}];return draft},ed=>review(ed,5),ed=>review(ed,5)))
     const config={EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db}
     const first=await (await post(config,{interests:'A partial persistence study of garden sheds'})).json() as {source:string;articleEdition:{articles:unknown[]};requestedCount:number;publishedCount:number;partial:boolean;editorialTier:{label:string}}
     expect(first.source).toBe('meta')
@@ -1185,6 +1164,22 @@ it('treats Content Studio records as authoritative Demo facts in 3-story prompts
   const revision=JSON.parse(String(send.mock.calls[2][1].body)).messages[0].content as string
   expect(revision).toContain('are authoritative Demo facts')
 })
+it('shares one severe-deception definition across chief, reviewer, revision and confirmation',async()=>{
+  mockPool()
+  const send=stagedProvider(ed=>review(ed,5),ed=>review(ed,5));vi.stubGlobal('fetch',send)
+  await (await post({},{interests:'A shared-definition study of table lamps'})).json()
+  expect(send).toHaveBeenCalledTimes(4)
+  const seen=new Set<string>()
+  for(const index of [0,1,2,3]){
+    const instruction=JSON.parse(String(send.mock.calls[index][1].body)).messages[0].content as string
+    const begin=instruction.indexOf('Severe deception means presenting invented')
+    const end=instruction.indexOf('are not severe deception.',begin)
+    expect(begin).toBeGreaterThanOrEqual(0)
+    expect(end).toBeGreaterThan(begin)
+    seen.add(instruction.slice(begin,end))
+  }
+  expect(seen.size).toBe(1)
+})
 it('sends unsupported-claim repair guidance to the revision editor',async()=>{
   mockPool()
   const send=stagedProvider(ed=>review(ed,5),ed=>review(ed,5));vi.stubGlobal('fetch',send)
@@ -1193,6 +1188,20 @@ it('sends unsupported-claim repair guidance to the revision editor',async()=>{
   const instruction=JSON.parse(String(send.mock.calls[2][1].body)).messages[0].content as string
   expect(instruction).toContain('remove it or rewrite it strictly within what the cited evidence supports')
   expect(instruction).toContain('Do not repeat, defend, or merely add uncertainty words')
+})
+it('identifies materially deceptive claims and revises them before publishing',async()=>{
+  mockPool()
+  const deceptive='This lamp cures insomnia and carries a lifetime safety certification.'
+  const flagged=(ed:EditorialArticleEdition)=>{const value=multiReview(ed,uniform(4),{1:[{severity:'high',code:'safety'}]});value.featureFeedback[1].issues[0].instruction=`Remove the deceptive claim: ${deceptive}`;return value}
+  const send=customProvider(input=>{const draft=toDraft(edition(input.articleCount,3));draft.articles[1].narrative=`A calm reading corner. ${deceptive}`;return draft},flagged,ed=>review(ed,5),(ed:EditorialArticleEdition)=>{const draft=toRevisionDraft(ed);draft.articles[1].narrative='This lamp brings a calm glow to evening reading.';return draft})
+  vi.stubGlobal('fetch',send)
+  const body=await (await post({},{interests:'A deceptive-claim revision study of bedside lamps'})).json() as {source:string;articleEdition:{articles:{narrative:string}[]};requestedCount:number;publishedCount:number;partial:boolean}
+  expect(body.source).toBe('meta')
+  expect([body.requestedCount,body.publishedCount,body.partial]).toEqual([3,3,false])
+  expect(body.articleEdition.articles[1].narrative).toContain('calm glow')
+  expect(body.articleEdition.articles[1].narrative).not.toContain('cures insomnia')
+  expect(body.articleEdition.articles[1].narrative).not.toContain('lifetime safety certification')
+  expect(send).toHaveBeenCalledTimes(4)
 })
 it('allows revision to remove an unsupported non-cultural claim passage',()=>{
   const ed=edition(3,3)
@@ -1211,34 +1220,12 @@ it('fails closed when confirmation feedback cannot be attributed',async()=>{
   expect(body).toMatchObject({source:'deterministic',status:'fallback',fallbackReason:'provider_or_validation',articleEdition:null,validationDiagnostic:{stage:'confirmation',code:'review_validation'}})
   expect(send).toHaveBeenCalledTimes(4)
 })
-it('logs blocked-article attribution when confirmation blocks all articles',async()=>{
-  mockPool()
-  const send=stagedProvider(ed=>review(ed,5),ed=>multiReview(ed,uniform(5),{0:[{severity:'high',code:'safety'}],1:[{severity:'high',code:'safety'}],2:[{severity:'high',code:'safety'}]}))
+it('publishes a single story despite high-severity safety findings',async()=>{
+  mockPool(3)
+  const send=stagedProvider(ed=>review(ed,5),ed=>multiReview(ed,uniform(5),{0:[{severity:'high',code:'safety'}]}))
   vi.stubGlobal('fetch',send)
-  const errors:string[]=[]
-  const spy=vi.spyOn(console,'error').mockImplementation((...args:unknown[])=>{errors.push(args.map(String).join(' '))})
-  try{
-    const body=await (await post({},{interests:'A block-attribution study of desks'})).json() as Record<string,unknown>
-    expect(body).toMatchObject({fallbackReason:'editorial_blocked'})
-    expect(body).not.toHaveProperty('blockedIssues')
-    const failure=errors.map(line=>{try{return JSON.parse(line)}catch{return null}}).find(row=>row?.event==='article_editorial_failure')
-    expect(failure).toMatchObject({stage:'confirmation',code:'editorial_blocked',affectedArticles:3})
-    expect(failure.requestId).toMatch(/^[0-9a-f-]{36}$/)
-    expect(failure.blockedIssues).toEqual([data[0].item.image.id,data[3].item.image.id,data[6].item.image.id].map(heroAssetId=>({heroAssetId,code:'safety'})))
-    expect(JSON.stringify(failure)).not.toContain('invite a different way')
-  }finally{spy.mockRestore()}
-})
-it('logs excluded heroes on partial confirmation publish',async()=>{
-  mockPool()
-  const send=stagedProvider(ed=>review(ed,5),ed=>multiReview(ed,uniform(5),{1:[{severity:'high',code:'brand_integrity'}]}))
-  vi.stubGlobal('fetch',send)
-  const errors:string[]=[]
-  const spy=vi.spyOn(console,'error').mockImplementation((...args:unknown[])=>{errors.push(args.map(String).join(' '))})
-  try{
-    const body=await (await post({},{interests:'A partial-attribution study of shelves'})).json() as {source:string;requestId:string;requestedCount:number;publishedCount:number;partial:boolean}
-    expect([body.source,body.requestedCount,body.publishedCount,body.partial]).toEqual(['meta',3,2,true])
-    const partial=errors.map(line=>{try{return JSON.parse(line)}catch{return null}}).find(row=>row?.event==='article_editorial_partial')
-    expect(partial).toMatchObject({stage:'confirmation',code:'editorial_blocked',affectedArticles:1,requestedCount:3,publishedCount:2,requestId:body.requestId})
-    expect(partial.blockedIssues).toEqual([{heroAssetId:data[3].item.image.id,code:'brand_integrity'}])
-  }finally{spy.mockRestore()}
+  const body=await (await post({},{editionFormat:ARTICLE_SINGLE_CONTRACT_VERSION,interests:'A single advisory-safety study of desks'})).json() as {source:string;articleEdition:{articles:unknown[]}}
+  expect(body.source).toBe('meta')
+  expect(body.articleEdition.articles).toHaveLength(1)
+  expect(send).toHaveBeenCalledTimes(4)
 })
