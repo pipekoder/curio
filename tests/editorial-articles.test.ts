@@ -701,13 +701,48 @@ it('generates exactly one reviewed story from a three-image pool in single-artic
   expect(chiefInput.catalog).toHaveLength(3)
   expect(String(send.mock.calls[0][1].body)).toContain('exactly one distinct article')
 })
-it('requires three eligible images for a single story without inference',async()=>{
-  mockPool(2)
+it('requires two eligible images for a single story without inference',async()=>{
+  mockPool(1)
   const send=provider();vi.stubGlobal('fetch',send)
   const result=await post({},{editionFormat:ARTICLE_SINGLE_CONTRACT_VERSION})
   expect(result.status).toBe(409)
-  expect(await result.json()).toMatchObject({format:ARTICLE_SINGLE_CONTRACT_VERSION,status:'insufficient_content',requiredImages:3,eligibleImages:2})
+  expect(await result.json()).toMatchObject({format:ARTICLE_SINGLE_CONTRACT_VERSION,status:'insufficient_content',requiredImages:2,eligibleImages:1})
   expect(send).not.toHaveBeenCalled()
+})
+it('publishes a single story from two distinct eligible images',async()=>{
+  mockPool(2)
+  const send=provider();vi.stubGlobal('fetch',send)
+  const body=await (await post({},{interests:'A two-image single story of morning rooms',editionFormat:ARTICLE_SINGLE_CONTRACT_VERSION})).json() as Record<string,unknown>
+  expect(body).toMatchObject({format:ARTICLE_SINGLE_CONTRACT_VERSION,source:'meta'})
+  expect((body.articleEdition as {articles:{images:unknown[]}[]}).articles).toHaveLength(1)
+  expect((body.articleEdition as {articles:{images:unknown[]}[]}).articles[0].images).toHaveLength(2)
+  expect(send).toHaveBeenCalledTimes(4)
+})
+it('publishes a single story from two images of the same brand',async()=>{
+  const rows=[data[0],data[2]]
+  expect(rows[0].sources[0].value).toBe(rows[1].sources[0].value)
+  vi.mocked(editorialArticlePool).mockResolvedValue({items:rows.map(row=>row.item),visualContexts:rows.map(row=>row.context),sources:rows.flatMap(row=>row.sources),eligibleCount:2})
+  const draftImage=(ref:string)=>({ref,products:['product_description']})
+  const draft={title:'One Studio, Two Expressions',deck:'A single-brand editorial study.',articles:[{headline:'Two Rooms, One Hand',deck:'A distinct editorial angle.',narrative:'These owner described objects invite a different way to read the room.',culturalClaims:[],images:[draftImage('A'),draftImage('B')]}]}
+  let calls=0
+  const send=vi.fn(async(_url:string,init:RequestInit)=>{
+    const input=JSON.parse(JSON.parse(String(init.body)).messages[1].content);calls++
+    const value=calls===1?draft:calls===2?review(input.edition,5):calls===3?toRevisionDraft(input.edition):review(input.edition,5)
+    return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}],usage:{prompt_tokens:100,completion_tokens:50,total_tokens:150}})
+  })
+  vi.stubGlobal('fetch',send)
+  const body=await (await post({},{interests:'A same-brand single story of paired seating',editionFormat:ARTICLE_SINGLE_CONTRACT_VERSION})).json() as {articleEdition:{articles:{images:{brandName:string}[]}[]};source:string}
+  expect(body.source).toBe('meta')
+  expect(body.articleEdition.articles).toHaveLength(1)
+  expect(body.articleEdition.articles[0].images.map(image=>image.brandName)).toEqual([rows[0].sources[0].value,rows[0].sources[0].value])
+  expect(send).toHaveBeenCalledTimes(4)
+})
+it('guides the chief editor with a Nordic lens and sparse-material strategies',async()=>{
+  mockPool(3)
+  const send=provider();vi.stubGlobal('fetch',send)
+  await post({},{interests:'A guided single story of quiet corners',editionFormat:ARTICLE_SINGLE_CONTRACT_VERSION})
+  const instruction=String(send.mock.calls[0][1].body)
+  for(const phrase of ['Nordic perspective on a world of ideas','never a compulsory comparison','Cultural comparisons and contrasts','Cross-cultural connections','Design and material history','Everyday rituals','shorter, more focused story','single brand','cultural stereotypes'])expect(instruction).toContain(phrase)
 })
 it('validates a single story with the same structural safeguards',()=>{
   const one={...edition(1,3),version:ARTICLE_SINGLE_CONTRACT_VERSION}

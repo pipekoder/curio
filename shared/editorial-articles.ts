@@ -8,7 +8,7 @@ export const ARTICLE_MIN_ELIGIBLE_IMAGES=6
 export const ARTICLE_MAX_EDITION_IMAGES=9
 export const ARTICLE_SINGLE_CONTRACT_VERSION='curio-editorial-article-v1' as const
 export const ARTICLE_SINGLE_COUNT=1
-export const ARTICLE_SINGLE_MIN_ELIGIBLE_IMAGES=3
+export const ARTICLE_SINGLE_MIN_ELIGIBLE_IMAGES=2
 export const ARTICLE_SINGLE_MAX_EDITION_IMAGES=3
 const id=z.string().regex(/^version-[a-f0-9]{64}$/)
 const plain=z.string().trim().min(1).max(2400).refine(value=>!/[<>]|javascript:|https?:|```/i.test(value))
