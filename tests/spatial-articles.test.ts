@@ -407,9 +407,30 @@ describe('spatial article edition fetch', () => {
   it('still reports a budget denial terminally instead of polling through it', async () => {
     // A resumable-for-later budget denial is not active generation: the
     // real reason must reach the UI at once, not after the overall bound.
-    const denied=await fetchArticleEdition('quiet rooms',true,err(503,{format:ARTICLE_CONTRACT_VERSION,source:'deterministic',retrieval:'d1',cached:false,articleEdition:null,status:'fallback',fallbackReason:'budget',budget:{limitType:'per_ip_hourly',limit:200,used:200,remaining:0,requestedUnits:4,measure:'units',retryAfterSeconds:60},resume:{recoverable:true,failedStage:null,attemptsUsed:1,chargedUnits:4}}) as unknown as typeof fetch,{pollGapMs:5})
-    expect(denied.edition).toBeNull()
-    expect(denied.status).toBe('fallback')
-    expect(denied.fallbackReason).toBe('budget')
+    // Owner-run denials arrive as HTTP 200 fallback bodies, like any owner
+    // failure; the status must not change the verdict.
+    for(const status of [200,503]){
+      const denied=await fetchArticleEdition('quiet rooms',true,err(status,{format:ARTICLE_CONTRACT_VERSION,source:'deterministic',retrieval:'d1',cached:false,articleEdition:null,status:'fallback',fallbackReason:'budget',budget:{limitType:'per_ip_hourly',limit:200,used:200,remaining:0,requestedUnits:4,measure:'units',retryAfterSeconds:60},resume:{recoverable:true,failedStage:null,attemptsUsed:1,chargedUnits:4}}) as unknown as typeof fetch,{pollGapMs:5})
+      expect(denied.edition).toBeNull()
+      expect(denied.status).toBe('fallback')
+      expect(denied.fallbackReason).toBe('budget')
+    }
+  })
+  it('keeps polling through a resumable 200 fallback instead of stopping the generation', async () => {
+    // Owner-run failures arrive as HTTP 200 fallback bodies, not 503s: a
+    // resumable one must continue polling like any transitional failure
+    // so a later request resumes the same job from checkpoints.
+    const calls=[{id:'call-1',model:'muse-spark-1.3',stage:'chief_editor',attempt:1,startedAt:1760000000000,endedAt:1760000010000,status:'completed'}]
+    const responses=[
+      new Response(JSON.stringify({format:ARTICLE_CONTRACT_VERSION,source:'deterministic',retrieval:'d1',cached:false,articleEdition:null,status:'fallback',fallbackReason:'provider_or_validation',modelCalls:calls,resume:{recoverable:true,failedStage:'reviewer',attemptsUsed:1,chargedUnits:4}}),{status:200}),
+      new Response(JSON.stringify(articleResponseFixture()),{status:200}),
+    ]
+    const fetcher=vi.fn(async()=>responses.shift()!)
+    const polls:ArticlePoll[]=[]
+    const result=await fetchArticleEdition('quiet rooms',true,fetcher as unknown as typeof fetch,{pollGapMs:5,onPoll:poll=>polls.push(poll)})
+    expect(result.edition?.articleEdition.articles).toHaveLength(3)
+    expect(result.status).toBeNull()
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(polls[0].modelCalls).toHaveLength(1)
   })
 })

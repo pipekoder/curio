@@ -127,6 +127,18 @@ export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImp
   // calls); an unparseable edge response resolves unparseable; any other
   // HTTP response resolves terminally; transport failures throw.
   type AttemptResult={type:'terminal';fetch:ArticleFetch}|{type:'poll'}|{type:'transient'}|{type:'unparseable'}
+  // A recoverable 3-story failure is transitional, not a verdict: a later
+  // poll resumes the same job from checkpoints. So is a lapsed lease: the
+  // previous owner may still complete the generating job. A budget denial
+  // is different — no generation is active, so its real reason reports
+  // terminally at once instead of polling on. Owner-run failures arrive
+  // as HTTP 200 fallback bodies, so every failure branch shares this.
+  type FailureDetail={budget?:unknown;resume?:{recoverable:boolean};fallbackReason?:string;eligibleImages?:number;requiredImages?:number;modelCalls?:ModelCallEvent[];notices?:JobNotice[]}
+  const transitional=(detail:FailureDetail)=>articleCount===3&&!detail.budget&&(detail.resume?.recoverable===true||detail.fallbackReason==='generation_interrupted')
+  const surfaceTransient=(detail:FailureDetail):AttemptResult=>{
+    events.onPoll?.({outcome:null,eligibleImages:detail.eligibleImages??null,requiredImages:detail.requiredImages??null,remainingCandidates:null,processing:null,generationStage:null,modelCalls:detail.modelCalls??null,notices:detail.notices??null})
+    return {type:'transient'}
+  }
   const attemptOnce=async():Promise<AttemptResult>=>{
     const requestBound=AbortSignal.timeout(articleCount===3?ARTICLE_3STORY_REQUEST_TIMEOUT_MS:ARTICLE_REQUEST_TIMEOUT_MS)
     const controller=new AbortController()
@@ -152,17 +164,8 @@ export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImp
       // isolated blips never stop a live generation.
       try{
         const parsed=failure.parse(await response.json())
-        const terminal=failed(parsed.status??'fallback',{fallbackReason:parsed.fallbackReason,budget:parsed.budget,eligibleImages:parsed.eligibleImages,requiredImages:parsed.requiredImages,validationStage:parsed.validationDiagnostic?.stage,modelCalls:parsed.modelCalls??null,notices:parsed.notices??null})
-        // A recoverable 3-story failure is transitional, not a verdict: a
-        // later poll resumes the same job from checkpoints. So is a lapsed
-        // lease: the previous owner may still complete the generating job.
-        // A budget denial is different — no generation is active, so its
-        // real reason reports terminally at once instead of polling on.
-        if(articleCount===3&&!parsed.budget&&(parsed.resume?.recoverable===true||parsed.fallbackReason==='generation_interrupted')){
-          events.onPoll?.({outcome:null,eligibleImages:parsed.eligibleImages??null,requiredImages:parsed.requiredImages??null,remainingCandidates:null,processing:null,generationStage:null,modelCalls:parsed.modelCalls??null,notices:parsed.notices??null})
-          return {type:'transient'}
-        }
-        return {type:'terminal',fetch:terminal}
+        if(transitional(parsed))return surfaceTransient(parsed)
+        return {type:'terminal',fetch:failed(parsed.status??'fallback',{fallbackReason:parsed.fallbackReason,budget:parsed.budget,eligibleImages:parsed.eligibleImages,requiredImages:parsed.requiredImages,validationStage:parsed.validationDiagnostic?.stage,modelCalls:parsed.modelCalls??null,notices:parsed.notices??null})}
       }catch{
         return {type:'unparseable'}
       }
@@ -174,6 +177,7 @@ export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImp
     if(data.articleEdition===null||data.items===undefined){
       const parsed=failure.safeParse(raw)
       const detail=parsed.success?parsed.data:{}
+      if(transitional(detail))return surfaceTransient(detail)
       return {type:'terminal',fetch:failed(detail.status??'fallback',{fallbackReason:detail.fallbackReason,budget:detail.budget,eligibleImages:detail.eligibleImages,requiredImages:detail.requiredImages,validationStage:detail.validationDiagnostic?.stage,modelCalls:detail.modelCalls??null,notices:detail.notices??null})}
     }
     const articleEdition=(articleCount===1?editorialSingleArticleEdition:editorialPartialArticleEdition).parse(data.articleEdition)

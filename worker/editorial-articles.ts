@@ -356,6 +356,7 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
   const jobNotices:JobNotice[]=(job?.history?.notices??[]).map(notice=>({...notice}))
   const emitNotice=(text:string)=>{jobNotices.push({id:crypto.randomUUID(),at:Date.now(),text});while(jobNotices.length>12)jobNotices.shift()}
   const noticesSnapshot=():JobNotice[]=>jobNotices.map(notice=>({...notice}))
+  let checkpointDegraded=false
   // Declared early: stage reports carry running spend, and the evidence
   // report runs before the reservation block below.
   let reservedUnits=0
@@ -433,7 +434,9 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
     // A failed 3-story job stays resumable while attempts remain and the
     // failure is recoverable. Quota denials without a failure object are
     // resumable too: a later attempt may proceed after the window resets.
-    const resumeMeta=triple&&modelCalls.length<ARTICLE_JOB_MAX_INVOCATIONS
+    // Resume needs the orchestrated job row: the direct path has nothing
+    // to resume from, so it must not promise resume metadata.
+    const resumeMeta=triple&&job&&modelCalls.length<ARTICLE_JOB_MAX_INVOCATIONS
       ?failure&&resumableFailure(failure)?{recoverable:true,failedStage:failure.stage,attemptsUsed:modelCalls.length,chargedUnits:reservedUnits}
       :!failure&&reason==='budget'?{recoverable:true,failedStage:null,attemptsUsed:modelCalls.length,chargedUnits:reservedUnits}
       :null
@@ -519,7 +522,9 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
     // Durable per-stage checkpoints (prepared 3-story only). A checkpoint
     // write doubles as a lease assertion: the orchestrator writes
     // conditionally on lease ownership, so a superseded owner aborts
-    // instead of issuing concurrent duplicate requests.
+    // instead of issuing concurrent duplicate requests. Pre-migration
+    // storage has no checkpoints table yet: completing the run without
+    // resume safety beats looping paid calls that can never adopt.
     const CHECKPOINT_ARTICLE_STAGE:Record<CheckpointStage,ArticleStage>={chief:'chief_editor',review:'reviewer',revision:'revision',confirmation:'confirmation'}
     const checkpoint=async(stageName:CheckpointStage,payload:CheckpointPayload)=>{
       if(!job?.onCheckpoint)return
@@ -532,6 +537,10 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
         if(!written)throw new ArticleWorkflowError(stage,'lease_expired')
       }catch(error){
         if(error instanceof ArticleWorkflowError)throw error
+        if(error instanceof Error&&/no such table/i.test(error.message)){
+          if(!checkpointDegraded){checkpointDegraded=true;emitNotice('Stage checkpoints unavailable; continuing without resume safety for this run.');console.error(JSON.stringify({event:'article_checkpoint_unavailable',stage:stageName}))}
+          return
+        }
         throw new ArticleWorkflowError(stage,'checkpoint_unavailable')
       }
     }
