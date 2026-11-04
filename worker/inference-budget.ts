@@ -7,21 +7,30 @@ import {resolveDemoTestingPolicy} from './demo-testing-policy'
 
 export class InferenceReservation{
   private remaining:number
-  constructor(public readonly reservedUnits:number){this.remaining=reservedUnits}
+  public totalUnits:number
+  constructor(public readonly reservedUnits:number){this.remaining=reservedUnits;this.totalUnits=reservedUnits}
   claim(){if(this.remaining<1)return false;this.remaining--;return true}
+  // Retry top-ups extend a live reservation after the Durable Object
+  // charges them. The local counter never exceeds charged units.
+  addUnits(units:number){this.remaining+=units;this.totalUnits+=units}
   get unusedUnits(){return this.remaining}
 }
+
+// Maximum actual Meta invocations per article job, including retries.
+// Normal 3-story flow uses 4; retries top up toward this ceiling.
+export const ARTICLE_JOB_MAX_INVOCATIONS=30
 
 function budgetLimits(env:Bindings,demo:boolean){
   const ceiling=Number(demo?env.EDITORIAL_DEMO_LIFETIME_UNITS:env.MAGAZINE_MAX_CALLS??'20')
   const daily=Number(demo?env.EDITORIAL_DEMO_DAILY_UNITS:env.INFERENCE_DAILY_MAX_UNITS??'20')
-  if(!Number.isInteger(ceiling)||ceiling<1||ceiling>(demo?500:100)||!Number.isInteger(daily)||daily<1||daily>(demo?160:100))throw Error('Invalid budget limits')
+  if(!Number.isInteger(ceiling)||ceiling<1||ceiling>(demo?10000:100)||!Number.isInteger(daily)||daily<1||daily>(demo?2000:100))throw Error('Invalid budget limits')
   return {ceiling,daily}
 }
 
 // Shared namespace/name and unchanged ceilings for magazine and Decoder calls.
 // Multi-model operations reserve every possible call atomically, never refund.
-export async function reserveInference(env: Bindings, ip: string, units: 1 | 2 | 3 | 4 | 5 = 1, samAssetId?: string,editorialPilot=false,demoTester:string|null=null,articlePreparation=false) {
+export type ArticleJobUnits={jobKey:string;topUp?:boolean}
+export async function reserveInference(env: Bindings, ip: string, units: 1 | 2 | 3 | 4 | 5 = 1, samAssetId?: string,editorialPilot=false,demoTester:string|null=null,articlePreparation=false,jobUnits?:ArticleJobUnits) {
   if (!env.RATE_LIMIT_SALT || env.RATE_LIMIT_SALT.length < 32 || !env.INFERENCE_BUDGET) throw new Error('Budget unavailable')
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.RATE_LIMIT_SALT), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
   const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(ip))
@@ -33,6 +42,7 @@ export async function reserveInference(env: Bindings, ip: string, units: 1 | 2 |
   const stub = env.INFERENCE_BUDGET.get(env.INFERENCE_BUDGET.idFromName('magazine-v1'))
   if(editorialPilot&&(units!==4||!env.EDITORIAL_REVIEW_PILOT_TOKEN||env.EDITORIAL_REVIEW_PILOT_TOKEN.length<32))throw new Error('Pilot unavailable')
   if(articlePreparation&&(units!==1||samAssetId||editorialPilot||env.EDITORIAL_ARTICLE_PREPARATION_ENABLED!=='true'))throw new Error('Article preparation unavailable')
+  if(jobUnits&&(samAssetId||editorialPilot||articlePreparation||(jobUnits.topUp&&units!==1)||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,89}$/.test(jobUnits.jobKey)))throw new Error('Article job units unavailable')
   const preparationPolicy=articlePreparation?resolveArticlePreparationPolicy(env):null
   const rates=resolveRatePolicy(env)
   const articleV3=units===5&&env.EDITORIAL_WORKFLOW_V3_ENABLED==='true'&&!samAssetId&&!editorialPilot&&!articlePreparation
@@ -40,8 +50,8 @@ export async function reserveInference(env: Bindings, ip: string, units: 1 | 2 |
   if(articleV3)rates.reviewedHourlyUnits=Math.max(5,rates.reviewedHourlyUnits)
   const testerHash=demo&&demoTester?await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(`demo-tester:${demoTester}`)):null
   const testerKey=testerHash?Array.from(new Uint8Array(testerHash),value=>value.toString(16).padStart(2,'0')).join(''):null
-  const testingActive=Boolean(testing&&demo&&testerKey&&(units===4||articleV3)&&!samAssetId&&!articlePreparation)
-  const response = await stub.fetch('https://budget/reserve', { method: 'POST', body: JSON.stringify({ ip: hash, ceiling, daily, demo, rates, ...(testerKey&&(units===4||articleV3)?{demoTester:testerKey}:{}), ...(testingActive?{demoTestingPolicy:testing}:{}), ...(units > 1 ? { units } : {}),...(articleV3?{articleV3:true}:{}), ...(samAssetId ? { samAssetId } : {}),...(editorialPilot?{editorialPilot:true}:{}),...(preparationPolicy?{articlePreparation:true,articlePreparationPolicy:preparationPolicy}:{}) }) })
+  const testingActive=Boolean(testing&&demo&&testerKey&&(units===4||articleV3||jobUnits)&&!samAssetId&&!articlePreparation)
+  const response = await stub.fetch('https://budget/reserve', { method: 'POST', body: JSON.stringify({ ip: hash, ceiling, daily, demo, rates, ...(testerKey&&(units===4||articleV3||jobUnits)?{demoTester:testerKey}:{}), ...(testingActive?{demoTestingPolicy:testing}:{}), ...(units > 1 ? { units } : {}),...(articleV3?{articleV3:true}:{}), ...(samAssetId ? { samAssetId } : {}),...(editorialPilot?{editorialPilot:true}:{}),...(preparationPolicy?{articlePreparation:true,articlePreparationPolicy:preparationPolicy}:{}),...(jobUnits?{jobUnits:{jobKey:jobUnits.jobKey,jobCap:ARTICLE_JOB_MAX_INVOCATIONS,...(jobUnits.topUp?{topUp:true}:{})}}:{}) }) })
   if (!response.ok) throw new Error('Budget unavailable')
   const result = await response.json() as { allowed?: boolean; retryAfter?: number; reservationId?: string;denial?:unknown }
   if (typeof result.allowed !== 'boolean') throw new Error('Invalid budget result')

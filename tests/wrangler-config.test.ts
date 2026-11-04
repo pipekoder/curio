@@ -25,7 +25,11 @@ it('pins the article preparation limits',()=>{
 })
 
 it('pins the Demo Testing window, Demo budget caps, and Article Chief timeout',()=>{
-  expect(config.vars).toMatchObject({DEMO_TESTING_MODE:'true',DEMO_TESTING_WINDOW_SECONDS:'900',DEMO_TESTING_WINDOW_UNITS:'12',EDITORIAL_DEMO_BUDGET_ENABLED:'true',EDITORIAL_DEMO_DAILY_UNITS:'160',EDITORIAL_DEMO_LIFETIME_UNITS:'500',ARTICLE_CHIEF_TIMEOUT_MS:'60000'})
+  expect(config.vars).toMatchObject({DEMO_TESTING_MODE:'true',DEMO_TESTING_WINDOW_SECONDS:'900',DEMO_TESTING_WINDOW_UNITS:'200',EDITORIAL_DEMO_BUDGET_ENABLED:'true',EDITORIAL_DEMO_DAILY_UNITS:'1000',EDITORIAL_DEMO_LIFETIME_UNITS:'5000',ARTICLE_CHIEF_TIMEOUT_MS:'60000'})
+})
+
+it('pins the judging hourly quotas and cooldown',()=>{
+  expect(config.vars).toMatchObject({INFERENCE_STANDARD_HOURLY_UNITS:'200',INFERENCE_REVIEWED_HOURLY_UNITS:'200',INFERENCE_TESTER_HOURLY_UNITS:'200',INFERENCE_TESTER_DAILY_UNITS:'1000',INFERENCE_COOLDOWN_SECONDS:'5'})
 })
 
 it('preserves budgets, models, and bindings',()=>{

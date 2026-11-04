@@ -5,7 +5,7 @@ export const budgetLimitType=z.enum([
   'demo_tester_hourly','demo_tester_daily','demo_tester_concurrency',
   'demo_testing_window',
   'article_preparation_hourly','article_preparation_daily','article_preparation_window','article_preparation_concurrency',
-  'sam_once_per_asset',
+  'sam_once_per_asset','job_invocation_cap',
 ])
 export type BudgetLimitType=z.infer<typeof budgetLimitType>
 export const budgetDenial=z.strictObject({
@@ -34,7 +34,7 @@ const labels:Record<BudgetLimitType,string>={
   demo_tester_hourly:'your tester hourly allowance',demo_tester_daily:'your tester daily allowance',demo_tester_concurrency:'your concurrent tester request limit',
   demo_testing_window:'your Demo Testing window',
   article_preparation_hourly:'your hourly image-preparation allowance',article_preparation_daily:'your daily image-preparation allowance',article_preparation_window:'your image-preparation request window',article_preparation_concurrency:'the shared image-preparation concurrency limit',
-  sam_once_per_asset:'the one-time object-analysis limit for this image',
+  sam_once_per_asset:'the one-time object-analysis limit for this image',job_invocation_cap:'the article job invocation cap',
 }
 export function budgetExplanation(value:PublicBudgetDiagnostic):string{
   const unit=value.measure==='units'?'inference units':value.measure==='requests'?'requests':'active requests'

@@ -10,13 +10,15 @@ Defaults and optional Worker environment overrides (all integers, validated befo
 
 | Variable | Default | Allowed |
 | --- | ---: | ---: |
-| `INFERENCE_STANDARD_HOURLY_UNITS` | 3 | 1–12 |
-| `INFERENCE_REVIEWED_HOURLY_UNITS` | 4 | 4–8 |
+| `INFERENCE_STANDARD_HOURLY_UNITS` | 3 | 1–1000 |
+| `INFERENCE_REVIEWED_HOURLY_UNITS` | 4 | 4–1000 |
 | `INFERENCE_PILOT_HOURLY_UNITS` | 8 | 4–16 |
-| `INFERENCE_TESTER_HOURLY_UNITS` | 40 | 4–80 |
-| `INFERENCE_TESTER_DAILY_UNITS` | 120 | 4–160, and at least tester hourly |
-| `INFERENCE_COOLDOWN_SECONDS` | 60 | 60–600 |
+| `INFERENCE_TESTER_HOURLY_UNITS` | 40 | 4–1000 |
+| `INFERENCE_TESTER_DAILY_UNITS` | 120 | 4–2000, and at least tester hourly |
+| `INFERENCE_COOLDOWN_SECONDS` | 60 | 5–600 |
 | `INFERENCE_TESTER_CONCURRENT` | 2 | 1–2 |
+
+The Demo deployment pins the judging values in `wrangler.jsonc` (200/200/200/1000 hourly/daily quotas, 5-second cooldown, 1000-unit Demo day, 5000-unit Demo lifetime, 200-unit/15-minute testing window). Hourly, cooldown and tester rates are deployment-wide: they apply identically whether Demo is on or off. The Demo toggle switches the shared ceilings (Demo 5000/1000 vs Standard 100/100) and enables the tester lanes and testing window. A deployment without the overrides keeps the restrictive defaults above.
 
 The existing `MAGAZINE_MAX_CALLS` (standard lifetime), `INFERENCE_DAILY_MAX_UNITS` (standard day), and `EDITORIAL_DEMO_LIFETIME_UNITS`/`EDITORIAL_DEMO_DAILY_UNITS` (Demo shared caps) remain separate, validated and authoritative. The source-controlled `wrangler.jsonc` on this branch sets standard lifetime/day to 100 units each, but that is **not** a verified Production runtime readback. The five existing `ARTICLE_PREP_*` variables still govern image preparation. An invalid override fails closed; it never silently increases the fallback cap. Dashboard changes are runtime configuration, but a subsequent Git/Wrangler deployment can replace Dashboard values with the source-controlled configuration. Record the approved values through the existing configuration release process before deploying, then verify the protected status endpoint. No new migration or Durable Object is needed.
 

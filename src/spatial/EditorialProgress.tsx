@@ -40,7 +40,7 @@ export default function EditorialProgress({progress}:{progress:ProgressSnapshot}
       <p className="spatial-eyebrow">Live Meta AI Logs</p>
       <ol className="editorial-model-log-list" ref={logRef}>
         {progress.modelCalls.map(call=><li key={call.id} className="editorial-model-log-row">
-          <div className="editorial-model-log-line">{formatCallTime(call.startedAt)} · {call.model} · {MODEL_CALL_STATUS[call.status]} · {formatCallDuration(call)}</div>
+          <div className="editorial-model-log-line">{formatCallTime(call.startedAt)} · {call.model} · {MODEL_CALL_STATUS[call.status]} · {formatCallDuration(call)}{call.attempt>1?` · attempt ${call.attempt}`:''}</div>
           <div className="editorial-model-log-task">{MODEL_CALL_TASK[call.stage]} — {call.summary??MODEL_CALL_RUNNING[call.stage]}</div>
         </li>)}
       </ol>

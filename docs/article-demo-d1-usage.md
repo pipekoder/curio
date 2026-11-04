@@ -65,3 +65,24 @@ one edition the shared validation rejects any repeated asset with
 `duplicate_image`, so the same image cannot appear twice in one 3-Story
 Edition. Live AI Logs show only the current job's own invocations; resumed
 history renders as recorded entries, never as new live calls.
+
+## Progressive live logs
+
+Each real Meta invocation reports twice to its D1 job row: a `calling`
+entry the moment the request starts (model ID, stage, attempt number,
+timestamp) and an updated entry when it settles (`completed` with duration,
+usage and result summary, or `failed` with the real error category).
+Retries are separate entries with their own attempt numbers; reports never
+invent activity, and the `reservation` pseudo-stage stays out of the visible
+log. Recovery notices (retry scheduled, resume adopted) travel alongside but
+render separately from model calls.
+
+The lease owner holds one long request for the whole workflow, so the
+client polls concurrently: a fresh poll launches every 5 seconds while
+earlier requests are still in flight, and each HTTP 202 carries the latest
+persisted invocations. The first terminal response wins and aborts the
+stragglers; polls are single-SELECT reads and never reserve budget. A
+resumed job re-serves its recorded entries as history with original IDs and
+timestamps. No migration, endpoint or streaming work is involved: the
+polling loop, the job row's `result_json`, and the existing 202 shape carry
+the whole flow.

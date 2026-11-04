@@ -19,6 +19,10 @@ test('a repeated prompt starts a fresh exploration with a new id',async({page})=
   await page.getByRole('button',{name:'New Discovery'}).click()
   await page.getByLabel('Your curiosity').fill('Quiet Nordic interiors')
   await page.getByRole('button',{name:'Begin exploration'}).click()
+  // New Discovery intentionally keeps the staged edition visible, so the
+  // chip below still shows the first edition until the second one stages.
+  // Wait for the second request itself before asserting fresh identity.
+  await expect.poll(()=>bodies.length).toBe(2)
   await expect(page.getByTestId('spatial-edition-chip')).toContainText('Article edition',{timeout:15000})
   expect(bodies).toHaveLength(2)
   expect(bodies[0].explorationId).toMatch(uuid)

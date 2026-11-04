@@ -1,4 +1,4 @@
-import type {ModelCallEvent} from '../../shared/article-model-calls'
+import type {ModelCallEvent,JobNotice} from '../../shared/article-model-calls'
 import type {ArticlePoll} from './articles'
 
 // Editorial progress model. Every transition below is driven by an observed
@@ -40,7 +40,7 @@ const GEN_DONE:Record<string,string>={
   confirmation:'Final editorial review complete.',
 }
 
-export type ArticleFinish={ok:boolean;staged?:boolean;evidence?:{interpretations:number}|null;revised:boolean;failureStage?:string|null;fallbackReason?:string|null;frozen?:boolean;modelCalls?:ModelCallEvent[]|null}
+export type ArticleFinish={ok:boolean;staged?:boolean;evidence?:{interpretations:number}|null;revised:boolean;failureStage?:string|null;fallbackReason?:string|null;frozen?:boolean;modelCalls?:ModelCallEvent[]|null;notices?:JobNotice[]|null}
 
 export function createArticleTracker(){
   const stages:ProgressStage[]=[
@@ -76,6 +76,9 @@ export function createArticleTracker(){
     poll(input:ArticlePoll):ProgressSnapshot{
       if(finished)return snapshot()
       if(input.modelCalls)modelCalls=input.modelCalls.map(call=>({...call}))
+      // Lifecycle notices (retries, resumes) join the activity feed, kept
+      // separate from model invocations. Feed keys dedupe replays.
+      if(input.notices)for(const notice of input.notices)emit(`notice-${notice.id}`,notice.text)
       complete('verify','verify-done','Approved imagery verified.')
       if(input.eligibleImages!==null&&input.requiredImages!==null&&input.requiredImages>0){
         const analyze=byId('analyze')
@@ -128,6 +131,7 @@ export function createArticleTracker(){
       if(finished)return snapshot()
       finished=true
       if(input.modelCalls)modelCalls=input.modelCalls.map(call=>({...call}))
+      if(input.notices)for(const notice of input.notices)emit(`notice-${notice.id}`,notice.text)
       if(input.frozen){
         emit('frozen','Stopped waiting for the editorial team.')
         return snapshot()

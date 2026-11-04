@@ -64,7 +64,7 @@ it('rejects unsafe toggle and window values, preserving defaults when unset',()=
  expect(resolveDemoTestingPolicy({DEMO_TESTING_MODE:'false'} as never)).toBe(null)
  expect(resolveDemoTestingPolicy({DEMO_TESTING_MODE:'true'} as never)).toEqual(testing)
  expect(resolveDemoTestingPolicy({DEMO_TESTING_MODE:'true',DEMO_TESTING_WINDOW_SECONDS:'1800',DEMO_TESTING_WINDOW_UNITS:'24'} as never)).toEqual({windowSeconds:1800,windowUnits:24})
- for(const config of [{DEMO_TESTING_MODE:'yes'},{DEMO_TESTING_WINDOW_SECONDS:'0'},{DEMO_TESTING_WINDOW_SECONDS:'3601'},{DEMO_TESTING_WINDOW_UNITS:'25'},{DEMO_TESTING_WINDOW_UNITS:'5'}])expect(()=>resolveDemoTestingPolicy(config as never)).toThrow()
+ for(const config of [{DEMO_TESTING_MODE:'yes'},{DEMO_TESTING_WINDOW_SECONDS:'0'},{DEMO_TESTING_WINDOW_SECONDS:'3601'},{DEMO_TESTING_WINDOW_UNITS:'1004'},{DEMO_TESTING_WINDOW_UNITS:'5'}])expect(()=>resolveDemoTestingPolicy(config as never)).toThrow()
 })
 
 it('requires an authenticated Demo session and does not make anonymous, SAM or preparation requests special',async()=>{
