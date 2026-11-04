@@ -499,7 +499,10 @@ export async function articleEditorialResponse(request:Request,env:Bindings,p:Ed
         try{
           const result=await structuredMuse(env.META_API_KEY!,model,instruction,input,schema,name,maxTokens,stage,()=>{called++},stage==='chief_editor'?chiefTimeoutMs:stage==='reviewer'?reviewTimeoutMs:stepTimeoutMs,workflowSignal)
           if(result.usage)measurements.push(result.usage)
-          if(event){event.endedAt=Date.now();event.status='completed';event.summary=summarizeModelCall(callStage,result.value);if(result.usage)event.usage={inputTokens:result.usage.inputTokens,outputTokens:result.usage.outputTokens}}
+          // Report completions as well as starts: concurrent polls must see
+          // the finished entry (with duration and usage) while the workflow
+          // still runs, not a stale calling entry until the next stage.
+          if(event){event.endedAt=Date.now();event.status='completed';event.summary=summarizeModelCall(callStage,result.value);if(result.usage)event.usage={inputTokens:result.usage.inputTokens,outputTokens:result.usage.outputTokens};if(callStage!=='reservation')await reportStage(callStage)}
           return result.value
         }catch(error){
           lastError=error

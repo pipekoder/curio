@@ -9,6 +9,7 @@ import type {EditorialPreferences} from '../shared/editorial'
 import type {EditorialSource} from '../shared/editorial-sources'
 import type {VisualContext} from '../shared/visual-observations'
 import {ARTICLE_CONTRACT_VERSION,ARTICLE_SINGLE_CONTRACT_VERSION,type EditorialArticleEdition} from '../shared/editorial-articles'
+import type {ModelCallEvent} from '../shared/article-model-calls'
 import {editorialDimensions,EDITORIAL_STANDARD_VERSION,type EditorialReviewOutput} from '../shared/editorial-standard'
 import {articleEditorialResponse,mergeRevisionProse,validateArticleEdition,type AdoptedCheckpoint,type CheckpointInvocation} from '../worker/editorial-articles'
 import type {CheckpointStage,CheckpointPayload} from '../shared/article-checkpoints'
@@ -620,6 +621,25 @@ it('resolves repeated requests with the same explorationId to the same completed
   expect(rows).toHaveLength(1)
  }finally{sqlite.close()}
 })
+it('never charges the budget again for completed-job polls',async()=>{
+ const {sqlite,db}=preparationDb()
+ try{
+  vi.mocked(editorialArticlePool).mockResolvedValue(prepared(6,[]))
+  const send=provider();vi.stubGlobal('fetch',send)
+  const {calls,budget}=budgetCalls()
+  const config={EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db,INFERENCE_BUDGET:budget}
+  const prompt={interests:'A poll-expense study in quiet rooms',explorationId:randomUUID()}
+  const one=await post(config,prompt)
+  expect(one.status).toBe(200)
+  expect(calls).toHaveLength(1)
+  for(let i=0;i<3;i++){
+    const again=await post(config,prompt)
+    expect(await again.json()).toMatchObject({cached:true,inference:{attempted:false}})
+  }
+  expect(calls).toHaveLength(1)
+  expect(send).toHaveBeenCalledTimes(4)
+ }finally{sqlite.close()}
+})
 it('rejects a malformed explorationId without creating a job or calling models',async()=>{
  const {sqlite,db}=preparationDb()
  try{
@@ -889,7 +909,9 @@ it('reports chief, reviewer, revision and confirmation entries through the progr
   const request=new Request(origin,{method:'POST',headers:{Origin:origin,'CF-Connecting-IP':'192.0.2.9'}})
   const response=await articleEditorialResponse(request,environment(),preferences,'lite',undefined,3,stage=>{seen.push(stage)})
   expect(response.status).toBe(200)
-  expect(seen).toEqual(['chief_editor','reviewer','revision','confirmation'])
+  // Each stage reports twice: at invocation start (calling) and at
+  // completion, so concurrent polls observe transitions while running.
+  expect(seen).toEqual(['chief_editor','chief_editor','reviewer','reviewer','revision','revision','confirmation','confirmation'])
 })
 it('reports revision and confirmation entries when review requests changes',async()=>{
   mockPool()
@@ -898,7 +920,7 @@ it('reports revision and confirmation entries when review requests changes',asyn
   const request=new Request(origin,{method:'POST',headers:{Origin:origin,'CF-Connecting-IP':'192.0.2.9'}})
   const response=await articleEditorialResponse(request,environment(),{...preferences,interests:'A revision-forcing study in quiet interiors'},'lite',undefined,3,stage=>{seen.push(stage)})
   expect(response.status).toBe(200)
-  expect(seen).toEqual(['chief_editor','reviewer','revision','confirmation'])
+  expect(seen).toEqual(['chief_editor','chief_editor','reviewer','reviewer','revision','revision','confirmation','confirmation'])
 })
 it('schedules hotspot processing only after validated editions lock images',async()=>{
   mockPool()
@@ -1357,6 +1379,47 @@ it('records one completed entry per actual invocation on the published edition',
   expect(leaked).not.toContain('fixture-only')
   expect(leaked).not.toContain('Explore seating')
 })
+it('reports each attempt start and completion while the workflow still runs',async()=>{
+  mockPool()
+  vi.stubGlobal('fetch',provider())
+  const stages:{stage:string;calls:LoggedCall[]}[]=[]
+  const onStage=(stage:string,modelCalls?:ModelCallEvent[])=>{stages.push({stage,calls:structuredClone(modelCalls??[]) as LoggedCall[]})}
+  const body=await (await articleEditorialResponse(liveLogRequest(),environment(),{...preferences,interests:'A progressive live-log study'},'lite',undefined,3,onStage as never)).json() as {modelCalls?:LoggedCall[]}
+  const chief=stages.filter(report=>report.stage==='chief_editor')
+  expect(chief).toHaveLength(2)
+  expect(chief[0].calls).toHaveLength(1)
+  expect(chief[0].calls[0]).toMatchObject({stage:'chief_editor',status:'calling',endedAt:null})
+  expect(chief[1].calls[0]).toMatchObject({stage:'chief_editor',status:'completed'})
+  expect(chief[1].calls[0].endedAt).toBeGreaterThanOrEqual(chief[1].calls[0].startedAt)
+  expect(body.modelCalls).toHaveLength(4)
+})
+it('persists the calling entry before the provider responds',async()=>{
+  const {sqlite,db}=preparationDb()
+  try{
+    vi.mocked(editorialArticlePool).mockResolvedValue(prepared(6,[]))
+    let release!:()=>void
+    const gate=new Promise<void>(resolve=>{release=resolve})
+    const send=provider()
+    let calls=0
+    vi.stubGlobal('fetch',vi.fn(async(url:string,init:RequestInit)=>{
+      if(++calls===1)await gate
+      return send(url,init)
+    }))
+    const pending=post({EDITORIAL_ARTICLE_PREPARATION_ENABLED:'true',CATALOG_DB:db},{interests:'A gated live-log study',explorationId:randomUUID()})
+    let observed:null|{modelCalls?:LoggedCall[]}=null
+    for(let i=0;i<100&&!observed;i++){
+      const row=sqlite.prepare('SELECT result_json FROM article_edition_jobs').get() as {result_json:string|null}|undefined
+      if(row?.result_json?.includes('"calling"'))observed=JSON.parse(row.result_json)
+      else await new Promise(resolve=>setTimeout(resolve,10))
+    }
+    release()
+    const response=await pending
+    expect(observed?.modelCalls).toHaveLength(1)
+    expect(observed?.modelCalls![0]).toMatchObject({model:'muse-spark-1.3',stage:'chief_editor',attempt:1,status:'calling',endedAt:null})
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({source:'meta'})
+  }finally{sqlite.close()}
+})
 it('reports the actually invoked chief model per mode',async()=>{
   for(const [mode,chief] of [['lite','muse-spark-1.3'],['hybrid','muse-wonder-1.0']] as const){
     mockPool()
@@ -1378,10 +1441,11 @@ it('carries the accumulated calling entry on every stage report',async()=>{
   const seen:{stage:string;calls:LoggedCall[]}[]=[]
   const response=await articleEditorialResponse(liveLogRequest(),environment(),{...preferences,interests:'A stage-report study in quiet interiors'},'lite',undefined,3,(stage,calls)=>{seen.push({stage,calls:calls??[]})})
   expect(response.status).toBe(200)
-  expect(seen.map(entry=>entry.stage)).toEqual(['chief_editor','reviewer','revision','confirmation'])
-  expect(seen.map(entry=>entry.calls.length)).toEqual([1,2,3,4])
-  expect(seen[3].calls.map(call=>call.status)).toEqual(['completed','completed','completed','calling'])
-  expect(seen[3].calls[3]).toMatchObject({stage:'confirmation',model:'muse-spark-1.3'})
+  expect(seen.map(entry=>entry.stage)).toEqual(['chief_editor','chief_editor','reviewer','reviewer','revision','revision','confirmation','confirmation'])
+  expect(seen.map(entry=>entry.calls.length)).toEqual([1,1,2,2,3,3,4,4])
+  expect(seen[6].calls.map(call=>call.status)).toEqual(['completed','completed','completed','calling'])
+  expect(seen[6].calls[3]).toMatchObject({stage:'confirmation',model:'muse-spark-1.3'})
+  expect(seen[7].calls.map(call=>call.status)).toEqual(['completed','completed','completed','completed'])
 })
 it('records the planning invocation for V3 single stories',async()=>{
   mockPool(3)
@@ -1478,7 +1542,7 @@ it('runs a successful 3-story Lite generation with one reserve and no top-ups',a
   expect(body.inference.reservedUnits).toBe(4)
   expect(body.modelCalls).toHaveLength(4)
   expect(calls).toHaveLength(1)
-  expect(calls[0]).toMatchObject({units:4,jobUnits:{jobCap:20}})
+  expect(calls[0]).toMatchObject({units:4,jobUnits:{jobCap:30}})
   expect((calls[0] as {jobUnits:{jobKey:string}}).jobUnits.jobKey).toMatch(/^direct-/)
 })
 it('runs a successful 3-story Hybrid generation through Wonder chief',async()=>{
@@ -1505,7 +1569,7 @@ it('retries confirmation after a stage timeout and publishes',async()=>{
   expect(body.modelCalls![4]).toMatchObject({stage:'confirmation',attempt:2,status:'completed'})
   expect(body.notices!.map(notice=>notice.text)).toEqual(['Confirmation timed out; retrying (attempt 2 of 3).'])
   expect(calls).toHaveLength(2)
-  expect(calls[1]).toMatchObject({jobUnits:{jobCap:20,topUp:true}})
+  expect(calls[1]).toMatchObject({jobUnits:{jobCap:30,topUp:true}})
   expect(calls[1]).not.toHaveProperty('units')
 })
 it('honors Retry-After on HTTP 429 and recovers',async()=>{
@@ -1585,17 +1649,17 @@ it('aborts without publishing when the lease is lost mid-run',async()=>{
   expect(body.resume).toMatchObject({recoverable:true,attemptsUsed:1})
   expect(send).toHaveBeenCalledTimes(1)
 })
-it('fails terminally at the 20-invocation cap without further charges',async()=>{
+it('fails terminally at the 30-invocation cap without further charges',async()=>{
   mockPool()
   const send=provider()
   vi.stubGlobal('fetch',send)
-  const history=Array.from({length:19},(_,index)=>({id:`hist-${index}`,model:'muse-spark-1.3',stage:'chief_editor',attempt:1,startedAt:1760000000000+index,endedAt:1760000000100+index,status:'completed',summary:'x'}))
+  const history=Array.from({length:29},(_,index)=>({id:`hist-${index}`,model:'muse-spark-1.3',stage:'chief_editor',attempt:1,startedAt:1760000000000+index,endedAt:1760000000100+index,status:'completed',summary:'x'}))
   const {calls,budget}=budgetCalls()
   const body=await (await articleEditorialResponse(liveLogRequest(),environment({INFERENCE_BUDGET:budget,ARTICLE_RETRY_BACKOFF_BASE_MS:'0'}),{...preferences,interests:'A cap-exhaustion study in quiet interiors'},'lite',undefined,3,undefined,undefined,undefined,
-    {jobKey:'job-cap-1',attemptsUsed:19,chargedUnits:19,history:{modelCalls:history as never,notices:[]}})).json() as {fallbackReason?:string;validationDiagnostic?:{code:string};modelCalls?:LoggedCall[];resume?:unknown}
+    {jobKey:'job-cap-1',attemptsUsed:29,chargedUnits:29,history:{modelCalls:history as never,notices:[]}})).json() as {fallbackReason?:string;validationDiagnostic?:{code:string};modelCalls?:LoggedCall[];resume?:unknown}
   expect(body.fallbackReason).toBe('provider_or_validation')
   expect(body.validationDiagnostic).toMatchObject({code:'workflow_limit'})
-  expect(body.modelCalls).toHaveLength(20)
+  expect(body.modelCalls).toHaveLength(30)
   expect(send).toHaveBeenCalledTimes(1)
   expect(body.resume).toBeUndefined()
   expect(calls).toHaveLength(1)

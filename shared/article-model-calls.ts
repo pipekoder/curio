@@ -15,7 +15,7 @@ export const modelCallEvent=z.strictObject({
   stage:modelCallStage,
   // 1-based attempt within the stage. Rows written before retries default
   // to the first attempt so upgrade never drops observed history.
-  attempt:z.number().int().min(1).max(20).default(1),
+  attempt:z.number().int().min(1).max(30).default(1),
   startedAt:z.number().int().min(0),
   endedAt:z.number().int().min(0).nullable(),
   status:z.enum(['calling','completed','failed']),
@@ -27,7 +27,7 @@ export type ModelCallEvent=z.infer<typeof modelCallEvent>
 // One generation runs at most planning, chief, reviewer, revision and
 // confirmation, with retries bounded by the job invocation cap. The array
 // cap only bounds malformed payloads.
-export const modelCallEvents=z.array(modelCallEvent).max(20)
+export const modelCallEvents=z.array(modelCallEvent).max(30)
 // System lifecycle notices (retry scheduled, resume adopted) travel with
 // the invocation log but render separately: they are never model calls.
 export const jobNotice=z.strictObject({id:z.string().min(1).max(80),at:z.number().int().min(0),text:z.string().min(1).max(200)})

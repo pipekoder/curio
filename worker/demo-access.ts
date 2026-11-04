@@ -13,7 +13,7 @@ const validId=(value:string)=>/^[a-z0-9_-]{1,40}$/.test(value)
 
 export function demoCapsValid(env:Bindings){
   const daily=Number(env.EDITORIAL_DEMO_DAILY_UNITS),lifetime=Number(env.EDITORIAL_DEMO_LIFETIME_UNITS)
-  return Number.isInteger(daily)&&daily>=4&&daily<=160&&Number.isInteger(lifetime)&&lifetime>=daily&&lifetime<=500
+  return Number.isInteger(daily)&&daily>=4&&daily<=2000&&Number.isInteger(lifetime)&&lifetime>=daily&&lifetime<=10000
 }
 export function demoPolicyEnabled(env:Bindings){
   return env.EDITORIAL_DEMO_BUDGET_ENABLED==='true'&&env.MAGAZINE_AI_ENABLED==='true'&&env.EDITORIAL_REVIEW_ENABLED==='true'

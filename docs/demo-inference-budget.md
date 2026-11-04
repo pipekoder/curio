@@ -6,9 +6,17 @@ This backend-only policy is separate from PR #65's dynamic Content Studio select
 
 One reviewed Editorial request atomically reserves **4 units** before any provider call. A first-pass Chief Editor + Reviewer result uses 2 model calls; Revision + Confirmation brings the maximum to 4. Unused units are not refunded, and failed, cancelled, or timed-out requests keep their reservation. An approved 5-minute cached plan, rejected consent, or failed preflight reserves zero units. Existing counters stay in the same `magazine-v1` Durable Object and are not reset by rollout.
 
-When explicitly enabled, the demo policy allows an authenticated tester 40 units per UTC hour (10 reviewed requests) and 120 units per UTC day (30). Two leases can be active for the same tester; the 60-second IP cooldown permits at most two authenticated reservations in that window. Anonymous Editorial requests remain at 4 units per IP per UTC hour (one reviewed request) and one per rolling 60 seconds. All workflows share a 160-unit UTC-day cap and a 500-unit cumulative cap. This is at most 40 new reviewed editions/day and 125 over the lifetime of this Durable Object, minus units already spent on any workflow. At four calls per edition the absolute model-call exposure is at most 160/day and 500 cumulative, subject to provider failures and other workflow usage. Each call requests at most 2,200 completion tokens; input-token and provider billing limits must be checked in Meta.
+When explicitly enabled, the Demo deployment policy allows an authenticated tester 200 units per UTC hour (50 reviewed requests) and 1000 units per UTC day (250). Two leases can be active for the same tester; the 5-second IP cooldown permits at most two authenticated reservations in that window. Anonymous visitors share the deployment-wide hourly quotas: 200 standard units and 200 reviewed units per IP per UTC hour (50 reviewed requests), one request per rolling 5 seconds. All workflows share a 1000-unit UTC-day cap and a 5000-unit cumulative cap: at most 250 new reviewed editions/day and 1250 over the lifetime of this Durable Object, minus units already spent on any workflow. Model-call exposure follows charged units (one charge per actual invocation, including retries, up to the 30-attempt per-job ceiling below), subject to provider failures and other workflow usage. Each call requests at most 2,200 completion tokens; input-token and provider billing limits must be checked in Meta.
 
-The standard `MAGAZINE_MAX_CALLS` variable retains its 1–100 validation and is not set to 500. The demo policy uses **new, explicit** caps. When disabled, Standard Mode uses `INFERENCE_DAILY_MAX_UNITS` (1–100, default 20 when unset) and the `MAGAZINE_MAX_CALLS` lifetime ceiling. If demo use raises the existing lifetime counter above the standard ceiling, switching back safely blocks further inference rather than resetting usage.
+Hourly, cooldown and tester rates are deployment-wide worker variables: they apply identically whether Demo is on or off. The standard `MAGAZINE_MAX_CALLS` variable retains its 1–100 validation. The demo policy uses **new, explicit** caps (daily up to 2000, lifetime up to 10000). When disabled, Standard Mode uses `INFERENCE_DAILY_MAX_UNITS` (1–100, default 20 when unset) and the `MAGAZINE_MAX_CALLS` lifetime ceiling, and the tester lanes and testing window reject. A deployment without overrides keeps the restrictive code defaults (3/4/8/40/120 hourly/daily units, 60-second cooldown). If demo use raises the existing lifetime counter above the standard ceiling, switching back safely blocks further inference rather than resetting usage.
+
+## Per-job invocation ceiling and polling cost
+
+One 3-Story job may charge at most **30 actual Meta invocations** (initial 4 plus retry top-ups; normal flow still uses 4). Attempt 31 is denied with `job_invocation_cap`, and repeated continuations can never reset the running total. Polling a job never reserves units: only the lease owner's generation requests and retry top-ups charge the budget, so one exploration costs exactly its executed invocations no matter how many polls observe it.
+
+## Counter persistence across mode and configuration changes
+
+All counters live in the shared Durable Object tables (`counters`, `job_units`, `leases`) and persist across mode toggles, variable changes and deployments; only TTL expiry and explicit reset remove them. Changing a limit alters what future reservations are checked against, never the recorded usage: raising a cap immediately frees headroom, while lowering one (or disabling Demo) can deny new requests until the affected windows roll. Cooldown and hourly/daily/window rows expire on their own schedule; lifetime and per-job totals never expire.
 
 ## Secure identification and operator status
 
@@ -22,8 +30,14 @@ No setting changes are made by this PR. After separately approved deployment, re
 
 ```text
 EDITORIAL_DEMO_BUDGET_ENABLED=true
-EDITORIAL_DEMO_DAILY_UNITS=160
-EDITORIAL_DEMO_LIFETIME_UNITS=500
+EDITORIAL_DEMO_DAILY_UNITS=1000
+EDITORIAL_DEMO_LIFETIME_UNITS=5000
+INFERENCE_STANDARD_HOURLY_UNITS=200
+INFERENCE_REVIEWED_HOURLY_UNITS=200
+INFERENCE_TESTER_HOURLY_UNITS=200
+INFERENCE_TESTER_DAILY_UNITS=1000
+INFERENCE_COOLDOWN_SECONDS=5
+DEMO_TESTING_WINDOW_UNITS=200
 EDITORIAL_TESTER_TOKEN_HASHES=<secret; only if non-owner testers are needed>
 ```
 
@@ -36,6 +50,6 @@ For emergency shutoff, set `MAGAZINE_AI_ENABLED=false` first. For budget rollbac
 1. Confirm effective Worker version, flags, bindings, Meta quota and a budget-status readback before enabling the demo flag.
 2. Obtain an Owner session from the unlocked Media Studio browser without printing its token: `fetch('/api/editorial/demo-session',{method:'POST',headers:{Authorization:'Bearer '+sessionStorage.getItem('curio.media.operator')}})`. Check HTTP 200 and a one-hour expiry; do not copy the token into the console output.
 3. Use the normal Silver Field prompt with consent. Confirm `source: meta` only on Reviewer-approved results and `inference.reservedUnits: 4` for new requests. Distinguish a cached result from a new reservation.
-4. Test multiple prompts with at least 60 seconds between batches. The first two simultaneous Owner requests may be admitted; a third must be denied by the concurrency/cooldown guard. Avoid deliberately spending quota solely to test the 10/hour boundary in Production; local regression tests cover it.
+4. Test multiple prompts with at least 5 seconds between submissions. The first two simultaneous Owner requests may be admitted; a third must be denied by the concurrency/cooldown guard. Avoid deliberately spending quota solely to test hourly boundaries in Production; local regression tests cover them.
 5. Verify status totals advance in four-unit increments and denial outcomes appear without prompts or identities. Confirm anonymous requests still use the lower budget and no consent still gives deterministic fallback.
 6. Clear the session with `fetch('/api/editorial/demo-session',{method:'DELETE'})`, then verify the higher allowance is gone. Set the demo flag false for rollback, or set `MAGAZINE_AI_ENABLED=false` for immediate inference shutoff.

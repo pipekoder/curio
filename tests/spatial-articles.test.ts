@@ -211,6 +211,66 @@ describe('spatial article edition fetch', () => {
     expect(bodies).toHaveLength(2)
     for(const body of bodies)expect(JSON.parse(body)).toMatchObject({prompt:'quiet rooms',consent:true,explorationId:id})
   })
+  it('observes a running call through a concurrent poll while the owner still generates', async () => {
+    const calling={id:'call-1',model:'muse-wonder-1.0',stage:'chief_editor',attempt:1,startedAt:Date.now(),endedAt:null,status:'calling'}
+    let releaseOwner!: (value: Response) => void
+    const ownerGate=new Promise<Response>(resolve=>{releaseOwner=resolve})
+    let calls=0
+    const fetcher=vi.fn(async ()=>{
+      if(++calls===1)return ownerGate
+      return new Response(JSON.stringify({status:'preparing',fallbackReason:'analysis_pending',eligibleImages:6,requiredImages:6,generationStage:'chief_editor',modelCalls:[calling],preparation:{outcome:'reviewing',remainingCandidates:0,processing:0,retryAfterMs:15000}}),{status:202})
+    })
+    const polls: ArticlePoll[]=[]
+    let pollSeen!: ()=>void
+    const firstPoll=new Promise<void>(resolve=>{pollSeen=resolve})
+    const pending=fetchArticleEdition('quiet rooms',true,fetcher as unknown as typeof fetch,{pollGapMs:20,onPoll:poll=>{polls.push(poll);pollSeen()}})
+    await firstPoll
+    expect(polls[0].modelCalls).toMatchObject([{id:'call-1',model:'muse-wonder-1.0',status:'calling',endedAt:null}])
+    releaseOwner(new Response(JSON.stringify(articleResponseFixture()),{status:200}))
+    const result=await pending
+    expect(result.edition?.articleEdition.articles).toHaveLength(3)
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+  it('adopts the first terminal response and aborts the stragglers', async () => {
+    const signals: (AbortSignal|null)[]=[]
+    let calls=0
+    const fetcher=vi.fn(async (_url:unknown,init:{signal?:AbortSignal|null})=>{
+      signals.push(init.signal??null)
+      if(++calls===1)return new Promise<Response>(()=>{})
+      return new Response(JSON.stringify(articleResponseFixture()),{status:200})
+    })
+    const result=await fetchArticleEdition('quiet rooms',true,fetcher as unknown as typeof fetch,{pollGapMs:10})
+    expect(result.edition?.articleEdition.articles).toHaveLength(3)
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(signals[0]?.aborted).toBe(true)
+  })
+  it('ignores one poll transport failure while the owner still runs', async () => {
+    let releaseOwner!: (value: Response) => void
+    const ownerGate=new Promise<Response>(resolve=>{releaseOwner=resolve})
+    let calls=0
+    const fetcher=vi.fn(async ()=>{
+      if(++calls===1)return ownerGate
+      if(calls===2)throw new Error('socket hang up')
+      return new Response(JSON.stringify({status:'preparing',preparation:{outcome:'reviewing',remainingCandidates:0,processing:0,retryAfterMs:0},eligibleImages:6,requiredImages:6}),{status:202})
+    })
+    const polls: ArticlePoll[]=[]
+    let pollSeen!: ()=>void
+    const firstPoll=new Promise<void>(resolve=>{pollSeen=resolve})
+    const pending=fetchArticleEdition('quiet rooms',true,fetcher as unknown as typeof fetch,{pollGapMs:10,onPoll:poll=>{polls.push(poll);pollSeen()}})
+    await firstPoll
+    releaseOwner(new Response(JSON.stringify(articleResponseFixture()),{status:200}))
+    const result=await pending
+    expect(result.edition?.articleEdition.articles).toHaveLength(3)
+    expect(result.status).toBeNull()
+  })
+  it('reads a clean sweep of failures as a request failure without waiting out the bound', async () => {
+    const fetcher=vi.fn(async ()=>{throw new Error('socket hang up')})
+    const result=await fetchArticleEdition('quiet rooms',true,fetcher as unknown as typeof fetch,{articleCount:1,timeoutMs:60000})
+    expect(result.edition).toBeNull()
+    expect(result.status).toBe('request_failed')
+    expect(result.timedOut).toBe(false)
+    expect(fetcher).toHaveBeenCalledTimes(20)
+  })
   it('omits explorationId for legacy callers that provide none', async () => {
     let body=''
     const fetcher=vi.fn(async (_url:unknown,init:{body:string})=>{body=init.body;return new Response(JSON.stringify(articleResponseFixture()),{status:200})})

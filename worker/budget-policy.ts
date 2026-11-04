@@ -1,15 +1,17 @@
 import {z} from 'zod'
 import type {Bindings} from './index'
 
-// Defaults reproduce the deployed policy. Dashboard values are optional and
-// bounded; the existing shared Durable Object counters are never reset.
+// Defaults reproduce the restrictive Standard policy. Dashboard values are
+// optional and bounded; the existing shared Durable Object counters are
+// never reset. Maxima admit the Demo deployment's judging configuration
+// (200 hourly units, 5s cooldown) while still rejecting absurd values.
 export const ratePolicy=z.strictObject({
-  standardHourlyUnits:z.number().int().min(1).max(12),
-  reviewedHourlyUnits:z.number().int().min(4).max(8),
+  standardHourlyUnits:z.number().int().min(1).max(1000),
+  reviewedHourlyUnits:z.number().int().min(4).max(1000),
   pilotHourlyUnits:z.number().int().min(4).max(16),
-  testerHourlyUnits:z.number().int().min(4).max(80),
-  testerDailyUnits:z.number().int().min(4).max(160),
-  cooldownSeconds:z.number().int().min(60).max(600),
+  testerHourlyUnits:z.number().int().min(4).max(1000),
+  testerDailyUnits:z.number().int().min(4).max(2000),
+  cooldownSeconds:z.number().int().min(5).max(600),
   testerConcurrent:z.number().int().min(1).max(2),
 }).refine(p=>p.testerDailyUnits>=p.testerHourlyUnits)
 export type RatePolicy=z.infer<typeof ratePolicy>

@@ -250,7 +250,7 @@ it('distinguishes article preparation and SAM limits without changing their coun
 it('accepts bounded rate configuration while rejecting unsafe values',()=>{
   expect(resolveRatePolicy({} as never)).toMatchObject({reviewedHourlyUnits:4,testerHourlyUnits:40,cooldownSeconds:60})
   expect(resolveRatePolicy({INFERENCE_REVIEWED_HOURLY_UNITS:'8',INFERENCE_TESTER_HOURLY_UNITS:'48',INFERENCE_TESTER_DAILY_UNITS:'120'} as never)).toMatchObject({reviewedHourlyUnits:8,testerHourlyUnits:48})
-  for(const env of [{INFERENCE_REVIEWED_HOURLY_UNITS:'0'},{INFERENCE_REVIEWED_HOURLY_UNITS:'9'},{INFERENCE_TESTER_DAILY_UNITS:'10',INFERENCE_TESTER_HOURLY_UNITS:'40'},{INFERENCE_COOLDOWN_SECONDS:'30'},{INFERENCE_TESTER_CONCURRENT:'3'}])expect(()=>resolveRatePolicy(env as never)).toThrow()
+  for(const env of [{INFERENCE_REVIEWED_HOURLY_UNITS:'0'},{INFERENCE_REVIEWED_HOURLY_UNITS:'1001'},{INFERENCE_TESTER_DAILY_UNITS:'10',INFERENCE_TESTER_HOURLY_UNITS:'40'},{INFERENCE_COOLDOWN_SECONDS:'4'},{INFERENCE_TESTER_CONCURRENT:'3'}])expect(()=>resolveRatePolicy(env as never)).toThrow()
 })
 
 it('enforces a configured reviewed per-IP cap without changing the shared budget or demo tester defaults',async()=>{
@@ -268,7 +268,7 @@ it('enforces a configured reviewed per-IP cap without changing the shared budget
     expect(status.lifetime.used).toBe(8)
     expect(status.perIp.hourly.remainingForReviewed).toBe(0)
     expect(status.recentDenials.per_ip_hourly).toBe(1)
-    const invalid=await value.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:ip(2),ceiling:100,daily:100,units:4,rates:{...rates,reviewedHourlyUnits:100}})}))
+    const invalid=await value.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:ip(2),ceiling:100,daily:100,units:4,rates:{...rates,reviewedHourlyUnits:1001}})}))
     expect(invalid.status).toBe(400)
   }finally{db.close()}
 })

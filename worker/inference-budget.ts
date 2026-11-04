@@ -18,12 +18,12 @@ export class InferenceReservation{
 
 // Maximum actual Meta invocations per article job, including retries.
 // Normal 3-story flow uses 4; retries top up toward this ceiling.
-export const ARTICLE_JOB_MAX_INVOCATIONS=20
+export const ARTICLE_JOB_MAX_INVOCATIONS=30
 
 function budgetLimits(env:Bindings,demo:boolean){
   const ceiling=Number(demo?env.EDITORIAL_DEMO_LIFETIME_UNITS:env.MAGAZINE_MAX_CALLS??'20')
   const daily=Number(demo?env.EDITORIAL_DEMO_DAILY_UNITS:env.INFERENCE_DAILY_MAX_UNITS??'20')
-  if(!Number.isInteger(ceiling)||ceiling<1||ceiling>(demo?500:100)||!Number.isInteger(daily)||daily<1||daily>(demo?160:100))throw Error('Invalid budget limits')
+  if(!Number.isInteger(ceiling)||ceiling<1||ceiling>(demo?10000:100)||!Number.isInteger(daily)||daily<1||daily>(demo?2000:100))throw Error('Invalid budget limits')
   return {ceiling,daily}
 }
 

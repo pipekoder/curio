@@ -2,8 +2,8 @@ import {z} from 'zod'
 import type {Bindings} from './index'
 
 // Fixed UTC windows use the existing counter table and expire without resetting
-// shared lifetime/day charges. Values are deliberately below the Demo caps.
-export const demoTestingPolicy=z.strictObject({windowSeconds:z.number().int().min(300).max(3600),windowUnits:z.number().int().min(4).max(24).refine(value=>value%4===0)})
+// shared lifetime/day charges. Values stay below the Demo daily cap.
+export const demoTestingPolicy=z.strictObject({windowSeconds:z.number().int().min(300).max(3600),windowUnits:z.number().int().min(4).max(1000).refine(value=>value%4===0)})
 export type DemoTestingPolicy=z.infer<typeof demoTestingPolicy>
 
 export function resolveDemoTestingPolicy(env:Bindings):DemoTestingPolicy|null{

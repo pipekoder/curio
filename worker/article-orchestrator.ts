@@ -192,7 +192,7 @@ export async function articleJobResponse(request:Request,env:Bindings,p:Editoria
   const leaseMs=articleCount===3?ARTICLE_3STORY_LEASE_MS:articleCount===1&&env.EDITORIAL_WORKFLOW_V3_ENABLED==='true'?230_000:LEASE_MS
   const base={format,source:'deterministic' as const,retrieval:'d1' as const,cached:false,articleEdition:null}
   if(env.EDITORIAL_ARTICLE_PREPARATION_ENABLED!=='true'||!p.consent||env.EDITORIAL_ARTICLES_ENABLED!=='true'||env.MAGAZINE_AI_ENABLED!=='true'||env.EDITORIAL_REVIEW_ENABLED!=='true'||env.EDITORIAL_PUBLIC_AI_ENABLED!=='true'||!env.CATALOG_DB||!env.MEDIA_BUCKET||!env.META_API_KEY||!env.INFERENCE_BUDGET)
-    return articleEditorialResponse(request,env,p,mode,undefined,articleCount,undefined,schedule,undefined,exploration)
+    return articleEditorialResponse(request,env,p,mode,undefined,articleCount,undefined,schedule,undefined,undefined,exploration)
   let policy:ReturnType<typeof resolveArticlePreparationPolicy>
   try{policy=resolveArticlePreparationPolicy(env)}catch{return Response.json({...base,status:'unavailable',fallbackReason:'configuration'},{status:503})}
   const db=env.CATALOG_DB,now=Date.now()

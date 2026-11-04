@@ -17,6 +17,13 @@ const ARTICLE_REQUEST_TIMEOUT_MS=180_000
 const ARTICLE_3STORY_REQUEST_TIMEOUT_MS=800_000
 const ARTICLE_3STORY_OVERALL_TIMEOUT_MS=900_000
 const ARTICLE_3STORY_POLL_ATTEMPTS=64
+// Live-log cadence: the lease owner holds one long request for the whole
+// workflow, so strictly sequential polls would never observe it. A fresh
+// poll launches on this cadence while earlier requests are still in
+// flight; each 202 carries the latest persisted modelCalls. Polls are
+// single-SELECT reads, so the server's retryAfterMs hint is deliberately
+// not honored here.
+const ARTICLE_POLL_GAP_MS=5000
 
 // Opt-in client for docs/full-catalog-articles.md: POSTs the existing prompt
 // shape plus editionFormat and stages only a fully validated article
@@ -93,17 +100,24 @@ export function articleStatusCopy(fetch:ArticleFetch):{title:string;detail:strin
   }
 }
 
-export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImpl:typeof fetch=fetch,events:{onResponse?:()=>void;onPoll?:(poll:ArticlePoll)=>void;signal?:AbortSignal;timeoutMs?:number;editorialMode?:EditorialMode;articleCount?:1|3;explorationId?:string}={}):Promise<ArticleFetch>{
+export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImpl:typeof fetch=fetch,events:{onResponse?:()=>void;onPoll?:(poll:ArticlePoll)=>void;signal?:AbortSignal;timeoutMs?:number;editorialMode?:EditorialMode;articleCount?:1|3;explorationId?:string;pollGapMs?:number}={}):Promise<ArticleFetch>{
   const articleCount=events.articleCount??3
   const editionFormat=articleCount===1?ARTICLE_SINGLE_CONTRACT_VERSION:ARTICLE_CONTRACT_VERSION
   const bound=AbortSignal.timeout(events.timeoutMs??(articleCount===3?ARTICLE_3STORY_OVERALL_TIMEOUT_MS:300000))
   const failed=(status:ArticleFetch['status'],extra:Partial<ArticleFetch>&{timedOut?:boolean}={}):ArticleFetch=>({
     edition:null,honest:'authored-fallback',articleCount,status,timedOut:false,generation:null,modelCalls:null,notices:null,...extra,
   })
-  try{
-   for(let attempt=0;attempt<(articleCount===3?ARTICLE_3STORY_POLL_ATTEMPTS:20);attempt++){
+  const maxAttempts=articleCount===3?ARTICLE_3STORY_POLL_ATTEMPTS:20
+  const pollGapMs=events.pollGapMs??ARTICLE_POLL_GAP_MS
+  const stragglers=new Set<AbortController>()
+  // One poll request. Resolves null on 202 (after firing onPoll); any
+  // other HTTP response resolves terminally; transport failures throw.
+  const attemptOnce=async():Promise<ArticleFetch|null>=>{
     const requestBound=AbortSignal.timeout(articleCount===3?ARTICLE_3STORY_REQUEST_TIMEOUT_MS:ARTICLE_REQUEST_TIMEOUT_MS)
-    const signal=AbortSignal.any([bound,requestBound,...(events.signal?[events.signal]:[])])
+    const controller=new AbortController()
+    stragglers.add(controller)
+    try{
+    const signal=AbortSignal.any([bound,requestBound,controller.signal,...(events.signal?[events.signal]:[])])
     const response=await fetchImpl('/api/editorial',{
       method:'POST',headers:{'Content-Type':'application/json'},
       // The same explorationId rides every poll attempt so all of them
@@ -115,16 +129,8 @@ export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImp
       const parsed=failure.safeParse(await response.json())
       if(!parsed.success||parsed.data.status!=='preparing')return failed('fallback')
       events.onPoll?.({outcome:parsed.data.preparation?.outcome??null,eligibleImages:parsed.data.eligibleImages??null,requiredImages:parsed.data.requiredImages??null,remainingCandidates:parsed.data.preparation?.remainingCandidates??null,processing:parsed.data.preparation?.processing??null,generationStage:parsed.data.generationStage??null,modelCalls:parsed.data.modelCalls??null,notices:parsed.data.notices??null})
-      const wait=parsed.data.preparation?.retryAfterMs??16000
-      if(wait)await new Promise<void>((resolve,reject)=>{
-        if(bound.aborted||events.signal?.aborted){reject(new Error('Interrupted'));return}
-        const timer=setTimeout(()=>{bound.removeEventListener('abort',abort);events.signal?.removeEventListener('abort',abort);resolve()},wait)
-        const abort=()=>{clearTimeout(timer);bound.removeEventListener('abort',abort);events.signal?.removeEventListener('abort',abort);reject(new Error('Interrupted'))}
-        bound.addEventListener('abort',abort,{once:true});events.signal?.addEventListener('abort',abort,{once:true})
-      })
-      continue
+      return null
     }
-    events.onResponse?.()
     if(!response.ok){
       // Non-AI states stay explicit: never synthesize articles or imply a
       // model succeeded. Unparseable errors fail closed the same way.
@@ -152,8 +158,62 @@ export async function fetchArticleEdition(prompt:string,consent:boolean,fetchImp
       edition:{articleEdition,items:data.items,source:data.source,retrieval:data.retrieval,cached:data.cached,researchReferences:data.researchReferences,aiDisclosure:data.aiDisclosure,editorialTier:data.editorialTier,requestedCount:data.requestedCount,publishedCount:data.publishedCount,partial:data.partial},
       honest,articleCount,status:null,timedOut:false,generation:parseGenerationMetadata(data.generation),evidence:data.evidence,modelCalls:data.modelCalls??null,notices:data.notices??null,
     }
-   }
-   return failed('preparing',{timedOut:true})
+    }finally{
+      stragglers.delete(controller)
+    }
+  }
+  // Pipelined driver: the first request launches immediately; while it is
+  // still in flight (the lease owner generates for minutes), a fresh poll
+  // launches every gap so 202s render live modelCalls. Settlements queue
+  // in arrival order so a terminal is never lost behind a 202. The first
+  // terminal response wins and aborts the stragglers. One attempt's
+  // transport failure is ignored while others fly; when the launch cap is
+  // reached with nothing resolved, polls seen reads as still-reviewing and
+  // a clean sweep of failures reads as a request failure, as before.
+  type Settled={value:ArticleFetch|null;error:unknown}
+  const results:Settled[]=[]
+  let launched=0,settledCount=0,sawPoll=false
+  let wake:()=>void=()=>{}
+  const launch=()=>{
+    launched++
+    void attemptOnce().then(
+      value=>{settledCount++;results.push({value,error:null});wake()},
+      error=>{settledCount++;results.push({value:null,error});wake()})
+  }
+  const waitSettled=(withGap:boolean)=>new Promise<boolean>((resolve,reject)=>{
+    // The executor runs synchronously, so arming wake cannot race a
+    // settlement: no callback runs between the queue check and this.
+    const timer=withGap?setTimeout(()=>{cleanup();resolve(false)},pollGapMs):undefined
+    const cleanup=()=>{clearTimeout(timer);bound.removeEventListener('abort',abort);events.signal?.removeEventListener('abort',abort)}
+    const abort=()=>{cleanup();reject(new Error('Interrupted'))}
+    bound.addEventListener('abort',abort,{once:true});events.signal?.addEventListener('abort',abort,{once:true})
+    wake=()=>{cleanup();resolve(true)}
+  })
+  try{
+    launch()
+    for(;;){
+      const next=results.shift()
+      if(next){
+        if(next.error){
+          if(bound.aborted||events.signal?.aborted)throw new Error('Interrupted')
+          continue
+        }
+        if(next.value===null){sawPoll=true;continue}
+        for(const controller of stragglers)controller.abort()
+        events.onResponse?.()
+        return next.value
+      }
+      if(settledCount>=launched){
+        if(launched>=maxAttempts)return failed(sawPoll?'preparing':'request_failed',{timedOut:sawPoll})
+        launch()
+        continue
+      }
+      if(launched<maxAttempts){
+        if(!await waitSettled(true)&&!bound.aborted&&!events.signal?.aborted)launch()
+      }else{
+        await waitSettled(false)
+      }
+    }
   }catch{
     return failed(bound.aborted?'fallback':'request_failed',{timedOut:bound.aborted})
   }

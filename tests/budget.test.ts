@@ -2,6 +2,9 @@
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, expect, it, vi } from 'vitest'
 import { InferenceBudget } from '../worker/budget'
+import { DEFAULT_RATE_POLICY, resolveRatePolicy } from '../worker/budget-policy'
+import { demoCapsValid } from '../worker/demo-access'
+import { resolveDemoTestingPolicy } from '../worker/demo-testing-policy'
 
 // Real SQLite runs the same SQL; local workerd smoke separately verifies the DO binding.
 function storage() {
@@ -128,19 +131,19 @@ it('permits only one SAM reservation per exact asset across IPs and UTC days', a
 })
 // Job-bound article reserves (initial, resume and retry top-ups) charge
 // unit counters cumulatively per job, skip the per-request cooldown, and
-// enforce the 20-invocation job cap across every request and resume.
-it('caps each article job at 20 cumulative invocations across requests',async()=>{
+// enforce the 30-invocation job cap across every request and resume.
+it('caps each article job at 30 cumulative invocations across requests',async()=>{
   const {state,db}=storage()
   const budget=new InferenceBudget(state)
   const tester='e'.repeat(64)
-  const attempt=(body:Record<string,unknown>)=>budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:'a'.repeat(64),ceiling:500,daily:160,demo:true,demoTester:tester,demoTestingPolicy:{windowSeconds:300,windowUnits:24},...body})}))
+  const attempt=(body:Record<string,unknown>)=>budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:'a'.repeat(64),ceiling:500,daily:160,demo:true,demoTester:tester,demoTestingPolicy:{windowSeconds:300,windowUnits:36},...body})}))
   try{
-    expect(await (await attempt({units:4,jobUnits:{jobKey:'article-job-abc123',jobCap:20}})).json()).toMatchObject({allowed:true})
-    for(let i=0;i<16;i++)expect(await (await attempt({jobUnits:{jobKey:'article-job-abc123',jobCap:20,topUp:true}})).json()).toMatchObject({allowed:true})
-    const denied=await (await attempt({jobUnits:{jobKey:'article-job-abc123',jobCap:20,topUp:true}})).json() as {allowed:boolean;denial:{limitType:string}}
+    expect(await (await attempt({units:4,jobUnits:{jobKey:'article-job-abc123',jobCap:30}})).json()).toMatchObject({allowed:true})
+    for(let i=0;i<26;i++)expect(await (await attempt({jobUnits:{jobKey:'article-job-abc123',jobCap:30,topUp:true}})).json()).toMatchObject({allowed:true})
+    const denied=await (await attempt({jobUnits:{jobKey:'article-job-abc123',jobCap:30,topUp:true}})).json() as {allowed:boolean;denial:{limitType:string}}
     expect(denied.allowed).toBe(false)
     expect(denied.denial.limitType).toBe('job_invocation_cap')
-    expect(await (await attempt({units:4,jobUnits:{jobKey:'article-job-other',jobCap:20}})).json()).toMatchObject({allowed:true})
+    expect(await (await attempt({units:4,jobUnits:{jobKey:'article-job-other',jobCap:30}})).json()).toMatchObject({allowed:true})
   }finally{db.close()}
 })
 it('skips the cooldown for job continuations but keeps the reviewed hourly bucket',async()=>{
@@ -151,7 +154,7 @@ it('skips the cooldown for job continuations but keeps the reviewed hourly bucke
   try{
     expect(await (await attempt({})).json()).toMatchObject({allowed:true})
     expect(await (await attempt({})).json()).toMatchObject({allowed:false,denial:{limitType:'per_ip_cooldown'}})
-    expect(await (await attempt({jobUnits:{jobKey:'article-job-cd',jobCap:20,topUp:true}})).json()).toMatchObject({allowed:true})
+    expect(await (await attempt({jobUnits:{jobKey:'article-job-cd',jobCap:30,topUp:true}})).json()).toMatchObject({allowed:true})
   }finally{db.close()}
 })
 it('holds no extra concurrency slot for mid-flight top-ups',async()=>{
@@ -159,10 +162,10 @@ it('holds no extra concurrency slot for mid-flight top-ups',async()=>{
   const budget=new InferenceBudget(state)
   const base={ip:'c'.repeat(64),ceiling:500,daily:160,demo:true,demoTester:'d'.repeat(64),rates:{standardHourlyUnits:3,reviewedHourlyUnits:8,pilotHourlyUnits:8,testerHourlyUnits:40,testerDailyUnits:120,cooldownSeconds:60,testerConcurrent:2}}
   try{
-    const initial=await (await budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({...base,units:4,jobUnits:{jobKey:'article-job-slot',jobCap:20}})}))).json() as {allowed:boolean;reservationId?:string}
+    const initial=await (await budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({...base,units:4,jobUnits:{jobKey:'article-job-slot',jobCap:30}})}))).json() as {allowed:boolean;reservationId?:string}
     expect(initial.allowed).toBe(true)
     expect(typeof initial.reservationId).toBe('string')
-    const topUp=await (await budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({...base,jobUnits:{jobKey:'article-job-slot',jobCap:20,topUp:true}})}))).json() as {allowed:boolean;reservationId?:string}
+    const topUp=await (await budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({...base,jobUnits:{jobKey:'article-job-slot',jobCap:30,topUp:true}})}))).json() as {allowed:boolean;reservationId?:string}
     expect(topUp.allowed).toBe(true)
     expect(topUp.reservationId).toBeUndefined()
   }finally{db.close()}
@@ -172,9 +175,118 @@ it('rejects malformed job-bound reservations',async()=>{
   const budget=new InferenceBudget(state)
   const attempt=(body:Record<string,unknown>)=>budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:'d'.repeat(64),ceiling:100,...body})}))
   try{
-    expect((await attempt({units:2,jobUnits:{jobKey:'article-job-x',jobCap:20,topUp:true}})).status).toBe(400)
-    expect((await attempt({samAssetId:'asset-v1',jobUnits:{jobKey:'article-job-x',jobCap:20}})).status).toBe(400)
-    expect((await attempt({jobUnits:{jobKey:'!bad',jobCap:20}})).status).toBe(400)
-    expect((await attempt({jobUnits:{jobKey:'article-job-x',jobCap:19}})).status).toBe(400)
+    expect((await attempt({units:2,jobUnits:{jobKey:'article-job-x',jobCap:30,topUp:true}})).status).toBe(400)
+    expect((await attempt({samAssetId:'asset-v1',jobUnits:{jobKey:'article-job-x',jobCap:30}})).status).toBe(400)
+    expect((await attempt({jobUnits:{jobKey:'!bad',jobCap:30}})).status).toBe(400)
+    expect((await attempt({jobUnits:{jobKey:'article-job-x',jobCap:29}})).status).toBe(400)
+  }finally{db.close()}
+})
+// Demo judging configuration: the worker accepts the raised Demo values
+// while unknown env keeps the restrictive Standard defaults.
+it('accepts the judging limits and keeps restrictive defaults',()=>{
+  expect(resolveRatePolicy({INFERENCE_STANDARD_HOURLY_UNITS:'200',INFERENCE_REVIEWED_HOURLY_UNITS:'200',INFERENCE_TESTER_HOURLY_UNITS:'200',INFERENCE_TESTER_DAILY_UNITS:'1000',INFERENCE_COOLDOWN_SECONDS:'5'} as never))
+    .toMatchObject({standardHourlyUnits:200,reviewedHourlyUnits:200,testerHourlyUnits:200,testerDailyUnits:1000,cooldownSeconds:5})
+  expect(()=>resolveRatePolicy({INFERENCE_STANDARD_HOURLY_UNITS:'1001'} as never)).toThrow()
+  expect(()=>resolveRatePolicy({INFERENCE_COOLDOWN_SECONDS:'4'} as never)).toThrow()
+  expect(DEFAULT_RATE_POLICY).toMatchObject({standardHourlyUnits:3,reviewedHourlyUnits:4,testerHourlyUnits:40,testerDailyUnits:120,cooldownSeconds:60})
+  expect(demoCapsValid({EDITORIAL_DEMO_DAILY_UNITS:'1000',EDITORIAL_DEMO_LIFETIME_UNITS:'5000'} as never)).toBe(true)
+  expect(demoCapsValid({EDITORIAL_DEMO_DAILY_UNITS:'2001',EDITORIAL_DEMO_LIFETIME_UNITS:'5000'} as never)).toBe(false)
+  expect(resolveDemoTestingPolicy({DEMO_TESTING_MODE:'true',DEMO_TESTING_WINDOW_SECONDS:'900',DEMO_TESTING_WINDOW_UNITS:'200'} as never)).toEqual({windowSeconds:900,windowUnits:200})
+})
+it('grants anonymous demo visitors the reviewed hourly quota',async()=>{
+  const {state,db}=storage()
+  const budget=new InferenceBudget(state)
+  const rates={standardHourlyUnits:200,reviewedHourlyUnits:200,pilotHourlyUnits:8,testerHourlyUnits:200,testerDailyUnits:1000,cooldownSeconds:5,testerConcurrent:2}
+  const attempt=()=>budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:'a'.repeat(64),ceiling:5000,daily:1000,demo:true,units:4,rates})}))
+  try{
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-11-04T10:00:00Z'))
+    for(let i=0;i<50;i++){
+      expect(await (await attempt()).json()).toMatchObject({allowed:true})
+      vi.setSystemTime(new Date('2026-11-04T10:00:00Z').getTime()+(i+1)*6000)
+    }
+    const denied=await (await attempt()).json() as {allowed:boolean;denial:{limitType:string;limit:number;used:number}}
+    expect(denied.allowed).toBe(false)
+    expect(denied.denial).toMatchObject({limitType:'per_ip_hourly',limit:200,used:200})
+  }finally{db.close()}
+})
+it('enforces a 5-second cooldown between requests',async()=>{
+  const {state,db}=storage()
+  const budget=new InferenceBudget(state)
+  const rates={standardHourlyUnits:200,reviewedHourlyUnits:200,pilotHourlyUnits:8,testerHourlyUnits:200,testerDailyUnits:1000,cooldownSeconds:5,testerConcurrent:2}
+  const attempt=()=>budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:'b'.repeat(64),ceiling:5000,daily:1000,demo:true,rates})}))
+  try{
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-11-04T10:00:00Z'))
+    expect(await (await attempt()).json()).toMatchObject({allowed:true})
+    const denied=await (await attempt()).json() as {allowed:boolean;denial:{limitType:string}}
+    expect(denied.allowed).toBe(false)
+    expect(denied.denial.limitType).toBe('per_ip_cooldown')
+    vi.setSystemTime(new Date('2026-11-04T10:00:00Z').getTime()+5000)
+    expect(await (await attempt()).json()).toMatchObject({allowed:true})
+  }finally{db.close()}
+})
+it('exhausts the 1000-unit demo daily quota across visitors',async()=>{
+  const {state,db}=storage()
+  const budget=new InferenceBudget(state)
+  try{
+    for(let i=0;i<250;i++){
+      const response=await budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:i.toString(16).padStart(64,'0'),ceiling:5000,daily:1000,demo:true,units:4})}))
+      expect(await response.json()).toMatchObject({allowed:true})
+    }
+    const last=await budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:'f'.repeat(64),ceiling:5000,daily:1000,demo:true,units:4})}))
+    const denied=await last.json() as {allowed:boolean;denial:{limitType:string}}
+    expect(denied.allowed).toBe(false)
+    expect(denied.denial.limitType).toBe('global_daily')
+  }finally{db.close()}
+})
+it('exhausts the 5000-unit demo lifetime quota across days',async()=>{
+  const {state,db}=storage()
+  const budget=new InferenceBudget(state)
+  const dayMs=86400000
+  try{
+    vi.useFakeTimers()
+    let n=0
+    for(let day=0;day<3;day++){
+      vi.setSystemTime(new Date('2026-11-04T10:00:00Z').getTime()+day*dayMs)
+      const charges=day<2?500:250
+      for(let i=0;i<charges;i++,n++){
+        const response=await budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:n.toString(16).padStart(64,'0'),ceiling:5000,daily:2000,demo:true,units:4})}))
+        expect(await response.json()).toMatchObject({allowed:true})
+      }
+    }
+    const last=await budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:'f'.repeat(64),ceiling:5000,daily:2000,demo:true,units:4})}))
+    const denied=await last.json() as {allowed:boolean;denial:{limitType:string}}
+    expect(denied.allowed).toBe(false)
+    expect(denied.denial.limitType).toBe('global_lifetime')
+  }finally{db.close()}
+})
+it('never resets the per-job cap and serializes concurrent top-ups',async()=>{
+  const {state,db}=storage()
+  const budget=new InferenceBudget(state)
+  const rates={standardHourlyUnits:200,reviewedHourlyUnits:1000,pilotHourlyUnits:8,testerHourlyUnits:200,testerDailyUnits:1000,cooldownSeconds:5,testerConcurrent:2}
+  const attempt=(body:Record<string,unknown>)=>budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify({ip:'c'.repeat(64),ceiling:5000,daily:1000,demo:true,rates,...body})}))
+  try{
+    expect(await (await attempt({units:4,jobUnits:{jobKey:'article-job-race',jobCap:30}})).json()).toMatchObject({allowed:true})
+    for(let i=0;i<25;i++)expect(await (await attempt({jobUnits:{jobKey:'article-job-race',jobCap:30,topUp:true}})).json()).toMatchObject({allowed:true})
+    const pair=await Promise.all([attempt({jobUnits:{jobKey:'article-job-race',jobCap:30,topUp:true}}),attempt({jobUnits:{jobKey:'article-job-race',jobCap:30,topUp:true}})])
+    const outcomes=await Promise.all(pair.map(response=>response.json() as Promise<{allowed:boolean;denial?:{limitType:string}}>))
+    expect(outcomes.filter(outcome=>outcome.allowed)).toHaveLength(1)
+    expect(outcomes.filter(outcome=>!outcome.allowed)).toHaveLength(1)
+    expect(outcomes.find(outcome=>!outcome.allowed)!.denial!.limitType).toBe('job_invocation_cap')
+    const again=await (await attempt({jobUnits:{jobKey:'article-job-race',jobCap:30,topUp:true}})).json() as {allowed:boolean;denial:{used:number}}
+    expect(again.allowed).toBe(false)
+    expect(again.denial.used).toBe(30)
+  }finally{db.close()}
+})
+it('restores the standard policy when demo is disabled',async()=>{
+  const {state,db}=storage()
+  const budget=new InferenceBudget(state)
+  try{
+    const post=(body:Record<string,unknown>)=>budget.fetch(new Request('https://budget/reserve',{method:'POST',body:JSON.stringify(body)}))
+    expect(await (await post({ip:'d'.repeat(64),ceiling:100,daily:100,units:4})).json()).toMatchObject({allowed:true})
+    expect((await post({ip:'d'.repeat(64),ceiling:101,daily:100,units:4})).status).toBe(400)
+    expect((await post({ip:'d'.repeat(64),ceiling:100,daily:100,demoTester:'e'.repeat(64),units:4})).status).toBe(400)
+    expect((await post({ip:'d'.repeat(64),ceiling:100,daily:100,demoTestingPolicy:{windowSeconds:900,windowUnits:200},units:4})).status).toBe(400)
   }finally{db.close()}
 })
