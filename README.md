@@ -1,45 +1,299 @@
 # Curio
 
-Persistent catalog development: see [D1 foundation, local ingestion and release sequence](docs/CATALOG_D1.md).
-The private metadata catalog is off by default and does not publish pending brand images.
-The existing production database binding is prepared in code; see the
-[production migration and rollback runbook](docs/D1_PRODUCTION_RUNBOOK.md).
-See [Meta embedding research and the Vectorize design](docs/VECTORIZE_META_RESEARCH.md)
-for verified capabilities, unresolved access and the next Asset Intelligence slice.
+### An AI Editorial Engine
 
-**From Advertising to Discovery.**
+**Instantly personal. Editorially rich. Led by curiosity. Powered by Meta AI.**
 
-Curio is an AI-powered personalized advertising magazine. Readers choose lifestyles, control the editorial mix, and explore stories and details behind advertising.
+Started: October 26, 2026 | Built for the Meta Hackathon ( Everything is developed starting from Oct 26, 2026 )
 
-## Stack
-React / TypeScript / Vite; Cloudflare Workers / Hono; planned Cloudflare R2 and D1; runtime inference exclusively through Meta models.
+**[Experience Curio — Live Demo](https://curio.shuang-han807.workers.dev)** | **[View Source Code](https://github.com/pipekoder/curio)**
 
-## Getting started
-Node.js 22.12+ and npm recommended. CI uses Node.js 22.
+Curio is an AI-powered editorial engine that brings together the immediacy of artificial intelligence, the depth of traditional publishing, and the freedom of personal curiosity.
+
+It transforms interests, visual content, brand stories, product information, and cultural context into personalized editorial experiences—created on demand and designed to invite exploration.
+
+Instead of simply delivering answers or displaying information, Curio creates stories that encourage people to discover unexpected connections and follow their curiosity.
+
+---
+
+## 1. The Idea — Rethinking How We Discover Information
+
+How do we consume information today?
+
+**Social media?** Fast, engaging, and constantly updated. But often lacking depth.
+
+**Traditional magazines?** Beautiful layouts, thoughtful storytelling, and strong editorial perspectives. But produced weeks or months before we read them.
+
+**Blogs and newsletters?** Insightful and well-written, yet too often left unread in our inboxes.
+
+**Search engines and AI assistants?** Instant access to seemingly endless information. But primarily designed to answer questions rather than invite unexpected discoveries.
+
+**Traditional advertising?** Everywhere, competing for our attention, yet rarely revealing the stories, ideas, and people behind the images.
+
+**And books?** When did we last open one simply out of curiosity?
+
+Every format offers something valuable, but each has limitations.
+
+**What if AI could bring the best of these experiences together?**
+
+- The immediacy of AI.
+- The relevance of personalization.
+- The depth of thoughtful editorial content.
+- The beauty of a magazine.
+- The freedom to explore beyond what we initially searched for.
+
+That's where Curio started.
+
+## 2. What Curio Does
+
+Curio turns a personal interest into an editorial journey.
+
+**Express an interest → Discover visual content → Generate an editorial edition → Read → Explore → Follow your curiosity**
+
+### Personalized Exploration
+
+Readers begin with their own interests, themes, or questions. Rather than relying solely on algorithmic predictions, Curio uses their expressed curiosity to guide discovery.
+
+### AI-Generated Editorial Editions
+
+Curio creates editorial stories by combining eligible visual content with relevant brand and product information, structured visual observations, and supporting cultural context.
+
+Readers can choose between two editorial modes:
+
+- **Lite:** Muse Spark 1.3 serves as Chief Editor.
+- **Hybrid:** Muse Wonder 1.0 serves as Chief Editor, with Muse Spark 1.3 providing editorial review and refinement.
+
+The three-article experience creates interconnected stories supported by selected imagery and source references.
+
+### Visual and Interactive Discovery
+
+Curio invites readers to go beyond the written article.
+
+Through visual intelligence, interactive details, and available product hotspots, images can become starting points for exploring objects, ideas, and connections.
+
+### An Editorial Experience, Not Just Generated Text
+
+Curio combines AI-generated narratives with visual layouts, image-led storytelling, structured editorial assessment, and source-aware exploration.
+
+The objective is to create something closer to a personalized magazine than a conventional chatbot response.
+
+## 3. Powered by Meta AI
+
+Meta's specialized AI models provide the foundation for Curio's editorial creation, multimodal understanding, and interactive visual exploration.
+
+### Muse Wonder 1.0 — Hybrid Chief Editor
+
+Muse Wonder acts as Chief Editor in Hybrid mode, synthesizing complex inputs—including user preferences, brand and product stories, visual intelligence, and supporting cultural sources—into cohesive, interconnected editorial narratives.
+
+Its role is to develop original editorial perspectives that go beyond simply describing products or summarizing information.
+
+### Muse Spark 1.3 — Lite Chief Editor and Editorial Intelligence
+
+Muse Spark acts as Chief Editor in Lite mode and supports the editorial review workflow across both modes.
+
+Its responsibilities include:
+
+- **Independent Review:** Evaluating the editorial draft and identifying opportunities for improvement.
+- **Structured Scoring:** Assessing editorial quality, discovery value, originality, narrative coherence, and readability.
+- **Targeted Revision:** Improving storytelling based on reviewer feedback while preserving approved imagery and factual references.
+- **Final Confirmation:** Independently evaluating the revised editorial content.
+
+Curio then applies deterministic validation and calculates the final weighted editorial score.
+
+### Muse Spark 1.3 — Multimodal Visual Intelligence
+
+Muse Spark also analyzes approved visual content.
+
+It extracts structured observations about subjects, material appearances, environments, and visual relationships.
+
+Curio uses these observations to enrich editorial storytelling and connect visual details with relevant information.
+
+Multiple image-analysis tasks can run concurrently, making visual preparation more efficient.
+
+### SAM 3.1 — Object-Level Visual Discovery
+
+SAM 3.1 supports product localization within approved imagery.
+
+Curio uses this capability to generate interactive hotspots, allowing readers to explore specific objects and related information.
+
+Hotspot analysis is scheduled asynchronously after editorial validation, so it does not delay article publication.
+
+### Why Meta AI?
+
+What makes Meta's approach particularly valuable is the combination of specialized, complementary AI capabilities accessible through APIs.
+
+Instead of depending on one general-purpose model for every task, Curio assigns distinct responsibilities to models suited to editorial creation, critical review, visual understanding, and object localization.
+
+This modular approach makes sophisticated AI capabilities accessible to independent developers and allows us to focus on creating new experiences rather than building foundational AI infrastructure.
+
+## 4. How the Editorial Engine Works
+
+Curio uses a multi-stage editorial workflow that combines generative AI with structured critical evaluation.
+
+**User Interest + Approved Visual & Factual Evidence**
+
+↓
+
+**Chief Editor — Muse Wonder or Muse Spark**
+
+Creates the original editorial narratives, selecting relevant imagery and developing the editorial direction.
+
+↓
+
+**Independent Reviewer — Muse Spark**
+
+Evaluates the content using Curio's five-dimensional Editorial Standard.
+
+| Evaluation dimension | Weight |
+|---|---:|
+| Editorial Quality | 30% |
+| Discovery Value | 25% |
+| Originality | 20% |
+| Narrative Coherence | 15% |
+| Readability | 10% |
+
+↓
+
+**Revision Editor — Muse Spark**
+
+Uses the Reviewer's structured findings to improve the articles. Revision is constrained to prose, preserving image identities, brand attribution, and source references.
+
+↓
+
+**Final Confirmation — Muse Spark**
+
+Independently evaluates the revised edition.
+
+↓
+
+**Curio Validation & Scoring Engine**
+
+Validates content structure, source relationships, and image identities, calculates the final weighted score, and assigns an editorial presentation label.
+
+The current workflow uses one bounded revision round rather than unlimited generation and rewriting.
+
+## 5. Technical Architecture
+
+Curio combines multiple AI capabilities with a production-oriented orchestration and data infrastructure.
+
+### Technology Stack
+
+| Component | Technology |
+|---|---|
+| Frontend | React, TypeScript, Vite |
+| Interactive experience | Three.js |
+| Backend | Cloudflare Workers, Hono |
+| Database | Cloudflare D1 |
+| Media storage | Cloudflare R2 |
+| AI models | Muse Wonder 1.0, Muse Spark 1.3, SAM 3.1 |
+| AI orchestration | Structured model outputs, staged workflows, deterministic validation |
+| Reliability | D1 job leases, checkpoints, inference-budget controls |
+
+### Parallel Visual Intelligence
+
+Curio can analyze multiple approved images concurrently through Muse Spark 1.3, extracting structured visual observations before composing an editorial edition.
+
+### Controlled Concurrent Generation
+
+The backend supports up to two active article-generation jobs through Cloudflare D1 atomic job claims.
+
+Each editorial workflow remains sequential internally, ensuring that the Reviewer receives the Chief Editor's completed output and the Revision Editor receives the Reviewer's findings.
+
+### Durable Generation and Recovery
+
+For three-article generation, Curio stores completed editorial stages as durable D1 checkpoints.
+
+If a workflow is interrupted, the system can resume from validated checkpoints rather than unnecessarily repeating completed model calls.
+
+### Asynchronous Visual Enrichment
+
+SAM 3.1 hotspot localization is scheduled as background work through Cloudflare Workers.
+
+This separates the immediate editorial reading experience from additional visual processing.
+
+### Evidence, Safety, and Responsible AI
+
+Curio includes:
+
+- Explicit consent for AI-generated editorial content.
+- Approved and versioned image references.
+- Separate permissions for image display and AI analysis.
+- Structured editorial evidence and source validation.
+- Deterministic checks on article and image identities.
+- Server-side model credentials and controlled inference budgets.
+- AI-content disclosure and transparent handling of unavailable features.
+
+AI-generated interpretation is distinguished from factual information supplied by content owners or approved sources.
+
+## 6. Impact & Research Hypothesis
+
+Curio began with a question about the way people experience advertising and information.
+
+Traditional advertising competes for attention. Search delivers answers. Social platforms encourage continuous consumption.
+
+Could AI create an experience that encourages people to stop, explore, question, and discover?
+
+Our central research question is:
+
+**Can AI-powered exploration turn passive exposure into active discovery, while improving understanding, engagement, brand recall, and consumer trust?**
+
+We believe a curiosity-driven editorial experience could help people engage with information in a more intentional and meaningful way.
+
+For brands, it offers an opportunity to be discovered through relevant stories and ideas rather than exposure alone.
+
+For readers, it creates the possibility of an information experience shaped by their own interests and curiosity.
+
+This remains a product and research hypothesis. Curio does not yet claim experimentally measured improvements in brand recall, trust, or purchase intention.
+
+## 7. Live Demo
+
+### [Experience Curio](https://curio.shuang-han807.workers.dev)
+
+The live demonstration showcases Curio's AI-powered editorial experience.
+
+**Suggested journey:**
+
+1. Start with an interest or select an exploration theme.
+2. Choose Lite or Hybrid editorial mode.
+3. Generate a personalized editorial edition.
+4. Read the AI-created stories and explore their visual context.
+5. Interact with available visual details and product hotspots.
+
+Live generation depends on model availability, catalog eligibility, permissions, and configured inference limits.
+
+## 8. Getting Started
+
+### Requirements
+
+- Node.js 22.12 or later.
+- npm.
+- Cloudflare resources and Meta API credentials for live inference.
+
+### Local Development
+
+Clone the repository and install dependencies:
 
 ```bash
+git clone https://github.com/pipekoder/curio.git
+cd curio
 npm ci
-npm run typecheck
-npm run build
+```
+
+Start the local Cloudflare Worker:
+
+```bash
 npm run worker:dev
 ```
 
-In a separate terminal, run `npm run dev` to start the Vite frontend, which proxies `/api` to port 8787.
+In another terminal, start the frontend:
 
-## Status
-The consented magazine flow, fictional catalog, Meta Standard client and durable
-abuse protection are implemented. **Live inference remains off by default.** No
-real model call has been made during implementation; successful test editions
-use mock model responses. No R2/D1 resources or deployment are required to test.
+```bash
+npm run dev
+```
 
-Read [PR #2 configuration and safeguards](docs/PR2_CONFIGURATION.md) before any
-future deployment or paid inference activation. Keep credentials server-side.
+The Vite frontend proxies `/api` requests to the local Worker.
 
-See [product specification](docs/PRODUCT_SPEC.md) and [engineering plan](docs/ENGINEERING_PLAN.md).
-
-Every AI model called at runtime must be a Meta model. Codex may be used to write and test the app. Synthetic ads must be labeled as such.
-
-## Checks (no credentials or paid API calls)
+### Validation
 
 ```bash
 npm run typecheck
@@ -49,57 +303,48 @@ npm run worker:check
 npm run test:integration
 ```
 
-`worker:check` only bundles with Wrangler's `--dry-run`; it does not upload or deploy.
-The integration check starts a local workerd on port 18787 and verifies the built
-React assets, SPA deep links, health, API 404 routing, validation, and the explicit
-disabled magazine 503 response. Run `build` and `worker:check` first. Keep `.dev.vars` absent for this check;
-health is expected to report `metaConfigured: false`. Unit/component tests cover
-form submission, disabled states, offline recovery, and API validation. GitHub
-Actions runs these checks on pull requests and pushes to `feat/foundation` and `feat/meta-magazine-generator`.
+The local validation commands do not require paid Meta inference.
 
-See [foundation verification](docs/FOUNDATION_REVIEW.md) for results and limits.
+API credentials must be configured server-side and must never be committed to the repository.
 
-PR #1 results in `docs/FOUNDATION_REVIEW.md` are historical; PR #2 changes and
-current configuration are described in `docs/PR2_CONFIGURATION.md`.
+## 9. Current Scope & Limitations
 
-## Advertising library and reader
+Curio is a Hackathon prototype demonstrating an AI-native editorial discovery experience.
 
-The library now includes six local, explicitly fictional illustration slots,
-category/lifestyle filters, and a non-billable sample reader with two editorial
-layouts. See [PR #3 review](docs/PR3_REVIEW.md) and the
-[asset/permission checklist](docs/ASSET_REGISTER.md) before replacing placeholders
-with real campaign assets. The sample reader never calls an inference API.
+Some brand, product, and catalog information is owner-created demonstration content rather than independently verified commercial information.
 
-The catalog is URL-first/hybrid: externally hosted visuals require independently
-reviewed display permission and an exact URL approval; the current six local
-illustrations remain fallbacks until those approvals exist. AI-analysis and edit
-permissions are separate. Personalized issues remain session-only, with no share
-route, image proxy or server-side preference/image storage. See the asset register
-for the updated URL, source-page and permissions checklist.
+AI-generated narratives may contain inaccuracies. Image analysis and interactive product features depend on eligible, approved assets and successful processing.
 
-## Living Advertisements
+The project demonstrates a technical and experiential approach to personalized discovery, but its impact on reader behavior, brand awareness, and consumer trust has not yet been experimentally validated.
 
-Select a numbered detail in a fictional illustration to see an authored highlight
-and editorial reveal, ask a bounded contextual question, or inspect a related
-catalog discovery. These are explicit demo annotations, not SAM detections or
-live Muse Spark commentary. Keyboard/Escape, mobile layouts and reduced motion
-are supported; the original image and advertiser/provenance layer remain.
+## 10. Further Documentation
 
-The server-only SAM 3.1 Decoder architecture is off by default and requires
-separate analysis permission, an exact reviewed PNG permit, private operator
-credential and shared durable-budget reservation. No current image is enabled
-for live analysis. See [Living Ads and first authorized SAM test](docs/PR7_LIVING_ADS.md).
+For implementation details, architecture, and operational guidance:
 
-Asset Intelligence v1 adds private on-demand gallery discovery, URL-only D1 metadata ingestion, cached structured Muse classification and preference ranking. See [the implementation and local workflow](docs/ASSET_INTELLIGENCE_V1.md) for the 33-candidate inventory, pending rights and production rollout gates.
+- [Editorial Article Workflow](docs/full-catalog-articles.md)
+- [Muse Model Routing](docs/editorial-dual-model-contract.md)
+- [Visual Intelligence and SAM](docs/PR17_VISUAL_INTELLIGENCE.md)
+- [Cloudflare D1 Catalog](docs/CATALOG_D1.md)
+- [Database Production Runbook](docs/D1_PRODUCTION_RUNBOOK.md)
 
-[Editorial Experience v1](docs/EDITORIAL_EXPERIENCE_V1.md) adds personalized editions, varied layouts, source-backed stories, curiosity branches and private local collections. “Compose my edition” works with AI disabled or the Worker unavailable. Real candidates remain subject to both D1 eligibility and the existing public registry.
+---
 
-[Demo Readiness & Real AI Editorial Engine](docs/PR15_DEMO_READINESS.md) makes Editorial Experience the primary journey and adds original, constrained Muse narratives and connected story threads. `npm run validate:editorial` is a zero-network dry run; live validation requires separate explicit approval. Both production inference/operator flags remain false.
+## 11. Development & Attribution
 
-Visual Asset & Image Intelligence: [PR #17 implementation, rights and SAM readiness](docs/PR17_VISUAL_INTELLIGENCE.md).
+Curio was started in October 2026 as an independent project for the Meta Hackathon, developed and maintained by **[@pipekoder](https://github.com/pipekoder)**.
 
-Final QA: [PR #18 acceptance checklist, live-test limits and integration status](docs/PR18_ACCEPTANCE_RUNBOOK.md). Run `npm run accept:demo` for local checks.
+**Commit attribution note:** During development, a one-letter typo in the Git author email configured by the AI coding assistant caused several commits to be incorrectly attributed to another GitHub account (`Sakhawat134`). These commits were part of Curio's development under `pipekoder` and do not represent contributions from that account.
 
-Adaptive on-demand discovery and the implemented D1 publication/Reader API are documented in [docs/ADAPTIVE_GALLERY_DISCOVERY.md](docs/ADAPTIVE_GALLERY_DISCOVERY.md), including actual source counts, local setup and permission prerequisites.
+The Git author configuration was subsequently corrected, and all commits made afterward have been attributed to the correct identity. And the issue has been reported to Github.
 
-Final approved-content rehearsal and evidence: [Demo readiness acceptance](docs/DEMO_READINESS_ACCEPTANCE.md). Future content must follow the [local owner gallery intake runbook](docs/OWNER_GALLERY_INTAKE.md).
+At the time these attribution errors occurred, the repository was **private, with no access granted to external collaborators**. Public access to the repository was first enabled on **November 4, 2026**.
+
+The incorrect attribution was solely a Git metadata configuration issue and does not reflect external contributions or any change in project ownership.
+
+
+### Curio
+
+**Instantly personal. Editorially rich. Led by curiosity.**
+
+*Built with Meta AI for the Meta Hackathon.*
+
